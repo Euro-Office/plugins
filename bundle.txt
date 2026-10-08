@@ -1,4 +1,3 @@
 highlightcode
 photoeditor
-zotero
 mendeley

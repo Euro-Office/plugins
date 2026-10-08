@@ -30,6 +30,8 @@ while read -r name || [ -n "$name" ]; do
 		rm -rf "$out/src"
 	fi
 	rm -rf "$out"/{.dev,.git*,node_modules,deploy,package.json,package-lock.json,vite.config.*,postcss.config.*}
+	# store screenshots are only shown by the marketplace, which is not shipped
+	rm -rf "$out/resources/store/screenshots"
 	find "$out" \( -name '*.map' -o -name '.DS_Store' \) -delete
 
 	(cd "$out" && find . -name '*.html') | while read -r html; do
