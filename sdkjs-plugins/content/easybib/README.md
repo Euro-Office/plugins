@@ -2,8 +2,6 @@
 
 The EasyBib plugin allows users to automatically add the references to the document in full accordance with style guides of their choice.
 
-The plugin is pre-installed in ONLYOFFICE Workspace (Enterprise and Community Edition) and ONLYOFFICE cloud service. 
-
 ## Important
 
 ~~Easybib will no longer issue an access key to its API and will close support after 5/31/2021.~~  
@@ -19,7 +17,7 @@ The plugin is pre-installed in ONLYOFFICE Workspace (Enterprise and Community Ed
 
 ## How to install
 
-Detailed instructions can be found in [ONLYOFFICE API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/).
+Detailed instructions can be found in the [plugin installation guide](https://euro-office.github.io/documentation/configuration/plugins/).
 
 ## How to use
 
@@ -39,7 +37,7 @@ The bibliography list will begin where you put the cursor.
 
 ## User feedback and support
 
-If you have any problems or question about ONLYOFFICE plugins, use the issues section here, in this repository.
+If you have any problems or question about the plugins, use the issues section here, in this repository.
 
 
 

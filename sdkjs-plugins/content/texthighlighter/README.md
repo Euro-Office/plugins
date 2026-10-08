@@ -51,5 +51,5 @@ Highlighting text is not supported in the Spreadsheet Editor, as cells do not ha
 
 ## Additional Information
 
-If you need more details about how to use or develop plugins for ONLYOFFICE, please refer to the [ONLYOFFICE Plugin Documentation](https://api.onlyoffice.com/docspace/plugins-sdk/get-started).
+If you need more details about how to use or develop plugins, please refer to the [plugin developer documentation](https://euro-office.github.io/documentation/development/plugins/).
 

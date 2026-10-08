@@ -1,8 +1,8 @@
-# ONLYOFFICE Mendeley plugin
+# Mendeley plugin
 
-Mendeley plugin allows users to create bibliographies in ONLYOFFICE editors using [Mendeley service](https://www.mendeley.com/).
+Mendeley plugin allows users to create bibliographies in the editors using [Mendeley service](https://www.mendeley.com/).
 
-The plugin is pre-installed in [ONLYOFFICE Workspace](https://www.onlyoffice.com/workspace.aspx) (both Enterprise and Community Edition), [ONLYOFFICE cloud service](https://www.onlyoffice.com/cloud-office.aspx), and [ONLYOFFICE Personal](https://personal.onlyoffice.com/). It can also be installed to [Document Server](https://github.com/ONLYOFFICE/DocumentServer) manually.
+The plugin can be installed to Document Server manually.
 
 ## How to use
 
@@ -18,13 +18,13 @@ The plugin is pre-installed in [ONLYOFFICE Workspace](https://www.onlyoffice.com
 
 Two installation ways are available:
 
-1. Put the folder with Mendeley plugin (it must contain the content of the src folder only) to ONLYOFFICE Document Server folder depending on the operating system:
+1. Put the folder with Mendeley plugin (it must contain the content of the src folder only) to Document Server folder depending on the operating system:
 
     For Linux - `/var/www/onlyoffice/documentserver/sdkjs-plugins/`.
 
     For Windows - `%ProgramFiles%\ONLYOFFICE\DocumentServer\sdkjs-plugins\`.
 
-    The plugins will be available to all the users users of ONLYOFFICE Document Server.
+    The plugins will be available to all the users users of Document Server.
     No service restart is required.
 
 2. Edit the Document Server config to add the following lines:
@@ -48,9 +48,9 @@ Two installation ways are available:
     });
     ```
 
-Detailed instructions can also be found in [ONLYOFFICE API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/).
+Detailed instructions can also be found in the [plugin installation guide](https://euro-office.github.io/documentation/configuration/plugins/).
 
-**Important**: when you integrate ONLYOFFICE Document Server with a 3rd-party storage, you need to use [special connectors](https://api.onlyoffice.com/editors/plugins) (integration apps). If you compile a connector from source code or create a new one, you can add plugins using Document Server config. If you use ready connectors (e.g. from ownCloud/Nextcloud marketplaces) adding plugins via config is not applicable. 
+**Important**: when you integrate Document Server with a 3rd-party storage, you need to use special connectors (integration apps). If you compile a connector from source code or create a new one, you can add plugins using Document Server config. If you use ready connectors (e.g. from ownCloud/Nextcloud marketplaces) adding plugins via config is not applicable. 
 
 ## Configuration
 
@@ -84,4 +84,4 @@ This plugin doesn't work in desktop editor, because has problem with authorizati
 
 To ask questions and share feedback, use Issues in this repository.
 
-If you need more information about how to use or write your own plugin, please visit our [API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/get-started/overview/).
+If you need more information about how to use or write your own plugin, please visit the [plugin developer documentation](https://euro-office.github.io/documentation/development/plugins/).

@@ -1,10 +1,10 @@
 ## Overview
 
-Communicate with your team, exchange instant messages and make video and voice calls using Rainbow right in the ONLYOFFICE editors. 
+Communicate with your team, exchange instant messages and make video and voice calls using Rainbow right in the editors. 
 
 [Rainbow](https://www.al-enterprise.com/en) is a business communication platform developed by Alcatel-Lucent Enterprise (ALE).
 
-The Rainbow plugin is compatible with [self-hosted](https://github.com/ONLYOFFICE/DocumentServer) versions of ONLYOFFICE Docs. 
+The Rainbow plugin is compatible with self-hosted versions of the editors. 
 
 ## How to use
 
@@ -13,7 +13,7 @@ The Rainbow plugin is compatible with [self-hosted](https://github.com/ONLYOFFIC
 
 ## How to install
 
-Detailed instructions can be found in [ONLYOFFICE API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/).
+Detailed instructions can be found in the [plugin installation guide](https://euro-office.github.io/documentation/configuration/plugins/).
 
 ## Known issues
 

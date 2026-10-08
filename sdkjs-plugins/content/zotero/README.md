@@ -1,8 +1,8 @@
-# ONLYOFFICE Zotero plugin
+# Zotero plugin
 
-Zotero plugin allows users to create bibliographies in ONLYOFFICE editors using Zotero service.
+Zotero plugin allows users to create bibliographies in the editors using Zotero service.
 
-The plugin is pre-installed in ONLYOFFICE Workspace (both Enterprise and Community Edition), ONLYOFFICE cloud service, and ONLYOFFICE Personal. It can also be installed to Document Server and desktop editors manually.
+The plugin can be installed to Document Server and desktop editors manually.
 
 ## How to use
 
@@ -26,13 +26,13 @@ Please note that Zotero works only with user’s personal library associated wit
 
 Two installation ways are available:
 
-1.  Put the folder with the plugin code to ONLYOFFICE Document Server folder depending on the operating system:
+1.  Put the folder with the plugin code to Document Server folder depending on the operating system:
 
     For Linux - `/var/www/onlyoffice/documentserver/sdkjs-plugins/`.
 
     For Windows - `%ProgramFiles%\ONLYOFFICE\DocumentServer\sdkjs-plugins\`.
 
-    The plugins will be available to all the users of ONLYOFFICE Document Server.
+    The plugins will be available to all the users of Document Server.
     No service restart is required.
 
 2.  Edit the Document Server config to add the following lines:
@@ -56,7 +56,7 @@ Two installation ways are available:
         });
         ```
 
-    **Important**: when you integrate ONLYOFFICE Document Server with a 3rd-party storage, you need to use special connectors (integration apps). If you compile a connector from source code or create a new one, you can add plugins using Document Server config. If you use ready connectors (e.g. from ownCloud/Nextcloud marketplaces) adding plugins via config is not applicable.
+    **Important**: when you integrate Document Server with a 3rd-party storage, you need to use special connectors (integration apps). If you compile a connector from source code or create a new one, you can add plugins using Document Server config. If you use ready connectors (e.g. from ownCloud/Nextcloud marketplaces) adding plugins via config is not applicable.
 
 ## How to install to desktop
 
@@ -66,7 +66,7 @@ Two installation ways are available:
 
 ## Configuration
 
-1. Find Zotero plugin in `Plugins` tab of the ONLYOFFICE Document Editor and click it.
+1. Find Zotero plugin in `Plugins` tab of the document editor and click it.
 
 2. Log in to your Zotero account.
 
