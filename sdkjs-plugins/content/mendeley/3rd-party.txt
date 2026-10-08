@@ -25,3 +25,8 @@ License File:   promise-polyfill.license
 url-polyfill - Polyfill URL and URLSearchParams to match last WHATWG specifications. (https://github.com/lifaon74/url-polyfill)
 License:        MIT
 License File:   url-polyfill.license
+
+\vendor\material-icons\material-icons.woff2
+Material Icons (npm material-icons 1.13.14) - Material Icons icon font by Google (https://github.com/marella/material-icons)
+License:        Apache-2.0
+License File:   material-icons.license

@@ -187,7 +187,7 @@ var bNewVersion = false;
                         path: oImage.src,
                         name: 'Image'
                     },
-                    theme: themeStyle,
+                    theme: themeStyle || whiteTheme,
                     initMenu: 'filter',
                     menuBarPosition: 'bottom',
                     usageStatistics: false,
