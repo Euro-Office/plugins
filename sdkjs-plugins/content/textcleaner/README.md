@@ -1,6 +1,6 @@
 # Text Cleaner
 
-A smart text cleaning and formatting plugin for ONLYOFFICE Document Editor that helps you clean and standardize text formatting with advanced options.
+A smart text cleaning and formatting plugin for the document editor that helps you clean and standardize text formatting with advanced options.
 
 ## Overview
 
@@ -51,7 +51,7 @@ Text Cleaner is an intelligent plugin that goes beyond simple "clear formatting"
 ## Installation
 
 ### Plugin Store 
-1. Open ONLYOFFICE Document Editor
+1. Open the document editor
 2. Go to **Plugins** → **Plugin Manager**
 3. Search for "Text Cleaner"
 4. Click **Install**
@@ -124,7 +124,7 @@ The plugin supports multiple languages including:
 
 ## System Requirements
 
-- ONLYOFFICE Document Editor 7.0 or higher
+- The document editor 7.0 or higher
 - Windows 7+, macOS 10.12+, or Linux
 - Minimum 2GB RAM
 - 100MB free disk space
@@ -143,15 +143,15 @@ The plugin supports multiple languages including:
 
 For support, bug reports, or feature requests:
 - Check the plugin documentation
-- Visit the ONLYOFFICE plugin marketplace
+- Visit the plugin marketplace
 - Contact the development team
 
 ## License
 
 © 2025 ONLYOFFICE Plugin
 
-This plugin is provided as-is for use with ONLYOFFICE Document Editor.
+This plugin is provided as-is for use with the document editor.
 
 ---
 
-**Note**: This plugin is designed to work with ONLYOFFICE Document Editor and may not be compatible with other office suites.
+**Note**: This plugin is designed to work with the document editor and may not be compatible with other office suites.

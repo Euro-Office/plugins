@@ -4,7 +4,7 @@ Convert your formatted document to Markdown or HTML.
 
 The plugin uses [Docs to Markdown](https://github.com/evbacher/gd2md-html) add-on and [marked] (https://github.com/markedjs/marked) library. 
 
-It is is compatible with [self-hosted](https://github.com/ONLYOFFICE/DocumentServer) and [desktop](https://github.com/ONLYOFFICE/DesktopEditors) versions of ONLYOFFICE editors. It can be added to ONLYOFFICE instances manually. 
+It is is compatible with self-hosted and desktop versions of the editors. It can be added to editor instances manually. 
 
 ## How to use
 
@@ -22,4 +22,4 @@ It is is compatible with [self-hosted](https://github.com/ONLYOFFICE/DocumentSer
 
 ## How to install
 
-Detailed instructions can be found in [ONLYOFFICE API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/).
+Detailed instructions can be found in the [plugin installation guide](https://euro-office.github.io/documentation/configuration/plugins/).

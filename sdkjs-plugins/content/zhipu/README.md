@@ -12,7 +12,7 @@ We design friendly Zhipu AI interface and improved prompts of request. We will g
 1. Fill in the ZhiPu API Key in the plugin settings to enable API calls
     - https://open.bigmodel.cn/overview
     - [View ZhiPu API](resources/images/View_Zhipu_API.png)
-    - In the OnlyOffice editor, click on the plugin icon below, click on settings, and fill in your ZhiPu API Key to start using it.
+    - In the editor, click on the plugin icon below, click on settings, and fill in your ZhiPu API Key to start using it.
 2. Select text in the document, right-click and select "ZhiPu Copilot" to process the text directly.
 3. In the submenu, you can select "Summarize text", "Translation" and other functions to process the selected content.
 4. Chat with the AI assistant in the chat interface, ask questions, and let the assistant summarize the text.
@@ -60,11 +60,11 @@ We design friendly Zhipu AI interface and improved prompts of request. We will g
 
 
 ## Requirements
-- OnlyOffice editor
+- The editors
 - ZhiPu API Key
 
 ## Installation
-1. Open the OnlyOffice editor.
+1. Open the editor.
 2. Click on the "Plugins" tab in the top menu.
 3. Click on "Download Plugins".
 4. Search for "ZhiPu Copilot" and click on "Install".

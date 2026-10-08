@@ -6,7 +6,7 @@ The plugin is based on [JavaScript Typograf](https://github.com/typograf/typogra
 
 Supported languages are listed [here](https://github.com/typograf/typograf/blob/dev/docs/LOCALES.en-US.md).
 
-Typograf is compatible with [self-hosted](https://github.com/ONLYOFFICE/DocumentServer) and [desktop](https://github.com/ONLYOFFICE/DesktopEditors) versions of ONLYOFFICE editors. It can be added to ONLYOFFICE instances manually. 
+Typograf is compatible with self-hosted and desktop versions of the editors. It can be added to editor instances manually. 
 
 ## How to use
 
@@ -17,7 +17,7 @@ Typograf is compatible with [self-hosted](https://github.com/ONLYOFFICE/Document
 
 ## How to install
 
-Detailed instructions can be found in [ONLYOFFICE API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/).
+Detailed instructions can be found in the [plugin installation guide](https://euro-office.github.io/documentation/configuration/plugins/).
 
 ## Known issues
 

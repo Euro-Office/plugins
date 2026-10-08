@@ -41,4 +41,4 @@ QR code generation is restricted to:
 - Links.
 - Single phrases without capital letters and symbols present in formulas.
 
-If you need more information about how to use or write your own plugin, please see this [link](https://api.onlyoffice.com/docs/plugin-and-macros/get-started/overview/).
+If you need more information about how to use or write your own plugin, please see this [link](https://euro-office.github.io/documentation/development/plugins/).

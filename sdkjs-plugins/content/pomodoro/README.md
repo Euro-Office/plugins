@@ -1,6 +1,6 @@
-# Pomodoro Timer Plugin for ONLYOFFICE
+# Pomodoro Timer Plugin
 
-This plugin adds a customizable Pomodoro Timer to ONLYOFFICE, helping users improve productivity through structured focus and break intervals. With configurable focus/break times and optional white noise, this plugin offers a distraction-free environment for users working within ONLYOFFICE.
+This plugin adds a customizable Pomodoro Timer to the editors, helping users improve productivity through structured focus and break intervals. With configurable focus/break times and optional white noise, this plugin offers a distraction-free environment for users working within the editors.
 
 ## Features
 
@@ -13,12 +13,12 @@ This plugin adds a customizable Pomodoro Timer to ONLYOFFICE, helping users impr
 ## Installation
 
 1. Clone this repository or download the project as a ZIP file.
-2. Extract the files and upload them to your ONLYOFFICE server’s plugin folder.
-3. Enable the plugin in ONLYOFFICE.
+2. Extract the files and upload them to your server’s plugin folder.
+3. Enable the plugin in the editor.
 
 ## Usage
 
-1. Open ONLYOFFICE and navigate to the plugins section.
+1. Open the editor and navigate to the plugins section.
 2. Start the Pomodoro Timer plugin by setting your desired **Focus Time** and **Break Time** under the settings.
 3. Choose a **White Noise** option to play during focus or break sessions.
 4. Click "Start" to begin the timer. The timer will count down for focus time, followed by break time, repeating the cycle.

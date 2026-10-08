@@ -2,7 +2,7 @@
 
 The Zoom plugin allows users to schedule meetings and make calls.
 
-It is compatible with [self-hosted](https://github.com/ONLYOFFICE/DocumentServer) version of ONLYOFFICE editors. It can be added to ONLYOFFICE instances manually.
+It is compatible with self-hosted versions of the editors. It can be added to editor instances manually.
 
 ## How to use
 
@@ -11,7 +11,7 @@ It is compatible with [self-hosted](https://github.com/ONLYOFFICE/DocumentServer
 
 ## How to install
 
-Detailed instructions can be found in [ONLYOFFICE API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/).
+Detailed instructions can be found in the [plugin installation guide](https://euro-office.github.io/documentation/configuration/plugins/).
 
 ## Configuration
 
