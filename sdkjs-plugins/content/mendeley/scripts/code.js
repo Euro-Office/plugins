@@ -225,8 +225,8 @@
         selectedScroller = initScrollBox(elements.selectedHolder, elements.selectedThumb);
         docsScroller = initScrollBox(elements.docsHolder, elements.docsThumb, checkDocsScroll);
 
-        fetch("https://www.zotero.org/styles-files/styles.json")
-            .then(function (resp) { return resp.json(); })
+        fetchWithFallback("https://www.zotero.org/styles-files/styles.json", "./resources/csl/styles.json")
+            .then(function (text) { return JSON.parse(text); })
             .then(function (json) {
                 var lastStyle = getLastUsedStyle();
                 var found = false;
@@ -530,6 +530,18 @@
         return window.Asc.plugin.tr(key);
     }
 
+    function fetchText(url) {
+        return fetch(url).then(function (resp) {
+            // status 0: file:// responses in desktop builds
+            if (!resp.ok && resp.status !== 0) throw new Error(resp.status + " " + url);
+            return resp.text();
+        });
+    }
+
+    function fetchWithFallback(remoteUrl, localUrl) {
+        return fetchText(remoteUrl).catch(function () { return fetchText(localUrl); });
+    }
+
     var loadingLocale = false;
     function getLocale(langTag) {
         return new Promise(function (res, rej) {
@@ -537,10 +549,8 @@
                 res(locales[langTag]);
             } else {
                 loadingLocale = true;
-				// https://raw.githubusercontent.com/citation-style-language/locales/master/locales-
-				// https://cdn.jsdelivr.net/gh/citation-style-language/locales@master/locales-
-                fetch("https://raw.githubusercontent.com/citation-style-language/locales/master/locales-" + langTag + ".xml")
-                    .then(function (resp) { return resp.text(); })
+                var localeFile = "locales-" + langTag + ".xml";
+                fetchWithFallback("https://raw.githubusercontent.com/citation-style-language/locales/master/" + localeFile, "./resources/csl/locales/" + localeFile)
                     .then(function (text) { locales[langTag] = text; res(text); loadingLocale = false; })
                     .catch(function (err) { rej(err); loadingLocale = false; });
             }
@@ -554,8 +564,7 @@
                 res(styles[styleName]);
             } else {
                 loadingStyle = true;
-                fetch("https://www.zotero.org/styles/" + styleName)
-                    .then(function (resp) { return resp.text(); })
+                fetchWithFallback("https://www.zotero.org/styles/" + styleName, "./resources/csl/styles/" + styleName + ".csl")
                     .then(function (text) { styles[styleName] = text; res(text); loadingStyle = false; })
                     .catch(function (err) { rej(err); loadingStyle = false; });
             }

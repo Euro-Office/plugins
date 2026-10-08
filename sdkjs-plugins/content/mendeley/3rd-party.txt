@@ -25,3 +25,7 @@ License File:   promise-polyfill.license
 url-polyfill - Polyfill URL and URLSearchParams to match last WHATWG specifications. (https://github.com/lifaon74/url-polyfill)
 License:        MIT
 License File:   url-polyfill.license
+
+\resources\csl\
+Citation Style Language styles and locales, bundled as offline fallback (https://github.com/citation-style-language/styles, https://github.com/citation-style-language/locales)
+License:        CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/), see the <rights> element of each file
