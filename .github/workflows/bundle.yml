@@ -1,0 +1,17 @@
+name: Bundle
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bundle plugins
+        run: scripts/bundle.sh "$RUNNER_TEMP/sdkjs-plugins"
+
+      - name: Check bundle
+        run: scripts/check-bundle.sh "$RUNNER_TEMP/sdkjs-plugins"

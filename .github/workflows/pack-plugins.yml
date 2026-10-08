@@ -1,7 +1,12 @@
 name: Pack Plugins and Create Release
 
 on:
-  page_build:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   pack-plugins:
@@ -10,37 +15,7 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.build.commit }}
 
-    - name: Get latest tag
-      id: get_tag
-      run: |
-        git fetch --tags
-        latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
-        echo "Latest tag: $latest"
-        if [[ -z "$latest" ]]; then
-          echo "tag=v0.0.0" >> "$GITHUB_OUTPUT"
-        else
-          echo "tag=$latest" >> "$GITHUB_OUTPUT"
-        fi
-    
-    - name: Bump patch version
-      id: bump_tag
-      run: |
-        old="${{ steps.get_tag.outputs.tag }}"
-        IFS='.' read -r major minor patch <<< "${old#v}"
-        new="v$major.$minor.$((patch+1))"
-        echo "New tag: $new"
-        echo "new_tag=$new" >> "$GITHUB_OUTPUT"
-    
-    - name: Create Git tag
-      run: |
-        git config user.name "github-actions"
-        git config user.email "github-actions@github.com"
-        git tag ${{ steps.bump_tag.outputs.new_tag }}
-        git push origin ${{ steps.bump_tag.outputs.new_tag }}
-    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -50,10 +25,18 @@ jobs:
       run: |
         python packer/pack.py
 
+    - name: Bundle plugins
+      run: |
+        scripts/bundle.sh "$RUNNER_TEMP/sdkjs-plugins"
+        scripts/check-bundle.sh "$RUNNER_TEMP/sdkjs-plugins"
+        tar -czf "artifacts/sdkjs-plugins-$GITHUB_REF_NAME.tar.gz" -C "$RUNNER_TEMP/sdkjs-plugins" .
+
     - name: Upload GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.bump_tag.outputs.new_tag }}
-        name: Release ${{ steps.bump_tag.outputs.new_tag }}
-        body: Auto‑generated release for commit `${{ github.event.build.commit }}`
-        files: artifacts/*.plugin
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body: Release for commit `${{ github.sha }}`
+        files: |
+          artifacts/*.plugin
+          artifacts/sdkjs-plugins-${{ github.ref_name }}.tar.gz
