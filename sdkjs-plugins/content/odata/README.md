@@ -4,7 +4,7 @@ Import data from OData feeds into your spreadsheet.
 
 The plugin connects to [OData](https://www.odata.org/) services and allows you to browse available entity sets (tables), preview data, and insert it directly into cells as formatted tables.
 
-OData Import is compatible with [self-hosted](https://github.com/ONLYOFFICE/DocumentServer) and [desktop](https://github.com/ONLYOFFICE/DesktopEditors) versions of ONLYOFFICE editors. It can be added to ONLYOFFICE instances manually.
+OData Import is compatible with self-hosted and desktop versions of the editors. It can be added to editor instances manually.
 
 ## How to use
 
@@ -20,7 +20,7 @@ OData Import is compatible with [self-hosted](https://github.com/ONLYOFFICE/Docu
 
 ## How to install
 
-Detailed instructions can be found in [ONLYOFFICE API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/).
+Detailed instructions can be found in the [plugin installation guide](https://euro-office.github.io/documentation/configuration/plugins/).
 
 ## Supported OData versions
 

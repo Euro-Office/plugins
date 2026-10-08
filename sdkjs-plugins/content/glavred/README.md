@@ -4,7 +4,7 @@ The Glavred plugin helps you make your text in Russian more informative and clea
 
 The plugin uses [Glavred API](https://glvrd.ru/api/).
 
-The plugin is compatible with [self-hosted](https://github.com/ONLYOFFICE/DocumentServer) and [desktop](https://github.com/ONLYOFFICE/DesktopEditors) versions of ONLYOFFICE editors. It can be added to ONLYOFFICE instances manually. 
+The plugin is compatible with self-hosted and desktop versions of the editors. It can be added to editor instances manually. 
 
 ## How to use
 
@@ -13,7 +13,7 @@ The plugin is compatible with [self-hosted](https://github.com/ONLYOFFICE/Docume
 
 ## How to install
 
-Detailed instructions can be found in [ONLYOFFICE API documentation](https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/).
+Detailed instructions can be found in the [plugin installation guide](https://euro-office.github.io/documentation/configuration/plugins/).
 
 ## User feedback and support
 
