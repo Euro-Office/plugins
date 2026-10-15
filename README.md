@@ -25,3 +25,14 @@ If you encounter any issues or have any questions regarding the ONLYOFFICE Plugi
 ## Acknowledgments
 
 We would like to thank all the contributors and developers who have worked on the ONLYOFFICE Plugin Marketplace.
+
+## Bundling
+
+`bundle.txt` lists the plugin folders (one per line) that ship with Euro-Office DocumentServer.
+`scripts/bundle.sh <dest>` builds the `sdkjs-plugins` directory for the image from it:
+
+- copies `sdkjs-plugins/v1/{plugins.js,plugins-ui.js,plugins.css}` to `<dest>/v1`
+- copies each listed plugin to `<dest>/<name>` without dev and build files (`.dev`, `node_modules`, `deploy`, `src` of prebuilt plugins, source maps)
+- rewrites `https://onlyoffice.github.io/sdkjs-plugins/` in HTML files to a relative path pointing at `<dest>/v1`
+
+`scripts/check-bundle.sh <dest>` fails if a bundled plugin loads external scripts, stylesheets or fonts on open, or declares a system or background variation. CI runs both on every push and pull request.

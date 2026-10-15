@@ -43,3 +43,8 @@ License File:   prettier@plugin-php.license
 
 License:        MIT
 License File:   xml-formatter.license
+
+9. Material Icons (npm material-icons 1.13.14) icon font by Google. (https://github.com/marella/material-icons)
+
+License:        Apache-2.0
+License File:   material-icons.license
