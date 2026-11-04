@@ -261,6 +261,7 @@ function fetchExternal(url, options, isStreaming) {
 		}
 
 		let abortController = new AbortController();
+		let requestUrl = message.url;
 
 		let request = {
 			method: message.method,
@@ -272,12 +273,25 @@ function fetchExternal(url, options, isStreaming) {
 			request.body = message.isBlob
 				? message.body
 				: (message.body ? JSON.stringify(message.body) : "");
+
+			if (message.isUseProxy && AI.serverSettings) {
+				requestUrl = AI.serverSettings.proxy;
+				request.body = JSON.stringify({
+					"target" : message.url,
+					"method" : request.method,
+					"headers" : request.headers,
+					"data" : request.body
+				});
+				request.headers = {
+					"Authorization" : "Bearer " + Asc.plugin.info.jwt
+				};
+			}
 		}
 
 		try {
-			let response = !message.url.startsWith("[external]")
-				? await fetch(message.url, request)
-				: await fetchExternal(message.url, request, true);
+			let response = !requestUrl.startsWith("[external]")
+				? await fetch(requestUrl, request)
+				: await fetchExternal(requestUrl, request, true);
 
 			return response.body
 				? new FetchReader(response.body.getReader(), abortController)
