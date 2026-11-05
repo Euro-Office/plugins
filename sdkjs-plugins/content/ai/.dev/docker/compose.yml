@@ -1,0 +1,36 @@
+# Local test server for the AI plugin: Euro-Office Document Server with this
+# plugin mounted live, plus an optional local LLM (Ollama).
+# Usage: see README.md in this folder.
+name: eo-ai-plugin
+
+services:
+  documentserver:
+    image: ghcr.io/euro-office/documentserver:${EO_TAG:-latest}
+    ports:
+      - "${EO_PORT:-8080}:80"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: "${EO_JWT_SECRET:-local-dev-secret-at-least-32-chars-long}"
+      EXAMPLE_ENABLED: "true"
+    volumes:
+      # Replace the bundled AI plugin with this working copy (same GUID folder).
+      - "../..:/var/www/euro-office/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}:ro"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:${OLLAMA_TAG:-latest}
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      # The plugin calls Ollama directly from the browser, so allow the editor origin.
+      OLLAMA_ORIGINS: "*"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  ollama:
