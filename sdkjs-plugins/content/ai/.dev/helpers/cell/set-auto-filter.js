@@ -87,7 +87,7 @@
 			},
 			{
 				"prompt": "Filter by column name 'Name' for specific values",
-				"arguments": { "range": "A1:D10", "fieldName": "Name", "criteria1": ["John", "Jane"], "operator": "xlFilterValues" }
+				"arguments": { "range": "A1:D10", "fieldName": "Name", "criteria1": "[\"John\", \"Jane\"]", "operator": "xlFilterValues" }
 			},
 			{
 				"prompt": "Filter by column header 'Age' for values greater than 18",

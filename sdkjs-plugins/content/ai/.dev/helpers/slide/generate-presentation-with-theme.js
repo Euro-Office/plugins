@@ -44,7 +44,7 @@
 					"description": "presentation topic"
 				},
 				"slideCount": {
-					"type": "string",
+					"type": "number",
 					"description": "number of slides"
 				},
 				"style": {
