@@ -790,7 +790,9 @@ function fetchExternal(url, options, isStreaming) {
 		let options = { streaming: isStreaming };
 
 		objRequest.url = AI._getEndpointUrl(provider, AI.Endpoints.Types.v1.Chat_Completions, this.model, options);
-		objRequest.body = provider.getChatCompletions({ messages : content.messages }, this.model);
+		// Providers may rewrite the list (e.g. Anthropic removes the system
+		// message); the agent reuses content.messages for the next iteration.
+		objRequest.body = provider.getChatCompletions({ messages : content.messages.slice() }, this.model);
 
 		if (content.tools) {
 			provider.addTools(objRequest.body, content.tools);
