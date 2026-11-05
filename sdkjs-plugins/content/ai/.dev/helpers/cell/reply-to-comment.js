@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "replyToComment",
+		"category": "comments-review",
 		"text": "Reply to Comment",
 		"description": "Adds a reply to an existing cell comment in the workbook, or marks it as resolved. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
 		"parameters": {

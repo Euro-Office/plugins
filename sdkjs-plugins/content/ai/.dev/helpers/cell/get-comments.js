@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "getComments",
+		"category": "comments-review",
 		"readOnly": true,
 		"text": "Read Comments",
 		"description": "Lists the comments in the workbook. For each comment returns its id (pass it to replyToComment), the sheet and cell address it belongs to (address is omitted when it cannot be determined, e.g. for comments on cells outside the used range), the cell value, author, comment text, whether it is resolved, and its replies.",

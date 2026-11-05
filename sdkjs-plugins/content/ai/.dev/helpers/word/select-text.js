@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "selectText",
+		"category": "core",
 		"readOnly": true,
 		"text": "Select Text",
 		"description": "Selects the n-th occurrence of a text in the main body of the document and moves the view to it, so the user can see it or so a selection-based tool (e.g. replaceSelection, rewriteText, commentText, insertMarkdown with position 'replaceSelection') can act on it. Does not change the content. Occurrences are numbered from 1 in document order, exactly as returned by findText.",

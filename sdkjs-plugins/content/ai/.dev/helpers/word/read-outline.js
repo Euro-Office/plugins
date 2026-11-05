@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "readOutline",
+		"category": "core",
 		"readOnly": true,
 		"text": "Read Outline",
 		"description": "Returns the outline (table of contents) of the text document: every top-level heading paragraph with its heading level (1 = top level, up to 9), its 1-based element index (same numbering as readDocument/editParagraph) and its text. Headings are detected from the paragraph's outline level or a 'Heading N' style. Use it to understand the structure of a long document cheaply, then read or edit specific sections by index.",

@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "findInPresentation",
+		"category": "core",
 		"readOnly": true,
 		"text": "Find in Presentation",
 		"description": "Searches the text of all slides (text boxes, placeholders and shapes; optionally speaker notes) for a plain-text string. Returns, per match, the 1-based slide number, the 1-based shape index on that slide (same numbering as readPresentation; null for speaker notes), where it was found ('shape' or 'notes') and a snippet of surrounding text. Case-insensitive unless matchCase is true. Use goToSlide to show a result to the user.",

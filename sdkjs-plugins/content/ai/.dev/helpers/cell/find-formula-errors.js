@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "findFormulaErrors",
+		"category": "analysis",
 		"readOnly": true,
 		"text": "Find Formula Errors",
 		"description": "Scans the used range of a worksheet (or all worksheets) for cells showing an error value (#REF!, #DIV/0!, #VALUE!, #NAME?, #N/A, #NUM!, #NULL!, #SPILL!, #CALC!, #GETTING_DATA) and returns each one's sheet, address, error and formula, plus a count per error type. Use it to audit a workbook, then explain or repair the formulas (fixFormula, writeRange).",

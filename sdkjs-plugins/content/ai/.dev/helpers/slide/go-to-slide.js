@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "goToSlide",
+		"category": "core",
 		"readOnly": true,
 		"text": "Go to Slide",
 		"description": "Shows the given slide in the editor (makes it the current slide). Use it to show the user a search result or before tools that act on the current slide. Slide numbers are 1-based. Does not change the presentation.",

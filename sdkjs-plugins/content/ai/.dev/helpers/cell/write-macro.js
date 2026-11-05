@@ -32,6 +32,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "writeMacro",
+		"category": "macro",
 		"text": "Run Macro",
 		"description": `Executes a JavaScript macro using the OnlyOffice Spreadsheet API.
 Use this tool to perform any spreadsheet operation when no other specialized tool is available.

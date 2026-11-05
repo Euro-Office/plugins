@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "setSpeakerNotes",
+		"category": "notes",
 		"text": "Write Speaker Notes",
 		"description": "Writes the speaker notes of a slide. mode 'replace' (default) replaces the existing notes, 'append' adds the text as new paragraphs after them. Line breaks (\\n) start new paragraphs. Defaults to the current slide. Slide numbers are 1-based.",
 		"parameters": {

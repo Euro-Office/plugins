@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "setNumberFormat",
+		"category": "data",
 		"text": "Set Number Format",
 		"description": "Applies a number format code to a cell range without changing the stored values. Use standard Excel format codes, e.g. 'General', '0', '0.00', '#,##0.00', '0%', '0.0%', '#,##0.00 \"€\"', '[$$-409]#,##0.00', 'dd.mm.yyyy', 'yyyy-mm-dd', 'hh:mm', '@' (text). Use it to show values as currency, percentages, dates or with a fixed number of decimals.",
 		"parameters": {

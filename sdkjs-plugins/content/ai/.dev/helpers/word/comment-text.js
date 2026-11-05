@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "commentText",
+		"category": "comments-review",
 		"text": "Add Comment to Text",
 		"description": "Adds a comment or footnote to explain or annotate the selected text. If no text is selected, works with the current paragraph.",
 		"parameters": {

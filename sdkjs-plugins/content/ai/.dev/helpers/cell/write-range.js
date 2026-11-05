@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "writeRange",
+		"category": "edit-text",
 		"text": "Write Cells",
 		"description": "Writes a 2D array of values into the spreadsheet starting at a top-left cell. Strings that start with '=' are entered as formulas (use English function names and commas as separators). Use null to leave a cell unchanged and an empty string to clear it. Use it to fill in computed results, cleaned data, new columns, totals or formulas. The whole write is a single undo step.",
 		"parameters": {

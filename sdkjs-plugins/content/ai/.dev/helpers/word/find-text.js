@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "findText",
+		"category": "core",
 		"readOnly": true,
 		"text": "Find Text",
 		"description": "Searches the main body of the text document (including tables and content controls, not headers, footers or footnotes) for a plain-text string. Returns the total number of matches and, for each returned match, its 1-based occurrence number, the 1-based index of the top-level element that contains it (same numbering as readDocument/editParagraph) and a short snippet of surrounding text. Use it to locate passages before editing them; pass the occurrence number to selectText to select a match. Matching is substring-based and case-insensitive unless matchCase is true.",

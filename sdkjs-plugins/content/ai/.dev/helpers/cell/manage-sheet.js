@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "manageSheet",
+		"category": "structure",
 		"text": "Manage Sheets",
 		"description": "Adds, renames, deletes or activates a worksheet. 'add' creates a new sheet called 'name' (it becomes the active sheet); 'rename' renames sheet 'name' to 'newName'; 'delete' removes sheet 'name' and all its data (the last remaining sheet cannot be deleted); 'activate' switches to sheet 'name'. Sheet names must be 1-31 characters and must not contain : \\ / ? * [ ]. Returns the resulting list of sheets and the active sheet.",
 		"parameters": {

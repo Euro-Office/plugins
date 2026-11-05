@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "setMultiSort",
+		"category": "data",
 		"text": "Sort by Multiple Columns",
 		"description": "Sorts data by multiple columns (up to 3 levels). Use this when you need to sort by primary, secondary, and tertiary sort keys. Each level can have its own sort order.",
 		"parameters": {

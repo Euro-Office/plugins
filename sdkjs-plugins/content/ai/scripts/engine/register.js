@@ -131,12 +131,12 @@ async function registerButtons(window, undefined)
 				window.SelectionSuggestions.attach(chatWindow, chatWindowShow);
 		});
 		
+		// Tool schemas and system prompts are no longer cached here: they
+		// depend on the tool categories selected per request and are cached
+		// per category set in EditorHelper (helperFuncs.js).
 		var AgentState = {
 			MAX_LOOP_ITERATIONS : 20,
-			isStopped : false,
-			tools : null,
-			systemToolsPrompt : "",
-			toolsSystemPrompt : ""
+			isStopped : false
 		};
 		window.AgentState = AgentState;
 
@@ -261,54 +261,85 @@ async function registerButtons(window, undefined)
 			let provider = AI.Storage.getProvider(requestEngine.modelUI.provider);
 			let isSupportTools = provider && provider.isSupportTools(requestEngine.model, requestEngine.modelUI);
 
-			let requestData = {
-				messages: messageHistory
-			};
+			// The chat sends { messages, usedTools, turnId } (chat.js sendMessage);
+			// a plain array is the older format.
+			let payload = Array.isArray(messageHistory) ? { messages: messageHistory } : (messageHistory || {});
+			let history = Array.isArray(payload.messages) ? payload.messages : [];
 
-			if (isSupportTools) {
-				if (!AgentState.tools)
-					AgentState.tools = window.EditorHelper.getTools();
+			// History may hold tool exchanges from earlier turns (see
+			// agentHistory.js). Keep them only if this model and provider can
+			// take tool messages; otherwise rewrite them as plain text.
+			let isSupportToolMessages = isSupportTools &&
+				!(provider.isSupportToolMessages && !provider.isSupportToolMessages(requestEngine.model, requestEngine.modelUI));
+			if (window.AgentHistory)
+				history = isSupportToolMessages ? window.AgentHistory.sanitize(history) : window.AgentHistory.flatten(history);
 
-				if (AgentState.tools && AgentState.tools.length > 0)
-					requestData.tools = AgentState.tools;
-
-				if ("" === AgentState.toolsSystemPrompt)
-					AgentState.toolsSystemPrompt = window.EditorHelper.getToolsSystemPrompt();
-
-				if (AgentState.toolsSystemPrompt) {
-					if (requestData.messages.length === 0 || requestData.messages[0].role !== "system") {
-						requestData.messages.unshift({
-							role: 'system',
-							content: AgentState.toolsSystemPrompt
-						});
-					}
-				}
-			} else {
-				if ("" === AgentState.systemToolsPrompt)
-					AgentState.systemToolsPrompt = window.EditorHelper.getSystemPrompt();
-
-				if (requestData.messages.length === 0 || requestData.messages[0].role !== "system") {
-					requestData.messages.unshift({
-						role: 'system',
-						content: AgentState.systemToolsPrompt
-					});
+			let lastUserText = "";
+			for (let i = history.length - 1; i >= 0; i--) {
+				if (history[i].role === "user" && typeof history[i].content === "string") {
+					lastUserText = history[i].content;
+					break;
 				}
 			}
 
+			let requestData = {
+				messages: history
+			};
+
 			// Live snapshot of the open file and the user's selection. Rebuilt on
 			// every user turn and appended to the system prompt (not persisted).
-			if (window.DocumentContext) {
-				let ctxPrompt = window.DocumentContext.toPrompt(await window.DocumentContext.get());
-				if (ctxPrompt) {
-					if (requestData.messages.length > 0 && requestData.messages[0].role === "system") {
-						requestData.messages[0] = {
-							role: "system",
-							content: requestData.messages[0].content + "\n\n" + ctxPrompt
-						};
-					} else {
-						requestData.messages.unshift({ role: "system", content: ctxPrompt });
-					}
-				}
+			let docContext = window.DocumentContext ? await window.DocumentContext.get() : null;
+			let ctxPrompt = window.DocumentContext ? window.DocumentContext.toPrompt(docContext) : "";
+
+			// Only relevant tool categories are sent (toolCategories.js): inferred
+			// from the message and selection, plus those used earlier in the chat.
+			// loadTools adds categories during the turn; refreshToolSelection()
+			// then updates the tools / prompt-based system prompt.
+			let toolSession = window.EditorHelper.createToolSession({
+				text: lastUserText,
+				context: docContext,
+				usedTools: Array.isArray(payload.usedTools) ? payload.usedTools : []
+			});
+			let ownsSystemPrompt = requestData.messages.length === 0 || requestData.messages[0].role !== "system";
+
+			function getSystemContent() {
+				let base = isSupportTools ? window.EditorHelper.getToolsSystemPrompt() : toolSession.getSystemPrompt();
+				return [base, ctxPrompt].filter(function(s) { return !!s; }).join("\n\n");
+			}
+
+			if (isSupportTools) {
+				let tools = toolSession.getTools();
+				if (tools && tools.length > 0)
+					requestData.tools = tools;
+			}
+			if (ownsSystemPrompt) {
+				let systemContent = getSystemContent();
+				if (systemContent)
+					requestData.messages.unshift({ role: "system", content: systemContent });
+			} else if (ctxPrompt) {
+				requestData.messages[0] = {
+					role: "system",
+					content: requestData.messages[0].content + "\n\n" + ctxPrompt
+				};
+			}
+
+			function refreshToolSelection() {
+				if (!toolSession.consumeChanged())
+					return;
+				if (isSupportTools)
+					requestData.tools = toolSession.getTools();
+				else if (ownsSystemPrompt && requestData.messages.length > 0 && requestData.messages[0].role === "system")
+					requestData.messages[0] = { role: "system", content: getSystemContent() };
+			}
+
+			// Messages added during this turn (tool calls, results, prompt-based
+			// exchanges). Sent to the chat at the end of the turn so the next
+			// request keeps the tool context (onAgentTranscript in chat.js).
+			let turnMessages = [];
+			let hasFinalReply = false;
+			function pushTurnMessage(msg) {
+				requestData.messages.push(msg);
+				turnMessages.push(msg);
 			}
 
 			// LOOP
@@ -358,7 +389,7 @@ async function registerButtons(window, undefined)
 				if (toolCalls && toolCalls.length > 0) {
 					// One assistant message carrying all tool calls, followed by one
 					// tool message per call (required by OpenAI-compatible APIs).
-					requestData.messages.push({
+					pushTurnMessage({
 						role: 'assistant',
 						content: result || null,
 						tool_calls: toolCalls
@@ -369,7 +400,7 @@ async function registerButtons(window, undefined)
 						let funcName = toolCall.function ? toolCall.function.name : "";
 
 						if (AgentState.isStopped || failed) {
-							requestData.messages.push({
+							pushTurnMessage({
 								role: 'tool',
 								tool_call_id: toolCall.id,
 								content: AgentState.isStopped ? "Cancelled by the user." : "Skipped because a previous tool call failed."
@@ -433,12 +464,13 @@ async function registerButtons(window, undefined)
 							result: toolResult
 						});
 
-						requestData.messages.push({
+						pushTurnMessage({
 							role: 'tool',
 							tool_call_id: toolCall.id,
 							content: toolResult.message || toolResult.error || 'Success'
 						});
 					}
+					refreshToolSelection(); // loadTools may have added categories
 					continue;
 				}
 
@@ -475,18 +507,18 @@ async function registerButtons(window, undefined)
 							result: toolResult
 						});
 
-						requestData.messages.push({
+						pushTurnMessage({
 							role: 'assistant',
 							content: result
 						});
 
 						if (toolResult.declined) {
-							requestData.messages.push({
+							pushTurnMessage({
 								role: 'user',
 								content: "SYSTEM: " + TOOL_DECLINED_MESSAGE + " Do not repeat this call; continue without it or ask the user how to proceed."
 							});
 						} else if (toolResult.error) {
-							requestData.messages.push({
+							pushTurnMessage({
 								role: 'user',
 								content: "SYSTEM: Function execution failed with error: " + toolResult.error + "\nPlease try a different approach or inform the user about the issue."
 							});							
@@ -495,11 +527,12 @@ async function registerButtons(window, undefined)
 							if (toolResult.prompt) {
 								resultMessage += "\n" + toolResult.prompt;
 							}
-							requestData.messages.push({
+							pushTurnMessage({
 								role: 'user',
 								content: resultMessage
 							});							
 						}
+						refreshToolSelection(); // loadTools may have added categories
 						continue;
 					} catch (e) {
 						console.error("Tool execution error:", e);
@@ -510,11 +543,21 @@ async function registerButtons(window, undefined)
 				if (!isStreamToChat && result) {
 					chatWindow.command("onChatReply", result);
 				}
+				hasFinalReply = !!result;
 				break;
 			}
 
 			if (iteration >= AgentState.MAX_LOOP_ITERATIONS) {
 				chatWindow.command("onChatReply", "Maximum iterations reached. Please try again.");
+			}
+
+			window.EditorHelper.activeToolSession = null;
+			if (turnMessages.length > 0) {
+				chatWindow.command("onAgentTranscript", {
+					turnId: payload.turnId || null,
+					messages: turnMessages,
+					hasFinalReply: hasFinalReply
+				});
 			}
 
 			// always end (may be twice)

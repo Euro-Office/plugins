@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "findInSheet",
+		"category": "core",
 		"readOnly": true,
 		"text": "Find in Sheet",
 		"description": "Searches cell values in the used range of a worksheet (or of all worksheets) for a text or number and returns the matching cells with sheet name, A1 address and value. Values are compared as text; by default a cell matches when it contains the query anywhere (case-insensitive). Use wholeCell to require the entire cell value to equal the query. Formulas are not searched, only their results. Use it to locate data before reading or editing it with readRange/writeRange.",

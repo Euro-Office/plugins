@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "resolveComment",
+		"category": "comments-review",
 		"text": "Resolve Comment",
 		"description": "Marks a comment in the text document as resolved, or reopens it with resolved=false. Get comment ids from getComments.",
 		"parameters": {

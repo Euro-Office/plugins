@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "readPresentation",
+		"category": "core",
 		"readOnly": true,
 		"text": "Read Presentation",
 		"description": "Reads the open presentation: total slide count, the current slide number, and for each requested slide the text of every shape (with shape index, type and placeholder type when available). Use it to understand or summarise the deck, find a slide by content, or decide where to make changes. Slide numbers are 1-based.",

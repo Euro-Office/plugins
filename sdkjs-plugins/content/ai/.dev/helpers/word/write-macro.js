@@ -32,6 +32,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "writeMacro",
+		"category": "macro",
 		"text": "Run Macro",
 		"description": `Executes a JavaScript macro using the OnlyOffice Document API (text documents / Word).
 Use this tool to perform any document operation when no other specialized tool is available.

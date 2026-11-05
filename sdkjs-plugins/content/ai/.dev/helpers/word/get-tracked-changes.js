@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "getTrackedChanges",
+		"category": "comments-review",
 		"readOnly": true,
 		"text": "Read Tracked Changes",
 		"description": "Lists the tracked changes (review mode revisions) in the text document, grouped as a flat list. Each change has its author, type (TextAdd = inserted text, TextRem = deleted text, ParaAdd/ParaRem = added/removed paragraph mark, TextPr/ParaPr = formatting change, RowsAdd/RowsRem/TablePr = table changes), the inserted/deleted text when available, the date (ISO 8601) and the text of the affected paragraph. Also reports whether track changes is currently switched on. Use reviewTrackedChanges to accept or reject them.",

@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "freezePanes",
+		"category": "structure",
 		"text": "Freeze Panes",
 		"description": "Freezes rows and/or columns so they stay visible while scrolling, or removes the freeze. Either pass 'rows' and/or 'columns' (number of top rows / left columns to freeze), or 'cell' (Excel semantics: everything above and to the left of this cell is frozen, e.g. 'B2' freezes row 1 and column A), or 'unfreeze': true. Applies to the given sheet, which becomes the active sheet.",
 		"parameters": {

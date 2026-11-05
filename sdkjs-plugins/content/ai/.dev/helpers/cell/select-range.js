@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "selectRange",
+		"category": "core",
 		"readOnly": true,
 		"text": "Select Cells",
 		"description": "Selects a cell range and scrolls to it, switching to the given sheet first if needed. Use it to show the user a result (e.g. after findInSheet) or to set the selection that selection-based tools act on. Does not change any cell content.",

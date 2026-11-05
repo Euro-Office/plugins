@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "setDataValidation",
+		"category": "data",
 		"text": "Set Data Validation",
 		"description": "Adds a data validation rule to a cell range (replacing any existing rule there), or removes validation with type 'none'. Types: 'list' (drop-down; give 'values' as an array of items or 'source' as a range reference like '=$H$2:$H$10'), 'whole' (whole numbers), 'decimal', 'date', 'time', 'textLength' (length of the text), 'custom' (a formula that must be TRUE, in 'min'). For whole/decimal/date/time/textLength use 'operator' with 'min' and, for between/notBetween, 'max'. Dates are given as formulas such as '=DATE(2025,1,31)', times as decimals of a day such as '0.5' (12:00). Optionally set an error message shown when invalid data is entered.",
 		"parameters": {

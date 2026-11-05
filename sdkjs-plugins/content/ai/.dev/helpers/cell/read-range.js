@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "readRange",
+		"category": "core",
 		"readOnly": true,
 		"text": "Read Cells",
 		"description": "Reads cell values (and optionally formulas) from the spreadsheet as a 2D array of rows. If 'range' is omitted the user's current selection is read; if the selection is a single cell, the sheet's used range is returned instead when 'expandToUsedRange' is true. Large ranges are truncated to 'maxRows' x 'maxColumns'; the response tells you the full size. Use this to analyse, explain, summarise or transform data before writing results back with writeRange.",

@@ -40,6 +40,9 @@ function RegisteredFunction(obj)
 	// Read-only tools only inspect the document and run without asking the
 	// user. Everything else needs approval. Not sent to providers.
 	this.readOnly = obj.readOnly === true;
+	// Tool group used to send only relevant tools per request
+	// (see toolCategories.js). Not sent to providers.
+	this.category = obj.category || "";
 
 	this.call = null;
 }
@@ -85,6 +88,9 @@ function EditorHelperImpl() {
 		}
 	}
 
+	if (this.funcs.length > 0)
+		this.funcs.push(createLoadToolsFunction(this));
+
 	for (let i = 0; i < this.funcs.length; i++) {
 		let func = this.funcs[i];
 		this.names2funcs[func.name] = func;
@@ -95,7 +101,169 @@ function EditorHelperImpl() {
 			this.names2text[name] = HELPERS.names[editorType][name];
 		}
 	}
+	this.names2text["loadTools"] = "Load Tools";
+
+	// Per category-set caches (key: sorted category list).
+	this._toolsCache = {};
+	this._systemPromptCache = {};
+	// Set by the agent loop for the running turn (see createToolSession);
+	// loadTools adds categories to it.
+	this.activeToolSession = null;
 }
+
+// ── Tool categories ─────────────────────────────────────────────────────
+// The meta tool that lets the model fetch more tool categories mid-turn.
+// Read-only (runs without approval); it only changes which tool schemas
+// the agent loop sends in the following iterations of this turn.
+function createLoadToolsFunction(helper) {
+	let available = helper.getAvailableCategories();
+	let func = new RegisteredFunction({
+		"name": "loadTools",
+		"category": "meta",
+		"readOnly": true,
+		"description": "Loads additional tool categories. Only some tools are available at first; call this when you need a tool from another category, then use the new tools in your next step. Categories:\n" + ToolCategories.describe(available),
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"categories": {
+					"type": "array",
+					"items": { "type": "string", "enum": available },
+					"description": "Categories to load."
+				}
+			},
+			"required": ["categories"]
+		},
+		"examples": [
+			{
+				"prompt": "Add a bar chart of this data",
+				"arguments": { "categories": ["charts-visuals"] }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let requested = params && params.categories;
+		if (typeof requested === "string")
+			requested = [requested];
+		if (!Array.isArray(requested) || requested.length === 0)
+			throw new ToolArgumentsError('Parameter "categories" must be a non-empty array. Available: ' + available.join(", "));
+		let unknown = requested.filter(function(c) { return available.indexOf(c) === -1; });
+		if (unknown.length > 0)
+			throw new ToolArgumentsError("Unknown categories: " + unknown.join(", ") + ". Available: " + available.join(", "));
+
+		let session = helper.activeToolSession;
+		let added = session ? session.add(requested) : [];
+		let names = helper.getToolNames(requested);
+		return {
+			loaded: requested,
+			newlyAvailableTools: session ? helper.getToolNames(added) : names,
+			allTools: names
+		};
+	};
+	return func;
+}
+
+// Categories this editor has tools for (without the meta category).
+EditorHelperImpl.prototype.getAvailableCategories = function() {
+	let list = [];
+	for (let i = 0; i < this.funcs.length; i++) {
+		let cat = this.funcs[i].category;
+		if (cat && cat !== ToolCategories.META_CATEGORY && list.indexOf(cat) === -1)
+			list.push(cat);
+	}
+	return ToolCategories.normalize(list);
+};
+
+// A tool is part of a selection if its category is selected. Tools without
+// a category (e.g. newly added ones) are always sent so they stay reachable.
+EditorHelperImpl.prototype._isFuncSelected = function(func, categories) {
+	if (func.category === ToolCategories.META_CATEGORY)
+		return true;
+	if (!func.category)
+		return true;
+	return categories.indexOf(func.category) !== -1;
+};
+
+// Without categories: all tools except loadTools (old behaviour).
+EditorHelperImpl.prototype._getSelectedFuncs = function(categories) {
+	let result = [];
+	for (let i = 0; i < this.funcs.length; i++) {
+		let func = this.funcs[i];
+		if (!categories) {
+			if (func.category !== ToolCategories.META_CATEGORY)
+				result.push(func);
+		} else if (this._isFuncSelected(func, categories)) {
+			result.push(func);
+		}
+	}
+	return result;
+};
+
+EditorHelperImpl.prototype.getToolNames = function(categories) {
+	let names = [];
+	for (let i = 0; i < this.funcs.length; i++) {
+		let func = this.funcs[i];
+		if (func.category && categories.indexOf(func.category) !== -1)
+			names.push(func.name);
+	}
+	return names;
+};
+
+EditorHelperImpl.prototype.getCategoriesOfTools = function(toolNames) {
+	let list = [];
+	for (let i = 0; toolNames && i < toolNames.length; i++) {
+		let func = this.names2funcs[toolNames[i]];
+		if (func && func.category && func.category !== ToolCategories.META_CATEGORY && list.indexOf(func.category) === -1)
+			list.push(func.category);
+	}
+	return list;
+};
+
+// options: { text, context, usedTools } → normalized category list.
+EditorHelperImpl.prototype.selectCategories = function(options) {
+	options = options || {};
+	return ToolCategories.select({
+		editorType: Asc.Editor.getType(),
+		text: options.text || "",
+		context: options.context || null,
+		usedCategories: this.getCategoriesOfTools(options.usedTools || []),
+		available: this.getAvailableCategories()
+	});
+};
+
+// The tool set of one agent turn. Starts with the inferred categories;
+// loadTools adds more. The loop polls consumeChanged() after tool calls.
+EditorHelperImpl.prototype.createToolSession = function(options) {
+	let helper = this;
+	let available = this.getAvailableCategories();
+	let session = {
+		categories: this.selectCategories(options),
+		changed: false,
+		add: function(categories) {
+			let added = categories.filter(function(c) {
+				return available.indexOf(c) !== -1 && session.categories.indexOf(c) === -1;
+			});
+			if (added.length > 0) {
+				session.categories = ToolCategories.normalize(session.categories.concat(added), available);
+				session.changed = true;
+			}
+			return added;
+		},
+		consumeChanged: function() {
+			let changed = session.changed;
+			session.changed = false;
+			return changed;
+		},
+		getTools: function() {
+			return helper.getTools(session.categories);
+		},
+		getSystemPrompt: function() {
+			return helper.getSystemPrompt(session.categories);
+		}
+	};
+	this.activeToolSession = session;
+	return session;
+};
 
 EditorHelperImpl.prototype._getEditorContext = function() {
 	let editorType = Asc.Editor.getType();
@@ -146,6 +314,7 @@ IMPORTANT RULES FOR DOCUMENT OPERATIONS:\n\
 4. The \"writeMacro\" tool can also READ/GET data from the " + ctx.name + ". Make the last expression in the code be the value you want to retrieve — it will be returned as the tool result. Example: " + ctx.macroExample + "\n\
 5. If a \"writeMacro\" call returns an error, analyze the error message, fix the code, and retry. You may retry up to 5 times for a single macro request before giving up and informing the user.\n\
 6. If the user’s question is NOT about the " + ctx.name + " content (e.g., general knowledge, coding help, conversation), respond normally without calling any tools.\n\
+7. Only some tools are loaded. If you need a tool that is not available (e.g. charts, conditional formatting, sorting), call \"loadTools\" with the needed categories first instead of falling back to writeMacro.\n\
 \n\
 Always prefer specialized tools over writeMacro when available. Use writeMacro as a universal fallback for any " + ctx.name + " operation.\n\
 ";
@@ -153,11 +322,18 @@ Always prefer specialized tools over writeMacro when available. Use writeMacro a
 	return prompt;
 };
 
-EditorHelperImpl.prototype.getSystemPrompt = function() {
+// categories: optional list from selectCategories(); only those functions
+// are described. Cached per category set.
+EditorHelperImpl.prototype.getSystemPrompt = function(categories) {
 	if (this.funcs.length === 0)
 		return "";
 
+	let cacheKey = categories ? categories.join(",") : "*";
+	if (this._systemPromptCache[cacheKey])
+		return this._systemPromptCache[cacheKey];
+
 	let ctx = this._getEditorContext();
+	let funcs = this._getSelectedFuncs(categories);
 
 	let systemPrompt = "\
 You are an AI assistant integrated into the OnlyOffice " + ctx.name + " editor with function-calling capabilities.\n\
@@ -171,6 +347,7 @@ BEHAVIOR RULES:\n\
 - If the user’s question is NOT about the " + ctx.name + " content (e.g., general knowledge, coding help, conversation), respond normally in text without calling any function.\n\
 - Do not ask for clarification when a function can handle the request — make reasonable assumptions.\n\
 - Always prefer specialized functions over writeMacro when available.\n\
+- Only some functions are listed. If you need one from another category, call \"loadTools\" first; the list is then extended.\n\
 \n\
 ────────────────────────────\n\
 FUNCTION CALL FORMAT\n\
@@ -197,8 +374,8 @@ AVAILABLE FUNCTIONS\n\
 ────────────────────────────\n\
 ";
 
-	for (let i in this.funcs) {
-		let func = this.funcs[i];
+	for (let i = 0; i < funcs.length; i++) {
+		let func = funcs[i];
 		systemPrompt += "\n\
 - " + func.name + "\n\
 Description: " + func.description + "\n\
@@ -216,8 +393,8 @@ EXAMPLES\n\
 ────────────────────────────\n\
 ";
 
-	for (let i in this.funcs) {
-		let func = this.funcs[i];
+	for (let i = 0; i < funcs.length; i++) {
+		let func = funcs[i];
 		for (let j = 0, len = func.examples.length; j < len; j++) {
 			let ex = func.examples[j];
 			systemPrompt += "If the user says: \"" + ex.prompt + "\"\n\
@@ -248,17 +425,26 @@ If the user’s question is about the " + ctx.name + " content — always use fu
 If the user’s question is NOT about the " + ctx.name + " — respond normally with clear helpful text.\n\
 ";
 
+	this._systemPromptCache[cacheKey] = systemPrompt;
 	return systemPrompt;
 };
 
-EditorHelperImpl.prototype.getTools = function() {
+// categories: optional list from selectCategories(); without it all tools
+// (except loadTools) are returned. Cached per category set; callers get a copy.
+EditorHelperImpl.prototype.getTools = function(categories) {
 	if (this.funcs.length === 0)
 		return null;
 
-	// Only serialize the schema fields; internal flags (readOnly, call) stay local.
+	let cacheKey = categories ? categories.join(",") : "*";
+	if (this._toolsCache[cacheKey])
+		return JSON.parse(this._toolsCache[cacheKey]);
+
+	// Only serialize the schema fields; internal flags (readOnly, category,
+	// call) stay local.
+	let funcs = this._getSelectedFuncs(categories);
 	let tools = [];
-	for (let i in this.funcs) {
-		let func = this.funcs[i];
+	for (let i = 0; i < funcs.length; i++) {
+		let func = funcs[i];
 		tools.push({
 			name: func.name,
 			description: func.description,
@@ -268,7 +454,8 @@ EditorHelperImpl.prototype.getTools = function() {
 		});
 	}
 
-	return JSON.parse(JSON.stringify(tools));
+	this._toolsCache[cacheKey] = JSON.stringify(tools);
+	return JSON.parse(this._toolsCache[cacheKey]);
 };
 
 EditorHelperImpl.prototype.isReadOnly = function(funcName) {

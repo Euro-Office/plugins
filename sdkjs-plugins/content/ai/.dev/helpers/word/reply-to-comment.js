@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "replyToComment",
+		"category": "comments-review",
 		"text": "Reply to Comment",
 		"description": "Adds a reply to an existing comment in the text document. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
 		"parameters": {

@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "editParagraph",
+		"category": "edit-text",
 		"text": "Edit Paragraph",
 		"description": "Edits the document by top-level element index (as returned by readDocument). Actions: 'replace' replaces the text of a paragraph (keeps its style), 'insertBefore'/'insertAfter' add a new paragraph next to the element (optionally with a style such as 'Heading 1'), 'delete' removes the element. Indexes are 1-based; after inserting or deleting, later indexes shift, so re-read the document if you need further edits.",
 		"parameters": {

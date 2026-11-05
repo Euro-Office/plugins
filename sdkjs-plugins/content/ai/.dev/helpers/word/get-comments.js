@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "getComments",
+		"category": "comments-review",
 		"readOnly": true,
 		"text": "Read Comments",
 		"description": "Lists the comments of the text document in document order. For each comment returns its id (pass it to replyToComment/resolveComment), author, creation time (ISO 8601, UTC), comment text, the quoted document text it is anchored to, whether it is resolved, and its replies (author, text). Use it to summarise review feedback or to decide which comments to answer or resolve.",

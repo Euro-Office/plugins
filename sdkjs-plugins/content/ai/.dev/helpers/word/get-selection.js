@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "getSelection",
+		"category": "core",
 		"readOnly": true,
 		"text": "Read Selection",
 		"description": "Returns the text currently selected by the user in the document, together with the 1-based indexes of the paragraphs the selection covers. If nothing is selected, returns the paragraph at the cursor. Use this whenever the user refers to 'this', 'the selection', 'the selected text' or 'here'.",

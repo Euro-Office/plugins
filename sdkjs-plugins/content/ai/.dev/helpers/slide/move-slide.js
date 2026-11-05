@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "moveSlide",
+		"category": "structure",
 		"text": "Move Slide",
 		"description": "Moves a slide to a new position. 'from' is the current 1-based slide number, 'to' is the 1-based number the slide should have afterwards (other slides shift accordingly). Example: from 5 to 1 makes slide 5 the first slide.",
 		"parameters": {

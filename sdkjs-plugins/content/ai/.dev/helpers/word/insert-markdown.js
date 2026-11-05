@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "insertMarkdown",
+		"category": "edit-text",
 		"text": "Insert Formatted Text",
 		"description": "Inserts rich content written in Markdown into the text document, converting headings (#, ##, ...), bold/italic, bulleted and numbered lists, links, code and tables to real document formatting. position 'cursor' inserts at the cursor (an existing selection is collapsed, not replaced), 'replaceSelection' replaces the currently selected text, 'end' appends after the last paragraph. Prefer this over editParagraph when adding several formatted paragraphs at once.",
 		"parameters": {

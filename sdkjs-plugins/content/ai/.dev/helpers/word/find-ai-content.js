@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "findAIContent",
+		"category": "comments-review",
 		"readOnly": true,
 		"text": "Find AI-Generated Content",
 		"description": "Lists the parts of the text document that were marked as AI-generated (content controls tagged 'ai-generated', added when AI text is inserted) together with the document-level AI provenance properties (AIGenerated, AIGeneratedModels, AIGeneratedLastUpdate). For each marked part returns its 1-based number in document order, kind (inline/block), the 1-based index of the top-level element that contains it (same numbering as readDocument; omitted when it is nested in a table or another container), the model and date, the character count and a text snippet. Use it to answer questions like 'What in this document was written by AI?'. Text that was edited by the user afterwards stays inside the mark.",

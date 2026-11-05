@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "replaceSelection",
+		"category": "edit-text",
 		"text": "Replace Selection",
 		"description": "Replaces the text the user has selected on the slide (inside a text box, placeholder or table cell) with new text. Use it to apply rewritten, shortened, translated or corrected text back to the selection. Requires a non-empty text selection.",
 		"parameters": {

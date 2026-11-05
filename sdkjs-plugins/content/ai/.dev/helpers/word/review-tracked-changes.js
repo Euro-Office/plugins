@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "reviewTrackedChanges",
+		"category": "comments-review",
 		"text": "Accept or Reject Changes",
 		"description": "Accepts or rejects tracked changes in the text document. scope 'all' affects every tracked change in the document; scope 'selection' affects only the changes inside the user's current selection (use selectText first to select a passage). Returns the number of tracked changes before and after. Inspect the changes with getTrackedChanges first.",
 		"parameters": {

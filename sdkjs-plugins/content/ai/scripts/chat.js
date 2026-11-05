@@ -657,6 +657,9 @@
 
 		document.getElementById('clear_history').onclick = function() {
 			document.getElementById('chat').innerHTML = '';
+			// Drop the items too, not only their DOM: sendMessage() builds the
+			// history (incl. stored tool transcripts) from this list.
+			messagesList._list = [];
 			messagesList.set([]);
 			document.getElementById('total_tokens').classList.remove('err-message');
 			document.getElementById('total_tokens').innerText = 0;
@@ -845,7 +848,9 @@
 	};
 
 	function sendMessage(text) {
-		const message = { role: 'user', content: text };
+		// turnId links the agent transcript of this turn back to this message
+		// (see onAgentTranscript).
+		const message = { role: 'user', content: text, turnId: 't' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8) };
 
 		if (attachedText.hasShow()) {
 			message.attachedText = attachedText.get();
@@ -861,20 +866,17 @@
 
 		let list = messagesList.get();
 
-		//Remove the errors, tool calls, and user messages that caused the error
-		list = list.filter(function(item, index) {
-			const nextItem = list[index + 1]
-			// Filter out tool messages (they are only for UI display)
-			if (item.isToolCall || item.role === 'tool') {
-				return false;
-			}
-			return !item.error && !(nextItem && nextItem.error);
+		// Rebuild the request history (scripts/helpers/agentHistory.js): turns
+		// that ended in an error are dropped as a whole, tool UI items are
+		// skipped, and the stored agent transcripts are re-inserted so the model
+		// keeps the tool context of earlier turns (truncated; older turns
+		// collapsed to a summary). Every assistant tool_calls message is
+		// followed by exactly its tool results, so no orphan tool messages.
+		window.Asc.plugin.sendToPlugin("onChatMessage", {
+			messages: window.AgentHistory.build(list),
+			usedTools: window.AgentHistory.collectToolNames(list),
+			turnId: message.turnId
 		});
-		list = list.map(function(item) {
-			return { role: item.role, content: item.getActiveContent ? item.getActiveContent() : item.content }
-		});
-
-		window.Asc.plugin.sendToPlugin("onChatMessage", list);
 	};
 
 	function createTyping() {
@@ -1182,6 +1184,23 @@
 			attachedText: attachedText.hasShow() ? attachedText.get() : ''
 		});
 		window.Asc.plugin.sendToPlugin("onUpdateState");
+	});
+
+	// Internal messages of a finished agent turn (tool calls + results). Stored
+	// on the user message that started the turn, hidden in the UI, persisted
+	// with the chat state and re-sent as history by sendMessage().
+	window.Asc.plugin.attachEvent("onAgentTranscript", function(data) {
+		if (!data || !data.turnId || !Array.isArray(data.messages))
+			return;
+		let list = messagesList.get();
+		for (let i = list.length - 1; i >= 0; i--) {
+			if (list[i].role === 'user' && list[i].turnId === data.turnId) {
+				let messages = window.AgentHistory.compactTranscript(data.messages);
+				if (messages.length > 0)
+					list[i].agentTranscript = { messages: messages, hasFinalReply: !!data.hasFinalReply };
+				return;
+			}
+		}
 	});
 
 	// Track tool call indices for updating

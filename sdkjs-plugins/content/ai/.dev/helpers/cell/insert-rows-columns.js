@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "insertRowsColumns",
+		"category": "structure",
 		"text": "Insert Rows or Columns",
 		"description": "Inserts empty whole rows or whole columns into a worksheet. The new rows/columns are inserted at position 'at' (before the existing row/column there), which shifts existing cells down or right; formulas referencing shifted cells are updated automatically. Rows are 1-based numbers, columns are letters (A, B, ..., XFD).",
 		"parameters": {

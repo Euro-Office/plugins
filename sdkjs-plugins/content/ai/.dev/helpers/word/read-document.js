@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "readDocument",
+		"category": "core",
 		"readOnly": true,
 		"text": "Read Document",
 		"description": "Reads the content of the open text document. Returns the total number of top-level elements and, for the requested window, each element's 1-based index, type (paragraph/table/blockLvlSdt), style name and text. Use it to understand the document before editing it, to locate paragraphs by content, or to answer questions about the document. Call it again with a different startIndex to page through long documents.",

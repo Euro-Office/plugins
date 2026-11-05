@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "replaceSelection",
+		"category": "edit-text",
 		"text": "Replace Selection",
 		"description": "Replaces the text the user has selected with new text, keeping the surrounding formatting as far as possible. Use it to apply rewritten, translated, corrected or summarized text back to the selection. Requires a non-empty selection; call getSelection first if unsure. Set 'trackChanges' to true to make the change visible as a tracked revision.",
 		"parameters": {

@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "deleteRowsColumns",
+		"category": "structure",
 		"text": "Delete Rows or Columns",
 		"description": "Deletes whole rows or whole columns (including their content) from a worksheet. Cells below/right of them shift up/left; formulas pointing at deleted cells become #REF!. Rows are 1-based numbers, columns are letters (A, B, ..., XFD). Read the affected cells first if unsure.",
 		"parameters": {

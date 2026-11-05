@@ -36,6 +36,7 @@ HELPERS.word = [];
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "addImage",
+		"category": "charts-visuals",
 		"description": "Generate an image from text and insert it at the current cursor position. Width and height are in millimeters.",
 		"parameters": {
 			"type": "object",
@@ -168,6 +169,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "checkSpelling",
+		"category": "comments-review",
 		"description": "Checks spelling and fixes text errors in the current paragraph.",
 		"parameters": {
 			"type": "object",
@@ -285,6 +287,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "commentText",
+		"category": "comments-review",
 		"description": "Adds a comment or footnote to explain or annotate the selected text. If no text is selected, works with the current paragraph.",
 		"parameters": {
 			"type": "object",
@@ -426,6 +429,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "editParagraph",
+		"category": "edit-text",
 		"description": "Edits the document by top-level element index (as returned by readDocument). Actions: 'replace' replaces the text of a paragraph (keeps its style), 'insertBefore'/'insertAfter' add a new paragraph next to the element (optionally with a style such as 'Heading 1'), 'delete' removes the element. Indexes are 1-based; after inserting or deleting, later indexes shift, so re-read the document if you need further edits.",
 		"parameters": {
 			"type": "object",
@@ -579,6 +583,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "findAIContent",
+		"category": "comments-review",
 		"readOnly": true,
 		"description": "Lists the parts of the text document that were marked as AI-generated (content controls tagged 'ai-generated', added when AI text is inserted) together with the document-level AI provenance properties (AIGenerated, AIGeneratedModels, AIGeneratedLastUpdate). For each marked part returns its 1-based number in document order, kind (inline/block), the 1-based index of the top-level element that contains it (same numbering as readDocument; omitted when it is nested in a table or another container), the model and date, the character count and a text snippet. Use it to answer questions like 'What in this document was written by AI?'. Text that was edited by the user afterwards stays inside the mark.",
 		"parameters": {
@@ -705,6 +710,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "findText",
+		"category": "core",
 		"readOnly": true,
 		"description": "Searches the main body of the text document (including tables and content controls, not headers, footers or footnotes) for a plain-text string. Returns the total number of matches and, for each returned match, its 1-based occurrence number, the 1-based index of the top-level element that contains it (same numbering as readDocument/editParagraph) and a short snippet of surrounding text. Use it to locate passages before editing them; pass the occurrence number to selectText to select a match. Matching is substring-based and case-insensitive unless matchCase is true.",
 		"parameters": {
@@ -821,6 +827,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "generateDocx",
+		"category": "generate",
 		"description": "Use this function if you are asked to generate a textual document (report, article, letter, etc.) based on a description. Input: Short description of what needs to be generated.",
 		"parameters": {
 			"type": "object",
@@ -857,6 +864,7 @@ If possible, provide the output in valid Markdown (.md) format, but do not wrap 
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "generateForm",
+		"category": "generate",
 		"description": "Use this function if you are asked to generate a form or document template (contract, any document for filling) based on a description. Input: a detailed description of the desired form or template.",
 		"parameters": {
 			"type": "object",
@@ -1094,6 +1102,7 @@ For radio buttons, always use the same \`groupKey\` for all options of the same 
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "getComments",
+		"category": "comments-review",
 		"readOnly": true,
 		"description": "Lists the comments of the text document in document order. For each comment returns its id (pass it to replyToComment/resolveComment), author, creation time (ISO 8601, UTC), comment text, the quoted document text it is anchored to, whether it is resolved, and its replies (author, text). Use it to summarise review feedback or to decide which comments to answer or resolve.",
 		"parameters": {
@@ -1179,6 +1188,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "getSelection",
+		"category": "core",
 		"readOnly": true,
 		"description": "Returns the text currently selected by the user in the document, together with the 1-based indexes of the paragraphs the selection covers. If nothing is selected, returns the paragraph at the cursor. Use this whenever the user refers to 'this', 'the selection', 'the selected text' or 'here'.",
 		"parameters": {
@@ -1240,6 +1250,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "getTrackedChanges",
+		"category": "comments-review",
 		"readOnly": true,
 		"description": "Lists the tracked changes (review mode revisions) in the text document, grouped as a flat list. Each change has its author, type (TextAdd = inserted text, TextRem = deleted text, ParaAdd/ParaRem = added/removed paragraph mark, TextPr/ParaPr = formatting change, RowsAdd/RowsRem/TablePr = table changes), the inserted/deleted text when available, the date (ISO 8601) and the text of the affected paragraph. Also reports whether track changes is currently switched on. Use reviewTrackedChanges to accept or reject them.",
 		"parameters": {
@@ -1318,6 +1329,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "insertMarkdown",
+		"category": "edit-text",
 		"description": "Inserts rich content written in Markdown into the text document, converting headings (#, ##, ...), bold/italic, bulleted and numbered lists, links, code and tables to real document formatting. position 'cursor' inserts at the cursor (an existing selection is collapsed, not replaced), 'replaceSelection' replaces the currently selected text, 'end' appends after the last paragraph. Prefer this over editParagraph when adding several formatted paragraphs at once.",
 		"parameters": {
 			"type": "object",
@@ -1402,6 +1414,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "insertPage",
+		"category": "structure",
 		"description": "Inserts a blank page at the specified location in the document.",
 		"parameters": {
 			"type": "object",
@@ -1465,6 +1478,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "changeParagraphStyle",
+		"category": "format",
 		"description": "Changes the style of a specified paragraph in the document. If no paragraph number is provided, affects the current paragraph.",
 		"parameters": {
 			"type": "object",
@@ -1536,6 +1550,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "readDocument",
+		"category": "core",
 		"readOnly": true,
 		"description": "Reads the content of the open text document. Returns the total number of top-level elements and, for the requested window, each element's 1-based index, type (paragraph/table/blockLvlSdt), style name and text. Use it to understand the document before editing it, to locate paragraphs by content, or to answer questions about the document. Call it again with a different startIndex to page through long documents.",
 		"parameters": {
@@ -1638,6 +1653,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "readOutline",
+		"category": "core",
 		"readOnly": true,
 		"description": "Returns the outline (table of contents) of the text document: every top-level heading paragraph with its heading level (1 = top level, up to 9), its 1-based element index (same numbering as readDocument/editParagraph) and its text. Headings are detected from the paragraph's outline level or a 'Heading N' style. Use it to understand the structure of a long document cheaply, then read or edit specific sections by index.",
 		"parameters": {
@@ -1720,6 +1736,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "replaceSelection",
+		"category": "edit-text",
 		"description": "Replaces the text the user has selected with new text, keeping the surrounding formatting as far as possible. Use it to apply rewritten, translated, corrected or summarized text back to the selection. Requires a non-empty selection; call getSelection first if unsure. Set 'trackChanges' to true to make the change visible as a tracked revision.",
 		"parameters": {
 			"type": "object",
@@ -1787,6 +1804,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "replyToComment",
+		"category": "comments-review",
 		"description": "Adds a reply to an existing comment in the text document. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
 		"parameters": {
 			"type": "object",
@@ -1837,6 +1855,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "resolveComment",
+		"category": "comments-review",
 		"description": "Marks a comment in the text document as resolved, or reopens it with resolved=false. Get comment ids from getComments.",
 		"parameters": {
 			"type": "object",
@@ -1888,6 +1907,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "reviewTrackedChanges",
+		"category": "comments-review",
 		"description": "Accepts or rejects tracked changes in the text document. scope 'all' affects every tracked change in the document; scope 'selection' affects only the changes inside the user's current selection (use selectText first to select a passage). Returns the number of tracked changes before and after. Inspect the changes with getTrackedChanges first.",
 		"parameters": {
 			"type": "object",
@@ -1959,6 +1979,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "rewriteText",
+		"category": "edit-text",
 		"description": "Use this function when you asked to rewrite or replace some text. If text or paragraph number is not specified assume that we are working with the current paragraph.",
 		
 		"parameters": {
@@ -2126,6 +2147,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "selectText",
+		"category": "core",
 		"readOnly": true,
 		"description": "Selects the n-th occurrence of a text in the main body of the document and moves the view to it, so the user can see it or so a selection-based tool (e.g. replaceSelection, rewriteText, commentText, insertMarkdown with position 'replaceSelection') can act on it. Does not change the content. Occurrences are numbered from 1 in document order, exactly as returned by findText.",
 		"parameters": {
@@ -2210,6 +2232,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "changeTextStyle",
+		"category": "format",
 		"description": "Changes the style of the selected text, including bold, italic, underline, strikethrough, and font size.",
 		"parameters": {
 			"type": "object",
@@ -2325,6 +2348,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "writeMacro",
+		"category": "macro",
 		"description": `Executes a JavaScript macro using the OnlyOffice Document API (text documents / Word).
 Use this tool to perform any document operation when no other specialized tool is available.
 This tool can also be used to READ/GET data from the document — make the last expression in the script be the value you want to retrieve, and it will be returned as the tool result.
@@ -2456,6 +2480,7 @@ HELPERS.slide = [];
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "addChartToSlide",
+		"category": "charts-visuals",
 		"description": "Adds a chart to the slide (152x89mm, centered)",
 		"parameters": {
 			"type": "object",
@@ -2679,6 +2704,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "addNewSlide",
+		"category": "structure",
 		"description": "Adds a new slide at the end of presentation using default layout from current slide's master",
 		"parameters": {
 			"type": "object",
@@ -2736,6 +2762,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "addShapeToSlide",
+		"category": "charts-visuals",
 		"description": "Adds a shape to the slide with optional text (139x42mm, centered, blue fill with dark border)",
 		"parameters": {
 			"type": "object",
@@ -2842,6 +2869,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "addTableToSlide",
+		"category": "charts-visuals",
 		"description": "Adds a table to the slide (194x97mm, centered)",
 		"parameters": {
 			"type": "object",
@@ -2969,6 +2997,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "addTextToPlaceholder",
+		"category": "edit-text",
 		"description": "Universal function for adding ANY text content to slides. Use this for ALL text addition requests: recipes, lists, instructions, notes, ideas, or any other text content.",
 		"parameters": {
 			"type": "object",
@@ -3169,6 +3198,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "addImageByDescription",
+		"category": "charts-visuals",
 		"description": "Adds an image on the slide in the presentation",
 		"parameters": {
 			"type": "object",
@@ -3311,6 +3341,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "changeSlideBackground",
+		"category": "charts-visuals",
 		"description": "Changes the color of the slide in the presentation.",
 		"parameters": {
 			"type": "object",
@@ -3421,6 +3452,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "deleteSlide",
+		"category": "structure",
 		"description": "Deletes slide with the specific index or current",
 		"parameters": {
 			"type": "object",
@@ -3480,6 +3512,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "duplicateSlide",
+		"category": "structure",
 		"description": "Duplicates slide with the specific index or current",
 		"parameters": {
 			"type": "object",
@@ -3538,6 +3571,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "findInPresentation",
+		"category": "core",
 		"readOnly": true,
 		"description": "Searches the text of all slides (text boxes, placeholders and shapes; optionally speaker notes) for a plain-text string. Returns, per match, the 1-based slide number, the 1-based shape index on that slide (same numbering as readPresentation; null for speaker notes), where it was found ('shape' or 'notes') and a snippet of surrounding text. Case-insensitive unless matchCase is true. Use goToSlide to show a result to the user.",
 		"parameters": {
@@ -3656,6 +3690,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "generatePresentationWithTheme",
+		"category": "generate",
 		"description": "Generates a complete presentation with custom theme, fonts, and streaming content",
 		"parameters": {
 			"type": "object",
@@ -5452,6 +5487,7 @@ ${fontsContract}
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "getSpeakerNotes",
+		"category": "notes",
 		"readOnly": true,
 		"description": "Returns the speaker notes of one slide, or of all slides when slideNumber is omitted (slides without notes are listed with an empty text). Slide numbers are 1-based. Use it to review, summarise or rewrite the presenter notes.",
 		"parameters": {
@@ -5514,6 +5550,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "goToSlide",
+		"category": "core",
 		"readOnly": true,
 		"description": "Shows the given slide in the editor (makes it the current slide). Use it to show the user a search result or before tools that act on the current slide. Slide numbers are 1-based. Does not change the presentation.",
 		"parameters": {
@@ -5553,6 +5590,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "moveSlide",
+		"category": "structure",
 		"description": "Moves a slide to a new position. 'from' is the current 1-based slide number, 'to' is the 1-based number the slide should have afterwards (other slides shift accordingly). Example: from 5 to 1 makes slide 5 the first slide.",
 		"parameters": {
 			"type": "object",
@@ -5608,6 +5646,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "readPresentation",
+		"category": "core",
 		"readOnly": true,
 		"description": "Reads the open presentation: total slide count, the current slide number, and for each requested slide the text of every shape (with shape index, type and placeholder type when available). Use it to understand or summarise the deck, find a slide by content, or decide where to make changes. Slide numbers are 1-based.",
 		"parameters": {
@@ -5722,6 +5761,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "replaceSelection",
+		"category": "edit-text",
 		"description": "Replaces the text the user has selected on the slide (inside a text box, placeholder or table cell) with new text. Use it to apply rewritten, shortened, translated or corrected text back to the selection. Requires a non-empty text selection.",
 		"parameters": {
 			"type": "object",
@@ -5758,6 +5798,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "setSpeakerNotes",
+		"category": "notes",
 		"description": "Writes the speaker notes of a slide. mode 'replace' (default) replaces the existing notes, 'append' adds the text as new paragraphs after them. Line breaks (\\n) start new paragraphs. Defaults to the current slide. Slide numbers are 1-based.",
 		"parameters": {
 			"type": "object",
@@ -5867,6 +5908,7 @@ HELPERS.slide.push((function(){
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "writeMacro",
+		"category": "macro",
 		"description": `Executes a JavaScript macro using the OnlyOffice Presentation API.
 Use this tool to perform any presentation operation when no other specialized tool is available.
 This tool can also be used to READ/GET data from the presentation — make the last expression in the script be the value you want to retrieve, and it will be returned as the tool result.
@@ -5999,6 +6041,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addAboveAverage",
+		"category": "conditional-formatting",
 		"description": "Highlights cells that contain values above or below the average of all values in the range. This is useful for identifying data points that deviate significantly from the typical values in your dataset.",
 		"parameters": {
 			"type": "object",
@@ -6114,6 +6157,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addCellValueCondition",
+		"category": "conditional-formatting",
 		"description": "Creates conditional formatting rules based on cell values using comparison operators (greater than, less than, equal to, between, etc.). This is the most flexible conditional formatting option, allowing you to highlight cells that meet specific criteria with custom colors for background and text.",
 		"parameters": {
 			"type": "object",
@@ -6247,6 +6291,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addChart",
+		"category": "charts-visuals",
 		"description": "Creates charts from data ranges to visualize data. Supports multiple chart types including bar charts, line charts, pie charts, scatter plots, and area charts. Each chart type has variants like stacked, 3D, and percentage views. Charts are automatically positioned below the source data range with configurable dimensions. Optional chart titles can be added for better context.",
 		"parameters": {
 			"type": "object",
@@ -6348,6 +6393,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addColorScale",
+		"category": "conditional-formatting",
 		"description": "Applies color scale conditional formatting to visualize data with gradient colors. Creates a heat map effect where values are represented by colors ranging from one color (minimum values) to another color (maximum values). Use 2-color scale for simple comparisons or 3-color scale for more detailed data visualization.",
 		"parameters": {
 			"type": "object",
@@ -6422,6 +6468,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addConditionalFormatting",
+		"category": "conditional-formatting",
 		"description": "Use this function when user asks for conditional formatting without specifying the exact type. This applies the most commonly used conditional formatting rule - highlighting cells based on values greater than a threshold with color background. Perfect for general requests like 'add conditional formatting', 'highlight important data', or 'format cells conditionally'.",
 		"parameters": {
 			"type": "object",
@@ -6538,6 +6585,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addDataBars",
+		"category": "conditional-formatting",
 		"description": "Adds data bar conditional formatting to display values as horizontal bars within cells. The length of each bar represents the value relative to other values in the range. Useful for creating in-cell bar charts and comparing values at a glance without additional charts.",
 		"parameters": {
 			"type": "object",
@@ -6650,6 +6698,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addIconSet",
+		"category": "conditional-formatting",
 		"description": "Applies icon set conditional formatting to display icons (arrows, traffic lights, symbols) based on value ranges. Icons provide visual indicators for data trends and performance levels. Each icon represents a different value range, making it easy to identify patterns and outliers in your data.",
 		"parameters": {
 			"type": "object",
@@ -6745,6 +6794,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addImage",
+		"category": "charts-visuals",
 		"description": "Use this function when you need to insert an image into the spreadsheet.",
 		"parameters": {
 			"type": "object",
@@ -6861,6 +6911,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addTop10Condition",
+		"category": "conditional-formatting",
 		"description": "Highlights the top or bottom ranked values in a range. You can choose to highlight by item count (e.g., top 10 values) or by percentage (e.g., top 20% of values). Perfect for identifying highest performers, outliers, or values that need attention in your dataset.",
 		"parameters": {
 			"type": "object",
@@ -6982,6 +7033,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "addUniqueValues",
+		"category": "conditional-formatting",
 		"description": "Highlights unique values or duplicate values in a range. Use this to identify data that appears only once (unique) or multiple times (duplicates) within the specified range. Perfect for data validation and cleanup tasks.",
 		"parameters": {
 			"type": "object",
@@ -7084,6 +7136,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "clearConditionalFormatting",
+		"category": "conditional-formatting",
 		"description": "Removes all conditional formatting rules from the specified range or current selection. This function cleans up all existing conditional formatting including color scales, data bars, icon sets, and highlight cell rules, returning cells to their default appearance.",
 		"parameters": {
 			"type": "object",
@@ -7144,6 +7197,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "deleteRowsColumns",
+		"category": "structure",
 		"description": "Deletes whole rows or whole columns (including their content) from a worksheet. Cells below/right of them shift up/left; formulas pointing at deleted cells become #REF!. Rows are 1-based numbers, columns are letters (A, B, ..., XFD). Read the affected cells first if unsure.",
 		"parameters": {
 			"type": "object",
@@ -7266,6 +7320,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "explainFormula",
+		"category": "analysis",
 		"description": "Analyzes and explains Excel formulas in natural language. Uses AI to provide detailed explanations of formula logic, function parameters, nested operations, and expected results. The explanation is added as a cell comment to the cell containing the formula. Particularly useful for understanding complex formulas with multiple nested functions or unfamiliar Excel functions. Keeps explanations concise (under 1024 characters recommended) while covering all essential information.",
 		"parameters": {
 			"type": "object",
@@ -7411,6 +7466,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "fillMissingData",
+		"category": "data",
 		"description": "Intelligently fills missing or empty cells in a data range using appropriate statistical methods. For numeric columns, fills with median values. For categorical columns, uses the most frequent value. For time series data, applies forward fill (uses the previous non-empty value). Automatically detects column types and highlights filled cells with light blue color for easy identification.",
 		"parameters": {
 			"type": "object",
@@ -7590,6 +7646,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "findFormulaErrors",
+		"category": "analysis",
 		"readOnly": true,
 		"description": "Scans the used range of a worksheet (or all worksheets) for cells showing an error value (#REF!, #DIV/0!, #VALUE!, #NAME?, #N/A, #NUM!, #NULL!, #SPILL!, #CALC!, #GETTING_DATA) and returns each one's sheet, address, error and formula, plus a count per error type. Use it to audit a workbook, then explain or repair the formulas (fixFormula, writeRange).",
 		"parameters": {
@@ -7714,6 +7771,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "findInSheet",
+		"category": "core",
 		"readOnly": true,
 		"description": "Searches cell values in the used range of a worksheet (or of all worksheets) for a text or number and returns the matching cells with sheet name, A1 address and value. Values are compared as text; by default a cell matches when it contains the query anywhere (case-insensitive). Use wholeCell to require the entire cell value to equal the query. Formulas are not searched, only their results. Use it to locate data before reading or editing it with readRange/writeRange.",
 		"parameters": {
@@ -7863,6 +7921,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "fixFormula",
+		"category": "analysis",
 		"description": "Scans cells for formulas containing errors and attempts to fix them automatically. Detects common formula errors including #DIV/0! (division by zero), #REF! (invalid cell references), #NAME? (unrecognized function names), #VALUE! (wrong value types), and #N/A (value not available). Applies appropriate fixes: wraps division operations in IF statements, corrects cell references, fixes function name typos, and adds IFERROR wrappers. Preserves formulas that have no errors. Can scan entire sheet or specific range.",
 		"parameters": {
 			"type": "object",
@@ -8030,6 +8089,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "formatTable",
+		"category": "format",
 		"description": "Applies professional table formatting to a data range with consistent styling, colors, and alignment. Features include: automatic or manual color scheme selection (blue, green, orange, gray, red), alternating row colors for readability, optional header row formatting (bold, centered, colored background), table borders, and automatic column width adjustment. Can auto-detect existing formatting to avoid overriding intentional styles. Supports smart content-based text alignment (right-align numbers, left-align text).",
 		"parameters": {
 			"type": "object",
@@ -8333,6 +8393,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "freezePanes",
+		"category": "structure",
 		"description": "Freezes rows and/or columns so they stay visible while scrolling, or removes the freeze. Either pass 'rows' and/or 'columns' (number of top rows / left columns to freeze), or 'cell' (Excel semantics: everything above and to the left of this cell is frozen, e.g. 'B2' freezes row 1 and column A), or 'unfreeze': true. Applies to the given sheet, which becomes the active sheet.",
 		"parameters": {
 			"type": "object",
@@ -8459,6 +8520,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "getComments",
+		"category": "comments-review",
 		"readOnly": true,
 		"description": "Lists the comments in the workbook. For each comment returns its id (pass it to replyToComment), the sheet and cell address it belongs to (address is omitted when it cannot be determined, e.g. for comments on cells outside the used range), the cell value, author, comment text, whether it is resolved, and its replies.",
 		"parameters": {
@@ -8584,6 +8646,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "getWorkbookInfo",
+		"category": "core",
 		"readOnly": true,
 		"description": "Returns an overview of the open spreadsheet: all sheet names with their used ranges, the active sheet, and the address of the user's current selection. Call this first when you need to know where data lives before reading or changing cells.",
 		"parameters": {
@@ -8632,6 +8695,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "highlightAnomalies",
+		"category": "analysis",
 		"description": "Detects and highlights statistical outliers (anomalies) in numeric data using the IQR (Interquartile Range) method or Z-score analysis. Applies conservative outlier detection to avoid false positives - only marks clear statistical anomalies. Automatically extracts numeric values from the range, calculates quartiles, and identifies values that fall outside Q1-1.5*IQR or Q3+1.5*IQR. Highlights detected anomalies with customizable colors. Requires at least 4 numeric values for analysis.",
 		"parameters": {
 			"type": "object",
@@ -8881,6 +8945,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "highlightDuplicates",
+		"category": "data",
 		"description": "Identifies and highlights duplicate values within a specified range. Compares all cells in the range and highlights cells that contain values appearing more than once. Uses AI to accurately detect duplicates while handling various data types (numbers, text, dates). Highlights all instances of duplicate values with customizable color. Useful for data validation, cleanup tasks, and identifying repeated entries in datasets.",
 		"parameters": {
 			"type": "object",
@@ -9092,6 +9157,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "insertPivotTable",
+		"category": "analysis",
 		"description": "Creates pivot tables for data analysis and summarization. Automatically detects suitable grouping columns and numeric columns for aggregation. Supports custom column selection via parameters. Creates a new worksheet with the pivot table. Intelligently matches column names using fuzzy substring matching when column names are specified.",
 		"parameters": {
 			"type": "object",
@@ -9520,6 +9586,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "insertRowsColumns",
+		"category": "structure",
 		"description": "Inserts empty whole rows or whole columns into a worksheet. The new rows/columns are inserted at position 'at' (before the existing row/column there), which shifts existing cells down or right; formulas referencing shifted cells are updated automatically. Rows are 1-based numbers, columns are letters (A, B, ..., XFD).",
 		"parameters": {
 			"type": "object",
@@ -9641,6 +9708,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "manageSheet",
+		"category": "structure",
 		"description": "Adds, renames, deletes or activates a worksheet. 'add' creates a new sheet called 'name' (it becomes the active sheet); 'rename' renames sheet 'name' to 'newName'; 'delete' removes sheet 'name' and all its data (the last remaining sheet cannot be deleted); 'activate' switches to sheet 'name'. Sheet names must be 1-31 characters and must not contain : \\ / ? * [ ]. Returns the resulting list of sheets and the active sheet.",
 		"parameters": {
 			"type": "object",
@@ -9760,6 +9828,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "readRange",
+		"category": "core",
 		"readOnly": true,
 		"description": "Reads cell values (and optionally formulas) from the spreadsheet as a 2D array of rows. If 'range' is omitted the user's current selection is read; if the selection is a single cell, the sheet's used range is returned instead when 'expandToUsedRange' is true. Large ranges are truncated to 'maxRows' x 'maxColumns'; the response tells you the full size. Use this to analyse, explain, summarise or transform data before writing results back with writeRange.",
 		"parameters": {
@@ -9908,6 +9977,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "replyToComment",
+		"category": "comments-review",
 		"description": "Adds a reply to an existing cell comment in the workbook, or marks it as resolved. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
 		"parameters": {
 			"type": "object",
@@ -9977,6 +10047,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "selectRange",
+		"category": "core",
 		"readOnly": true,
 		"description": "Selects a cell range and scrolls to it, switching to the given sheet first if needed. Use it to show the user a result (e.g. after findInSheet) or to set the selection that selection-based tools act on. Does not change any cell content.",
 		"parameters": {
@@ -10038,6 +10109,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "setAutoFilter",
+		"category": "data",
 		"description": "Applies autofilter to a data range, enabling dropdown filters on column headers. Supports filtering by column number or column name (with fuzzy matching). Offers multiple filter types: value comparison operators (greater than, less than, equals), multiple value selection, top/bottom N items or percentage, color-based filtering (cell background or font color), and dynamic filters. Can be used to filter active selection or specific ranges.",
 		"parameters": {
 			"type": "object",
@@ -10268,6 +10340,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "setDataValidation",
+		"category": "data",
 		"description": "Adds a data validation rule to a cell range (replacing any existing rule there), or removes validation with type 'none'. Types: 'list' (drop-down; give 'values' as an array of items or 'source' as a range reference like '=$H$2:$H$10'), 'whole' (whole numbers), 'decimal', 'date', 'time', 'textLength' (length of the text), 'custom' (a formula that must be TRUE, in 'min'). For whole/decimal/date/time/textLength use 'operator' with 'min' and, for between/notBetween, 'max'. Dates are given as formulas such as '=DATE(2025,1,31)', times as decimals of a day such as '0.5' (12:00). Optionally set an error message shown when invalid data is entered.",
 		"parameters": {
 			"type": "object",
@@ -10454,6 +10527,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "setMultiSort",
+		"category": "data",
 		"description": "Sorts data by multiple columns (up to 3 levels). Use this when you need to sort by primary, secondary, and tertiary sort keys. Each level can have its own sort order.",
 		"parameters": {
 			"type": "object",
@@ -10690,6 +10764,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "setNumberFormat",
+		"category": "data",
 		"description": "Applies a number format code to a cell range without changing the stored values. Use standard Excel format codes, e.g. 'General', '0', '0.00', '#,##0.00', '0%', '0.0%', '#,##0.00 \"€\"', '[$$-409]#,##0.00', 'dd.mm.yyyy', 'yyyy-mm-dd', 'hh:mm', '@' (text). Use it to show values as currency, percentages, dates or with a fixed number of decimals.",
 		"parameters": {
 			"type": "object",
@@ -10762,6 +10837,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "setSort",
+		"category": "data",
 		"description": "Sorts data in a range by a single column in ascending or descending order.",
 		"parameters": {
 			"type": "object",
@@ -10960,6 +11036,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "summarizeData",
+		"category": "analysis",
 		"description": "Analyzes and creates a comprehensive text summary of data in the specified range. Automatically determines data types (numeric, categorical, dates) and provides relevant statistics for each type. For numeric data: calculates totals, averages, ranges, and identifies outliers. For categorical data: finds most frequent values and distribution patterns. The summary is placed in a new cell adjacent to the data range with proper formatting and text wrapping.",
 		"parameters": {
 			"type": "object",
@@ -11109,6 +11186,7 @@ HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "changeTextStyle",
+		"category": "format",
 		"description": "Applies text formatting styles to cells in the specified range or current selection. Supports comprehensive text styling options including bold, italic, underline (multiple types), strikeout, font family, font size, and font color. Colors can be specified using hex codes (#FF0000) or preset color names (red, blue, etc.). All formatting parameters are optional - only specified properties will be changed, leaving others unchanged.",
 		"parameters": {
 			"type": "object",
@@ -11266,6 +11344,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "writeMacro",
+		"category": "macro",
 		"description": `Executes a JavaScript macro using the OnlyOffice Spreadsheet API.
 Use this tool to perform any spreadsheet operation when no other specialized tool is available.
 This tool can also be used to READ/GET data from the spreadsheet — make the last expression in the script be the value you want to retrieve, and it will be returned as the tool result.
@@ -11389,6 +11468,7 @@ values;`
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "writeRange",
+		"category": "edit-text",
 		"description": "Writes a 2D array of values into the spreadsheet starting at a top-left cell. Strings that start with '=' are entered as formulas (use English function names and commas as separators). Use null to leave a cell unchanged and an empty string to clear it. Use it to fill in computed results, cleaned data, new columns, totals or formulas. The whole write is a single undo step.",
 		"parameters": {
 			"type": "object",

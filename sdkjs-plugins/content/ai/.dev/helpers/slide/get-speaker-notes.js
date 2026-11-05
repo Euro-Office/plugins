@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "getSpeakerNotes",
+		"category": "notes",
 		"readOnly": true,
 		"text": "Read Speaker Notes",
 		"description": "Returns the speaker notes of one slide, or of all slides when slideNumber is omitted (slides without notes are listed with an empty text). Slide numbers are 1-based. Use it to review, summarise or rewrite the presenter notes.",
