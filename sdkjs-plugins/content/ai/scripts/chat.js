@@ -42,6 +42,9 @@
 	let themeType = 'light';
 	let isAgentRunning = false;
 	let isAgentStopped = false;
+	// Pending tool approval prompts by approval id. Not persisted: they are
+	// only meaningful while the agent waits for an answer.
+	let toolApprovals = {};
 
 	function escapeHtml(str) {
 		if (!str) return '';
@@ -196,6 +199,15 @@
 
 			$toolCallContent.append($header);
 			$toolCallContent.append($details);
+
+			// Pending approval prompts stay visible even when the card is collapsed.
+			let listIndex = this._list.indexOf(item);
+			for (let approvalId in toolApprovals) {
+				let approval = toolApprovals[approvalId];
+				if (approval.listIndex === listIndex)
+					$toolCallContent.append(renderToolApproval(approval));
+			}
+
 			item.$el.append($toolCallContent);
 			scrollbarList && scrollbarList.update();
 		},
@@ -385,6 +397,71 @@
 			return this._list;
 		}
 	};
+
+	// ── Tool approval prompts ───────────────────────────────────────────────
+	function renderToolApproval(approval) {
+		let data = approval.data;
+		let isMacro = typeof data.code === 'string';
+		let questionId = 'tool_approval_q_' + String(data.id).replace(/[^A-Za-z0-9_-]/g, '_');
+		let $box = $('<div class="tool_call_approval" role="group" tabindex="-1"></div>');
+		$box.attr('aria-labelledby', questionId);
+
+		let $question = $('<div class="tool_call_approval_question"></div>');
+		$question.attr('id', questionId);
+		$question.text(window.Asc.plugin.tr('Allow this action?') + ' ' + (data.humanName || data.functionName || ''));
+		$box.append($question);
+
+		if (isMacro) {
+			$box.append($('<div class="tool_call_approval_label"></div>').text(window.Asc.plugin.tr('The assistant wants to run this macro:')));
+			$box.append($('<pre class="tool_call_approval_code" tabindex="0"></pre>').text(data.code));
+		} else if (data.arguments && data.arguments !== '{}') {
+			$box.append($('<pre class="tool_call_approval_code" tabindex="0"></pre>').text(data.arguments));
+		}
+
+		let $buttons = $('<div class="tool_call_approval_buttons"></div>');
+		function addButton(label, decision, extraClass) {
+			let $btn = $('<button type="button" class="btn-text-default"></button>');
+			if (extraClass) $btn.addClass(extraClass);
+			$btn.text(window.Asc.plugin.tr(label));
+			$btn.on('click', function(e) {
+				e.stopPropagation();
+				respondToolApproval(data.id, decision);
+			});
+			$buttons.append($btn);
+		}
+		addButton('Allow', 'allow', 'submit primary');
+		addButton(isMacro ? 'Allow for this session' : 'Always allow', 'always');
+		addButton('Deny', 'deny');
+		$box.append($buttons);
+		return $box;
+	}
+
+	function rerenderToolCallAt(listIndex) {
+		let item = messagesList.get()[listIndex];
+		if (item && item.isToolCall && item.$el)
+			messagesList._renderToolCall(item);
+	}
+
+	function respondToolApproval(id, decision) {
+		let approval = toolApprovals[id];
+		if (!approval)
+			return;
+		delete toolApprovals[id];
+		window.Asc.plugin.sendToPlugin("onToolApprovalResponse", { id: id, decision: decision });
+		rerenderToolCallAt(approval.listIndex);
+	}
+
+	function clearToolApprovals(toolCallId) {
+		let touched = {};
+		for (let id in toolApprovals) {
+			if (toolCallId === undefined || toolApprovals[id].toolCallId === toolCallId) {
+				touched[toolApprovals[id].listIndex] = true;
+				delete toolApprovals[id];
+			}
+		}
+		for (let listIndex in touched)
+			rerenderToolCallAt(Number(listIndex));
+	}
 
 	let attachedText = {
 		set: function(text) {
@@ -639,6 +716,7 @@
 
 	function onStopAgent() {
 		isAgentStopped = true;
+		clearToolApprovals(); // the plugin side resolves pending approvals as denied
 		updateControlButtonsState();
 		window.Asc.plugin.sendToPlugin("onStopAgent", {});
 	};
@@ -1061,6 +1139,7 @@
 			}
 		}
 
+		clearToolApprovals();
 		removeTyping();
 		finishAgentExecution();
 		document.getElementById('input_message').focus();
@@ -1156,10 +1235,44 @@
 			result = toolCallData.result ? (toolCallData.result.message || toolCallData.result.error || 'Success') : '';
 		}
 
+		if (toolCallData.id)
+			clearToolApprovals(toolCallData.id);
+
 		// Update the result for the existing tool call
 		if (toolCallData.id && toolCallIndices[toolCallData.id] !== undefined) {
 			messagesList.updateToolCallResult(toolCallIndices[toolCallData.id], result);
 			delete toolCallIndices[toolCallData.id];
+		}
+	});
+
+	window.Asc.plugin.attachEvent("onToolApprovalRequest", function(data) {
+		if (!data || !data.id)
+			return;
+
+		let index = data.toolCallId ? toolCallIndices[data.toolCallId] : undefined;
+		if (index === undefined) {
+			index = messagesList.addToolCall({
+				functionName: data.functionName,
+				humanName: data.humanName || data.functionName,
+				arguments: data.arguments || '',
+				result: null
+			});
+		}
+		let listIndex = (index && typeof index === 'object') ? index.listIndex : index;
+
+		toolApprovals[data.id] = {
+			data: data,
+			toolCallId: data.toolCallId,
+			listIndex: listIndex
+		};
+		rerenderToolCallAt(listIndex);
+
+		let item = messagesList.get()[listIndex];
+		if (item && item.$el) {
+			let $chat = $('#chat');
+			$chat.scrollTop($chat[0].scrollHeight);
+			let $box = item.$el.find('.tool_call_approval').last();
+			if ($box.length) $box[0].focus({ preventScroll: true });
 		}
 	});
 

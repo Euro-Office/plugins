@@ -127,8 +127,104 @@ async function registerButtons(window, undefined)
 		}
 		window.AgentState.ToolError = ToolError;
 
+		// ── Tool approval ──────────────────────────────────────────────────
+		// Every tool that is not marked readOnly needs the user's consent in
+		// the chat window before it runs. "Always allow" is remembered per tool
+		// in localStorage, except for writeMacro (arbitrary code), where it only
+		// lasts as long as this chat window.
+		const ALWAYS_ALLOW_KEY = "onlyoffice_ai_tool_always_allow";
+		const SESSION_ONLY_TOOLS = { "writeMacro": true };
+		let sessionAllowedTools = {};
+		let pendingApprovals = {};
+		let approvalCounter = 0;
+
+		function getPersistedAllowedTools() {
+			try {
+				let value = JSON.parse(window.localStorage.getItem(ALWAYS_ALLOW_KEY) || "{}");
+				return (value && typeof value === "object" && !Array.isArray(value)) ? value : {};
+			} catch (e) {
+				return {};
+			}
+		}
+
+		function rememberAllowedTool(funcName) {
+			if (SESSION_ONLY_TOOLS[funcName]) {
+				sessionAllowedTools[funcName] = true;
+				return;
+			}
+			let allowed = getPersistedAllowedTools();
+			allowed[funcName] = true;
+			try {
+				window.localStorage.setItem(ALWAYS_ALLOW_KEY, JSON.stringify(allowed));
+			} catch (e) {
+				sessionAllowedTools[funcName] = true;
+			}
+		}
+
+		function isToolPreapproved(funcName) {
+			if (window.EditorHelper.isReadOnly(funcName))
+				return true;
+			if (sessionAllowedTools[funcName])
+				return true;
+			if (SESSION_ONLY_TOOLS[funcName])
+				return false;
+			return getPersistedAllowedTools()[funcName] === true;
+		}
+
+		// Resolves true if the tool may run, false if the user declined, the
+		// agent was stopped or the chat window went away.
+		function requestToolApproval(toolCallId, funcName, argsObj) {
+			if (isToolPreapproved(funcName))
+				return Promise.resolve(true);
+			if (AgentState.isStopped)
+				return Promise.resolve(false);
+
+			let id = "approval_" + (++approvalCounter) + "_" + (toolCallId || "");
+			return new Promise(function(resolve) {
+				pendingApprovals[id] = { resolve: resolve, functionName: funcName };
+				let request = {
+					id: id,
+					toolCallId: toolCallId,
+					functionName: funcName,
+					humanName: window.EditorHelper.getHumanName(funcName),
+					arguments: JSON.stringify(argsObj || {}, null, 2)
+				};
+				if (funcName === "writeMacro" && argsObj && typeof argsObj.code === "string")
+					request.code = argsObj.code;
+				try {
+					chatWindow.command("onToolApprovalRequest", request);
+				} catch (e) {
+					console.error("Failed to request tool approval:", e);
+					delete pendingApprovals[id];
+					resolve(false);
+				}
+			});
+		}
+
+		function denyPendingApprovals() {
+			let ids = Object.keys(pendingApprovals);
+			for (let i = 0; i < ids.length; i++) {
+				let pending = pendingApprovals[ids[i]];
+				delete pendingApprovals[ids[i]];
+				pending.resolve(false);
+			}
+		}
+		AgentState.denyPendingApprovals = denyPendingApprovals;
+
+		chatWindow.attachEvent("onToolApprovalResponse", function(data) {
+			if (!data || !data.id || !pendingApprovals[data.id])
+				return;
+			let pending = pendingApprovals[data.id];
+			delete pendingApprovals[data.id];
+
+			if (data.decision === "always")
+				rememberAllowedTool(pending.functionName);
+			pending.resolve(!AgentState.isStopped && (data.decision === "allow" || data.decision === "always"));
+		});
+
 		chatWindow.attachEvent("onStopAgent", function() {
 			AgentState.isStopped = true;
+			denyPendingApprovals();
 		});
 
 		chatWindow.attachEvent("onChatMessage", async function(messageHistory) {
@@ -264,7 +360,7 @@ async function registerButtons(window, undefined)
 						let argsObj = {};
 						let argsError = null;
 						try {
-							argsObj = (typeof funcArgs === 'string') ? (funcArgs.trim() ? JSON.parse(funcArgs) : {}) : (funcArgs || {});
+							argsObj = parseToolArguments(funcArgs);
 						} catch (e) {
 							argsError = "Arguments are not valid JSON: " + e.message;
 						}
@@ -278,12 +374,18 @@ async function registerButtons(window, undefined)
 						});
 
 						let toolResult = {};
+						let declined = false;
 						try {
 							if (argsError)
 								throw new AgentState.ToolError(argsError);
 							let func = window.EditorHelper.names2funcs[funcName];
 							if (!func)
 								throw new AgentState.ToolError("Unknown tool \"" + funcName + "\". Available tools: " + Object.keys(window.EditorHelper.names2funcs).join(", "));
+
+							if (!(await requestToolApproval(toolCall.id, funcName, argsObj))) {
+								declined = true;
+								throw new AgentState.ToolError(TOOL_DECLINED_MESSAGE);
+							}
 
 							let toolResultMessage = await func.call(argsObj);
 							if (toolResultMessage)
@@ -292,9 +394,14 @@ async function registerButtons(window, undefined)
 								toolResultMessage = Asc.plugin.tr("Function executed successfully");
 							toolResult.message = toolResultMessage;
 						} catch (e) {
-							console.error("Tool execution error:", e);
-							toolResult.error = Asc.plugin.tr("Error:") + "\n" + (e && e.message ? e.message : String(e));
-							failed = true;
+							if (declined) {
+								// Not a failure: let the model see the refusal and continue.
+								toolResult.error = TOOL_DECLINED_MESSAGE;
+							} else {
+								console.error("Tool execution error:", e);
+								toolResult.error = Asc.plugin.tr("Error:") + "\n" + (e && e.message ? e.message : String(e));
+								failed = true;
+							}
 						}
 
 						chatWindow.command("onToolCallEnd", {
@@ -322,8 +429,7 @@ async function registerButtons(window, undefined)
 					try {
 						let toolCallId = 'system_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 
-						let sysNameMatch = result.match(/\(([^)]+)\)/);
-						let sysFuncName = sysNameMatch ? sysNameMatch[1].trim() : '';
+						let sysFuncName = window.EditorHelper.parseFuncCall(result).funcName || '';
 
 						chatWindow.command("onToolCallStart", {
 							type: 'system_prompt',
@@ -332,7 +438,11 @@ async function registerButtons(window, undefined)
 							humanName: sysFuncName ? window.EditorHelper.getHumanName(sysFuncName) : ''
 						});
 
-						let toolResult = await window.EditorHelper.callFunc(result);
+						let toolResult = await window.EditorHelper.callFunc(result, {
+							beforeCall: function(name, args) {
+								return requestToolApproval(toolCallId, name, args);
+							}
+						});
 
 						chatWindow.command("onToolCallEnd", {
 							type: 'system_prompt',
@@ -346,7 +456,12 @@ async function registerButtons(window, undefined)
 							content: result
 						});
 
-						if (toolResult.error) {
+						if (toolResult.declined) {
+							requestData.messages.push({
+								role: 'user',
+								content: "SYSTEM: " + TOOL_DECLINED_MESSAGE + " Do not repeat this call; continue without it or ask the user how to proceed."
+							});
+						} else if (toolResult.error) {
 							requestData.messages.push({
 								role: 'user',
 								content: "SYSTEM: Function execution failed with error: " + toolResult.error + "\nPlease try a different approach or inform the user about the issue."

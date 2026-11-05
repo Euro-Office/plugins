@@ -37,6 +37,9 @@ function RegisteredFunction(obj)
 	this.parameters = obj.parameters || {};
 	this.examples = obj.examples || [];
 	this.returns = obj.returns || {};
+	// Read-only tools only inspect the document and run without asking the
+	// user. Everything else needs approval. Not sent to providers.
+	this.readOnly = obj.readOnly === true;
 
 	this.call = null;
 }
@@ -252,12 +255,25 @@ EditorHelperImpl.prototype.getTools = function() {
 	if (this.funcs.length === 0)
 		return null;
 
+	// Only serialize the schema fields; internal flags (readOnly, call) stay local.
 	let tools = [];
 	for (let i in this.funcs) {
-		tools.push(this.funcs[i]);		
+		let func = this.funcs[i];
+		tools.push({
+			name: func.name,
+			description: func.description,
+			parameters: func.parameters,
+			examples: func.examples,
+			returns: func.returns
+		});
 	}
 
 	return JSON.parse(JSON.stringify(tools));
+};
+
+EditorHelperImpl.prototype.isReadOnly = function(funcName) {
+	let func = this.names2funcs[funcName];
+	return !!(func && func.readOnly);
 };
 
 EditorHelperImpl.prototype.getHumanName = function(funcName) {
@@ -272,26 +288,54 @@ EditorHelperImpl.prototype.getHumanName = function(funcName) {
 	return englishName;
 };
 
-EditorHelperImpl.prototype.callFunc = async function(data) {
+var FUNC_CALL_PREFIX_RE = /^\s*\[functionCalling\s*\(\s*([A-Za-z_$][\w$.-]*)\s*\)\s*\]\s*:?/;
 
-	let index1 = data.indexOf("(");
-	let index2 = data.indexOf(")");
-	let index3 = data.indexOf("{");
+// Parses a prompt-based tool call "[functionCalling (name)]: {json}".
+// Returns { funcName, args } or { funcName, error }. Never executes anything.
+EditorHelperImpl.prototype.parseFuncCall = function(data) {
+	data = (typeof data === "string") ? data : "";
 
-	let funcName = data.substring(index1 + 1, index2).trim();
-	let paramsStr = getJsonResult(data, index3);
+	let match = data.match(FUNC_CALL_PREFIX_RE);
+	if (!match)
+		return { funcName: "", error: "Malformed function call. Expected: [functionCalling (functionName)]: {JSON arguments}" };
+
+	let funcName = match[1];
+	let rest = data.substring(match[0].length);
+	let braceIndex = rest.indexOf("{");
+	if (braceIndex === -1) {
+		if (rest.trim() === "")
+			return { funcName: funcName, args: {} };
+		return { funcName: funcName, error: "Arguments for \"" + funcName + "\" must be a JSON object." };
+	}
+	if (rest.substring(0, braceIndex).trim() !== "")
+		return { funcName: funcName, error: "Unexpected text before the arguments of \"" + funcName + "\". Arguments must be a JSON object." };
 
 	try {
-		let func = this.names2funcs[funcName];
-		if (!func) {
-			let errorMsg = "Function not found: " + funcName;
-			console.error(errorMsg);
-			return {
-				error: errorMsg
-			};
+		return { funcName: funcName, args: parseToolArguments(getJsonResult(rest, braceIndex)) };
+	} catch (e) {
+		return { funcName: funcName, error: "Arguments for \"" + funcName + "\" are not valid JSON (" + e.message + "). Send a strict JSON object: double-quoted keys and strings, no comments, no expressions." };
+	}
+};
+
+// hooks.beforeCall(funcName, args) -> Promise<boolean>; false means the user declined.
+EditorHelperImpl.prototype.callFunc = async function(data, hooks) {
+	let parsed = this.parseFuncCall(data);
+
+	try {
+		if (parsed.error)
+			throw new ToolArgumentsError(parsed.error);
+
+		let func = this.names2funcs[parsed.funcName];
+		if (!func)
+			throw new ToolArgumentsError("Unknown tool \"" + parsed.funcName + "\". Available tools: " + Object.keys(this.names2funcs).join(", "));
+
+		if (hooks && typeof hooks.beforeCall === "function") {
+			let allowed = await hooks.beforeCall(parsed.funcName, parsed.args);
+			if (!allowed)
+				return { error: TOOL_DECLINED_MESSAGE, declined: true };
 		}
 
-		let toolResultMessage = await func.call(eval("(" + paramsStr.replaceAll("\n", "\\n") + ")"));
+		let toolResultMessage = await func.call(parsed.args);
 		if (toolResultMessage)
 			toolResultMessage = Asc.plugin.tr("Function executed successfully") + "\n" + JSON.stringify(toolResultMessage);
 		else
@@ -299,12 +343,98 @@ EditorHelperImpl.prototype.callFunc = async function(data) {
 
 		return { message : toolResultMessage };
 	} catch (e) {
+		console.error("Tool execution error:", e);
 		return {
-			error: Asc.plugin.tr("Error:") + "\n" + e.message
+			error: Asc.plugin.tr("Error:") + "\n" + (e && e.message ? e.message : String(e))
 		};
 	}
-	
 };
+
+var TOOL_DECLINED_MESSAGE = "The user declined this action.";
+
+function ToolArgumentsError(message) {
+	this.name = "ToolError";
+	this.message = message;
+}
+ToolArgumentsError.prototype = Object.create(Error.prototype);
+ToolArgumentsError.prototype.constructor = ToolArgumentsError;
+
+// Parses model-supplied tool arguments as data. Strict JSON first; then a
+// tolerant pass that only fixes harmless issues (raw control characters inside
+// strings, trailing commas). Throws on anything else. Never evaluates code.
+function parseToolArguments(str) {
+	if (str === undefined || str === null)
+		return {};
+	if (typeof str === "object")
+		return str;
+
+	str = String(str).trim();
+	if (str === "")
+		return {};
+
+	let result;
+	try {
+		result = JSON.parse(str);
+	} catch (strictError) {
+		try {
+			result = JSON.parse(relaxJson(str));
+		} catch (e) {
+			throw new Error(strictError.message);
+		}
+	}
+
+	if (result === null || typeof result !== "object" || Array.isArray(result))
+		throw new Error("expected a JSON object");
+
+	return result;
+}
+
+function relaxJson(str) {
+	let out = "";
+	let inString = false;
+	let isEscaped = false;
+	for (let i = 0; i < str.length; i++) {
+		let ch = str[i];
+		if (inString) {
+			if (isEscaped) {
+				isEscaped = false;
+				out += ch;
+			} else if (ch === "\\") {
+				isEscaped = true;
+				out += ch;
+			} else if (ch === "\"") {
+				inString = false;
+				out += ch;
+			} else if (ch === "\n") {
+				out += "\\n";
+			} else if (ch === "\r") {
+				out += "\\r";
+			} else if (ch === "\t") {
+				out += "\\t";
+			} else if (ch < " ") {
+				out += "\\u" + ("0000" + ch.charCodeAt(0).toString(16)).slice(-4);
+			} else {
+				out += ch;
+			}
+			continue;
+		}
+		if (ch === "\"") {
+			inString = true;
+			out += ch;
+			continue;
+		}
+		if (ch === ",") {
+			// drop trailing comma before } or ]
+			let j = i + 1;
+			while (j < str.length && /\s/.test(str[j]))
+				j++;
+			if (str[j] === "}" || str[j] === "]")
+				continue;
+		}
+		out += ch;
+	}
+	return out;
+}
 
 function getJsonResult(responseText, startPos) {
 		
@@ -317,10 +447,6 @@ function getJsonResult(responseText, startPos) {
 	
 	for (let i = startPos; i < inputLen; i++) {
 		let char = responseText[i];
-		
-		if (char === '\n') {
-			this.lineNumber++;
-		}
 		
 		if (char === '"' && !isEscaped) {
 			inString = !inString;

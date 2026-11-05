@@ -729,6 +729,12 @@ window.Asc.plugin.button = async function(id, windowId) {
 
 	if (window.chatWindow && window.chatWindow.id === windowId)
 	{
+		// Chat closed: stop the agent and treat pending tool approvals as denied.
+		if (window.AgentState) {
+			window.AgentState.isStopped = true;
+			if (window.AgentState.denyPendingApprovals)
+				window.AgentState.denyPendingApprovals();
+		}
 		clearChatState();
 		delete window.chatWindow;
 	}

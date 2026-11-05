@@ -202,5 +202,12 @@
 	"Explain formula": "Formel erklären",
 	"Improve text": "Text verbessern",
 	"Make concise": "Kürzer fassen",
-	"Summarize this slide": "Diese Folie zusammenfassen"
+	"Summarize this slide": "Diese Folie zusammenfassen",
+
+	"Allow this action?": "Diese Aktion zulassen?",
+	"The assistant wants to run this macro:": "Der Assistent möchte dieses Makro ausführen:",
+	"Allow": "Zulassen",
+	"Always allow": "Immer zulassen",
+	"Allow for this session": "Für diese Sitzung zulassen",
+	"Deny": "Ablehnen"
 }

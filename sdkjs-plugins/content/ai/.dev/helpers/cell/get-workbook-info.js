@@ -1,6 +1,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "getWorkbookInfo",
+		"readOnly": true,
 		"text": "Inspect Workbook",
 		"description": "Returns an overview of the open spreadsheet: all sheet names with their used ranges, the active sheet, and the address of the user's current selection. Call this first when you need to know where data lives before reading or changing cells.",
 		"parameters": {

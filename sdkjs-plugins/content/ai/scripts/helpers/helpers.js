@@ -818,6 +818,7 @@ For radio buttons, always use the same \`groupKey\` for all options of the same 
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "getSelection",
+		"readOnly": true,
 		"description": "Returns the text currently selected by the user in the document, together with the 1-based indexes of the paragraphs the selection covers. If nothing is selected, returns the paragraph at the cursor. Use this whenever the user refers to 'this', 'the selection', 'the selected text' or 'here'.",
 		"parameters": {
 			"type": "object",
@@ -1012,6 +1013,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "readDocument",
+		"readOnly": true,
 		"description": "Reads the content of the open text document. Returns the total number of top-level elements and, for the requested window, each element's 1-based index, type (paragraph/table/blockLvlSdt), style name and text. Use it to understand the document before editing it, to locate paragraphs by content, or to answer questions about the document. Call it again with a different startIndex to page through long documents.",
 		"parameters": {
 			"type": "object",
@@ -4442,6 +4444,7 @@ ${fontsContract}
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
 		"name": "readPresentation",
+		"readOnly": true,
 		"description": "Reads the open presentation: total slide count, the current slide number, and for each requested slide the text of every shape (with shape index, type and placeholder type when available). Use it to understand or summarise the deck, find a slide by content, or decide where to make changes. Slide numbers are 1-based.",
 		"parameters": {
 			"type": "object",
@@ -6664,6 +6667,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "getWorkbookInfo",
+		"readOnly": true,
 		"description": "Returns an overview of the open spreadsheet: all sheet names with their used ranges, the active sheet, and the address of the user's current selection. Call this first when you need to know where data lives before reading or changing cells.",
 		"parameters": {
 			"type": "object",
@@ -7599,6 +7603,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "readRange",
+		"readOnly": true,
 		"description": "Reads cell values (and optionally formulas) from the spreadsheet as a 2D array of rows. If 'range' is omitted the user's current selection is read; if the selection is a single cell, the sheet's used range is returned instead when 'expandToUsedRange' is true. Large ranges are truncated to 'maxRows' x 'maxColumns'; the response tells you the full size. Use this to analyse, explain, summarise or transform data before writing results back with writeRange.",
 		"parameters": {
 			"type": "object",
@@ -7945,8 +7950,14 @@ HELPERS.cell.push((function(){
 				return { error: "Invalid field \"" + Asc.scope.field + "\". Must be a number (e.g., 1)" };
 
 			let criteria1 = Asc.scope.criteria1;
-			if (criteria1 && criteria1.startsWith && (criteria1.startsWith("[") || criteria1.startsWith("{")))
-				criteria1 = eval(criteria1);
+			if (criteria1 && criteria1.startsWith && (criteria1.startsWith("[") || criteria1.startsWith("{"))) {
+				// Parse as data only; never evaluate model-supplied text.
+				try {
+					criteria1 = JSON.parse(criteria1);
+				} catch (e) {
+					return { error: "Invalid criteria1 \"" + Asc.scope.criteria1 + "\". Arrays and objects must be valid JSON, e.g. [\"A\",\"B\"] or {\"r\":255,\"g\":0,\"b\":0}." };
+				}
+			}
 			if (Asc.scope.operator === "xlFilterCellColor" || Asc.scope.operator === "xlFilterFontColor") {
 				if (criteria1 && typeof criteria1 === 'object' && criteria1.r !== undefined && criteria1.g !== undefined && criteria1.b !== undefined) {
 					criteria1 = Api.CreateColorFromRGB(criteria1.r, criteria1.g, criteria1.b);
