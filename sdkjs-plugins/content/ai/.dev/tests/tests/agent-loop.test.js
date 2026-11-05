@@ -351,6 +351,81 @@ describe("prompt-based tool calling (models without native tools)", () => {
 	});
 });
 
+describe("tool call events and messages (exact format)", () => {
+	// The chat UI (chat.js onToolCallStart/End) and the model see these
+	// payloads; both tool calling paths must keep them as they are.
+	const stripIds = (agent, name) => agent.win.sent(name).map((d) => ({ ...d, id: d.id.replace(/^system_\d+_[a-z0-9]+$/, "system_ID") }));
+
+	test("prompt-based: success, unknown tool, malformed call, declined", async () => {
+		const agent = await wordAgent({ supportsTools: false });
+		agent.decide = "deny";
+		agent.engine.queue.push(
+			{ content: '[functionCalling (getSelection)]: {}' },
+			{ content: '[functionCalling (noSuchTool)]: {"a": 1}' },
+			{ content: '[functionCalling (readDocument)]: 42' },
+			{ content: '[functionCalling (replaceSelection)]: {"text": "Bye"}' },
+			{ content: "Done." }
+		);
+		await agent.send("Go");
+		const msgs = transcript(agent);
+		expect(msgs.map((m) => m.role)).toEqual(["assistant", "user", "assistant", "user", "assistant", "user", "assistant", "user"]);
+		expect(msgs[0]).toEqual({ role: "assistant", content: "[functionCalling (getSelection)]: {}" });
+		expect(msgs[1].content).toMatch(/^SYSTEM: Function executed successfully\n\{"hasSelection":true/);
+		expect(msgs[3].content).toMatch(/^SYSTEM: Function execution failed with error: Error:\nUnknown tool "noSuchTool"\. Available tools: .*\nPlease try a different approach or inform the user about the issue\.$/s);
+		expect(msgs[5]).toEqual({ role: "user", content: 'SYSTEM: Function execution failed with error: Error:\nArguments for "readDocument" must be a JSON object.\nPlease try a different approach or inform the user about the issue.' });
+		expect(msgs[6]).toEqual({ role: "assistant", content: '[functionCalling (replaceSelection)]: {"text": "Bye"}' });
+		expect(msgs[7]).toEqual({ role: "user", content: "SYSTEM: The user declined this action. Do not repeat this call; continue without it or ask the user how to proceed." });
+
+		expect(stripIds(agent, "onToolCallStart")).toEqual([
+			{ type: "system_prompt", id: "system_ID", call: "[functionCalling (getSelection)]: {}", humanName: "Read Selection" },
+			{ type: "system_prompt", id: "system_ID", call: '[functionCalling (noSuchTool)]: {"a": 1}', humanName: "noSuchTool" },
+			{ type: "system_prompt", id: "system_ID", call: "[functionCalling (readDocument)]: 42", humanName: agent.ctx.EditorHelper.getHumanName("readDocument") },
+			{ type: "system_prompt", id: "system_ID", call: '[functionCalling (replaceSelection)]: {"text": "Bye"}', humanName: agent.ctx.EditorHelper.getHumanName("replaceSelection") }
+		]);
+		const ends = stripIds(agent, "onToolCallEnd");
+		expect(ends.map((e) => [e.type, e.id, e.call])).toEqual(stripIds(agent, "onToolCallStart").map((e) => [e.type, e.id, e.call]));
+		expect(ends[0].result).toEqual({ message: msgs[1].content.replace(/^SYSTEM: /, "") });
+		expect(ends[1].result).toEqual({ error: msgs[3].content.replace(/^SYSTEM: Function execution failed with error: /, "").replace(/\nPlease try.*$/, "") });
+		expect(ends[2].result).toEqual({ error: 'Error:\nArguments for "readDocument" must be a JSON object.' });
+		expect(ends[3].result).toEqual({ error: "The user declined this action.", declined: true });
+		expect(agent.approvals.map((a) => a.toolCallId)).toEqual([agent.win.sent("onToolCallEnd")[3].id]);
+		expect(agent.engine.requests).toHaveLength(5);
+	});
+
+	test("native: success, bad arguments, then the rest of the calls is skipped", async () => {
+		const agent = await wordAgent();
+		agent.engine.queue.push(
+			{ content: "Reading.", tool_calls: [toolCall("c1", "getSelection", {}), toolCall("c2", "readDocument", "{oops"), toolCall("c3", "getSelection", {})] },
+			{ content: "", tool_calls: [toolCall("d1", "replaceSelection", { text: "Bye" })] },
+			{ content: "Done." }
+		);
+		agent.decide = "deny";
+		await agent.send("Go");
+		const msgs = transcript(agent);
+		expect(msgs[0]).toEqual({ role: "assistant", content: "Reading.", tool_calls: [toolCall("c1", "getSelection", {}), toolCall("c2", "readDocument", "{oops"), toolCall("c3", "getSelection", {})] });
+		expect(msgs[1]).toMatchObject({ role: "tool", tool_call_id: "c1", content: expect.stringMatching(/^Function executed successfully\n\{"hasSelection":true/) });
+		expect(msgs[2]).toEqual({ role: "tool", tool_call_id: "c2", content: expect.stringMatching(/^Error:\nArguments are not valid JSON: /) });
+		expect(msgs[3]).toEqual({ role: "tool", tool_call_id: "c3", content: "Skipped because a previous tool call failed." });
+		expect(msgs[4]).toEqual({ role: "assistant", content: null, tool_calls: [toolCall("d1", "replaceSelection", { text: "Bye" })] });
+		expect(msgs[5]).toEqual({ role: "tool", tool_call_id: "d1", content: "The user declined this action." });
+
+		expect(agent.win.sent("onToolCallStart")).toEqual([
+			{ type: "native", id: "c1", functionName: "getSelection", humanName: "Read Selection", arguments: "{}" },
+			{ type: "native", id: "c2", functionName: "readDocument", humanName: agent.ctx.EditorHelper.getHumanName("readDocument"), arguments: "{}" },
+			{ type: "native", id: "d1", functionName: "replaceSelection", humanName: agent.ctx.EditorHelper.getHumanName("replaceSelection"), arguments: '{\n  "text": "Bye"\n}' }
+		]);
+		const ends = agent.win.sent("onToolCallEnd");
+		expect(ends.map((e) => [e.type, e.id, e.functionName, e.arguments])).toEqual([
+			["native", "c1", "getSelection", "{}"],
+			["native", "c2", "readDocument", "{}"],
+			["native", "d1", "replaceSelection", '{\n  "text": "Bye"\n}']
+		]);
+		expect(ends[0].result).toEqual({ message: msgs[1].content });
+		expect(ends[1].result).toEqual({ error: msgs[2].content });
+		expect(ends[2].result).toEqual({ error: "The user declined this action." });
+	});
+});
+
 describe("chat window events", () => {
 	test("onChatReplace inserts or replaces through the Library", async () => {
 		const agent = await wordAgent();

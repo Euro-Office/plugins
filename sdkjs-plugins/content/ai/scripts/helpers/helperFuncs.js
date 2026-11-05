@@ -515,6 +515,7 @@ var FUNC_CALL_PREFIX_RE = /^\s*\[functionCalling\s*\(\s*([A-Za-z_$][\w$.-]*)\s*\
 
 // Parses a prompt-based tool call "[functionCalling (name)]: {json}".
 // Returns { funcName, args } or { funcName, error }. Never executes anything.
+// The call itself runs in the agent loop (promptTools.js converts it).
 EditorHelperImpl.prototype.parseFuncCall = function(data) {
 	data = (typeof data === "string") ? data : "";
 
@@ -537,41 +538,6 @@ EditorHelperImpl.prototype.parseFuncCall = function(data) {
 		return { funcName: funcName, args: parseToolArguments(getJsonResult(rest, braceIndex)) };
 	} catch (e) {
 		return { funcName: funcName, error: "Arguments for \"" + funcName + "\" are not valid JSON (" + e.message + "). Send a strict JSON object: double-quoted keys and strings, no comments, no expressions." };
-	}
-};
-
-// hooks.beforeCall(funcName, args) -> Promise<boolean>; false means the user declined.
-EditorHelperImpl.prototype.callFunc = async function(data, hooks) {
-	let parsed = this.parseFuncCall(data);
-
-	try {
-		if (parsed.error)
-			throw new ToolArgumentsError(parsed.error);
-
-		let func = this.names2funcs[parsed.funcName];
-		if (!func)
-			throw new ToolArgumentsError("Unknown tool \"" + parsed.funcName + "\". Available tools: " + Object.keys(this.names2funcs).join(", "));
-
-		if (hooks && typeof hooks.beforeCall === "function") {
-			let allowed = await hooks.beforeCall(parsed.funcName, parsed.args);
-			if (!allowed)
-				return { error: TOOL_DECLINED_MESSAGE, declined: true };
-		}
-
-		let toolResultMessage = (hooks && typeof hooks.call === "function")
-			? await hooks.call(func, parsed.funcName, parsed.args)
-			: await func.call(parsed.args);
-		if (toolResultMessage)
-			toolResultMessage = Asc.plugin.tr("Function executed successfully") + "\n" + JSON.stringify(toolResultMessage);
-		else
-			toolResultMessage = Asc.plugin.tr("Function executed successfully");
-
-		return { message : toolResultMessage };
-	} catch (e) {
-		console.error("Tool execution error:", e);
-		return {
-			error: Asc.plugin.tr("Error:") + "\n" + (e && e.message ? e.message : String(e))
-		};
 	}
 };
 

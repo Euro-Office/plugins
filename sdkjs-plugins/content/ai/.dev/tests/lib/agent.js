@@ -17,6 +17,7 @@ const SCRIPTS = [
 	"scripts/engine/toolApproval.js",
 	"scripts/engine/actions.js",
 	"scripts/engine/chatWindow.js",
+	"scripts/engine/promptTools.js",
 	"scripts/engine/agentLoop.js",
 	"scripts/engine/contextMenu.js",
 	"scripts/engine/toolbar.js",

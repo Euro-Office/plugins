@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 // Layer 3: model-supplied tool arguments are parsed as data, never executed
-// (scripts/helpers/helperFuncs.js: parseToolArguments, parseFuncCall, callFunc).
+// (scripts/helpers/helperFuncs.js: parseToolArguments, parseFuncCall;
+// scripts/engine/promptTools.js and the agent loop for prompt-based calls).
 
 import { describe, test, expect, beforeEach } from "vitest";
 import { createToolEnv } from "../lib/plugin.js";
+import { createAgent } from "../lib/agent.js";
+import { createWordDocument } from "../fakes/word.js";
 
 let env, calls;
 
-beforeEach(() => {
-	env = createToolEnv("word");
-	calls = [];
-	env.ctx.__calls = calls;
-	// Replace the registry with two recorder tools so nothing touches a document.
-	env.sandbox.run(`
+// Two recorder tools (and one that fails) instead of the registry, so
+// nothing touches a document.
+const RECORDER_TOOLS = `
 		var __echo = new RegisteredFunction({ name: "echo", description: "d", parameters: { type: "object", properties: {} } });
 		__echo.call = async function(p) { __calls.push(p); return { ok: true }; };
 		var __read = new RegisteredFunction({ name: "peek", readOnly: true, description: "d", parameters: { type: "object", properties: {} } });
@@ -21,7 +21,13 @@ beforeEach(() => {
 		var __boom = new RegisteredFunction({ name: "boom", description: "d", parameters: { type: "object", properties: {} } });
 		__boom.call = async function() { throw new window.AgentState.ToolError("it broke"); };
 		HELPERS.word = [__echo, [__read, __boom]];
-	`);
+`;
+
+beforeEach(() => {
+	env = createToolEnv("word");
+	calls = [];
+	env.ctx.__calls = calls;
+	env.sandbox.run(RECORDER_TOOLS);
 	env.helper = env.sandbox.run("new EditorHelperImpl()");
 });
 
@@ -90,21 +96,39 @@ describe("parseFuncCall (prompt-based tool calls)", () => {
 	});
 });
 
-describe("callFunc", () => {
+describe("EditorHelper", () => {
+	test("nested tool arrays in HELPERS are flattened", () => {
+		// loadTools (meta tool) is always appended
+		expect(env.helper.funcs.map((f) => f.name)).toEqual(["echo", "peek", "boom", "loadTools"]);
+	});
+});
+
+describe("prompt-based calls (AIPromptTools + the agent loop)", () => {
+	// Runs one "[functionCalling (...)]" reply through the real agent loop
+	// with the recorder tools above; returns the onToolCallEnd result.
+	let agent;
+	beforeEach(async () => {
+		agent = await createAgent({ editorType: "word", fake: createWordDocument({ body: ["Hello"] }), supportsTools: false });
+		agent.ctx.__calls = calls;
+		agent.sandbox.run(RECORDER_TOOLS);
+		agent.ctx.EditorHelper = agent.sandbox.run("new EditorHelperImpl()");
+	});
+	async function run(reply) {
+		agent.engine.queue.push({ content: reply }, { content: "ok" });
+		await agent.send("go");
+		const ends = agent.win.sent("onToolCallEnd");
+		return ends[ends.length - 1].result;
+	}
+
 	test("runs the tool with parsed arguments and wraps the result", async () => {
-		const r = await env.helper.callFunc('[functionCalling (echo)]: {"text": "hi", "n": 2}');
+		const r = await run('[functionCalling (echo)]: {"text": "hi", "n": 2}');
 		expect(r).toEqual({ message: 'Function executed successfully\n{"ok":true}' });
 		expect(calls).toHaveLength(1);
 		expect(JSON.parse(JSON.stringify(calls[0]))).toEqual({ text: "hi", n: 2 });
 	});
 
 	test("tools without a result report plain success", async () => {
-		expect(await env.helper.callFunc("[functionCalling (peek)]: {}")).toEqual({ message: "Function executed successfully" });
-	});
-
-	test("nested tool arrays in HELPERS are flattened", () => {
-		// loadTools (meta tool) is always appended
-		expect(env.helper.funcs.map((f) => f.name)).toEqual(["echo", "peek", "boom", "loadTools"]);
+		expect(await run("[functionCalling (peek)]: {}")).toEqual({ message: "Function executed successfully" });
 	});
 
 	test("malicious payloads are rejected and not executed", async () => {
@@ -113,42 +137,55 @@ describe("callFunc", () => {
 			'[functionCalling (echo)]: {"a": `${globalThis.pwned = 1}`}',
 			"[functionCalling (echo)]: {\"a\": 1, \"b\": eval(\"globalThis.pwned = 1\")}"
 		]) {
-			const r = await env.helper.callFunc(payload);
+			const r = await run(payload);
 			expect(r.error).toMatch(/not valid JSON/);
 		}
-		expect(env.ctx.pwned).toBeUndefined();
+		expect(agent.ctx.pwned).toBeUndefined();
 		expect(globalThis.pwned).toBeUndefined();
 		expect(calls).toHaveLength(0);
+		expect(agent.approvals).toHaveLength(0);
 	});
 
 	test("unknown tools list the available ones", async () => {
-		const r = await env.helper.callFunc("[functionCalling (nope)]: {}");
+		const r = await run("[functionCalling (nope)]: {}");
 		expect(r.error).toMatch(/Unknown tool "nope"\. Available tools: echo, peek, boom, loadTools/);
 	});
 
 	test("tool errors are returned, not thrown", async () => {
-		const r = await env.helper.callFunc("[functionCalling (boom)]: {}");
-		expect(r).toEqual({ error: "Error:\nit broke" });
+		expect(await run("[functionCalling (boom)]: {}")).toEqual({ error: "Error:\nit broke" });
 	});
 
-	test("beforeCall hook can decline; the tool does not run", async () => {
-		const seen = [];
-		const r = await env.helper.callFunc('[functionCalling (echo)]: {"x": 1}', {
-			beforeCall: async (name, args) => { seen.push([name, JSON.parse(JSON.stringify(args))]); return false; }
-		});
-		expect(r).toEqual({ error: env.ctx.TOOL_DECLINED_MESSAGE, declined: true });
-		expect(seen).toEqual([["echo", { x: 1 }]]);
+	test("the user can decline; the tool does not run", async () => {
+		agent.decide = "deny";
+		const r = await run('[functionCalling (echo)]: {"x": 1}');
+		expect(r).toEqual({ error: agent.ctx.TOOL_DECLINED_MESSAGE, declined: true });
+		expect(agent.approvals.map((a) => [a.functionName, JSON.parse(a.arguments)])).toEqual([["echo", { x: 1 }]]);
 		expect(calls).toHaveLength(0);
 	});
 
-	test("beforeCall is not consulted for calls that cannot run", async () => {
-		let asked = 0;
-		const hooks = { beforeCall: async () => { asked++; return true; } };
-		await env.helper.callFunc("[functionCalling (nope)]: {}", hooks);
-		await env.helper.callFunc("[functionCalling (echo)]: {bad}", hooks);
-		expect(asked).toBe(0);
-		await env.helper.callFunc('[functionCalling (echo)]: {"x": 1}', hooks);
-		expect(asked).toBe(1);
+	test("approval is not asked for calls that cannot run", async () => {
+		await run("[functionCalling (nope)]: {}");
+		await run("[functionCalling (echo)]: {bad}");
+		expect(agent.approvals).toHaveLength(0);
+		await run('[functionCalling (echo)]: {"x": 1}');
+		expect(agent.approvals).toHaveLength(1);
 		expect(calls).toHaveLength(1);
+	});
+});
+
+describe("AIPromptTools.toToolCalls", () => {
+	test("converts a reply into one OpenAI-style tool call", async () => {
+		const agent = await createAgent({ editorType: "word", fake: createWordDocument({ body: ["Hello"] }) });
+		const PT = agent.ctx.AIPromptTools;
+		agent.ctx.EditorHelper = agent.sandbox.run("new EditorHelperImpl()");
+		const [call] = PT.toToolCalls('[functionCalling (readDocument)]: {"startIndex": 1}');
+		expect(call).toMatchObject({ type: "function", function: { name: "readDocument", arguments: '{"startIndex":1}' }, promptCall: '[functionCalling (readDocument)]: {"startIndex": 1}' });
+		expect(call.id).toMatch(/^system_\d+_[a-z0-9]+$/);
+		expect(call.argumentsError).toBeUndefined();
+		const [bad] = PT.toToolCalls("[functionCalling (readDocument)]: {a: 1}");
+		expect(bad.function).toEqual({ name: "readDocument", arguments: "" });
+		expect(bad.argumentsError).toMatch(/not valid JSON/);
+		expect(PT.isToolCall("[functionCalling (x)]: {}")).toBe(true);
+		expect(PT.isToolCall(" [functionCalling (x)]: {}")).toBe(false);
 	});
 });

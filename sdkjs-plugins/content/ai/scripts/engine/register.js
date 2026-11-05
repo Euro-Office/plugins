@@ -36,6 +36,7 @@
 //   actions.js      AI.ActionType / AI.Actions: the model of each request type
 //   chatWindow.js   the chat window and its events
 //   agentLoop.js    the chat agent loop (tool calls, approval, transcripts)
+//   promptTools.js  tool calling for models without native tool support
 //   contextMenu.js  the "AI" context menu and its one-shot actions
 //   toolbar.js      the "AI" toolbar tab
 // The helpers below are globals shared by these files.

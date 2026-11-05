@@ -77,6 +77,95 @@
 		});
 	}
 
+	// Native (OpenAI-style) tool calls: one assistant message carrying all
+	// tool calls, followed by one tool message per call (required by
+	// OpenAI-compatible APIs). The prompt-based counterpart is AIPromptTools.
+	const NATIVE_TOOL_CALLS = {
+		callMessages: function(content, toolCalls) {
+			return [{
+				role: 'assistant',
+				content: content || null,
+				tool_calls: toolCalls
+			}];
+		},
+		resultMessage: function(toolCall, result) {
+			return {
+				role: 'tool',
+				tool_call_id: toolCall.id,
+				content: result.message || result.error || 'Success'
+			};
+		},
+		// Payload of onToolCallStart (result undefined) / onToolCallEnd.
+		toolCallEvent: function(toolCall, result, args) {
+			let funcName = toolCall.function ? toolCall.function.name : "";
+			let event = {
+				type: 'native',
+				id: toolCall.id,
+				functionName: funcName
+			};
+			if (result === undefined)
+				event.humanName = window.EditorHelper.getHumanName(funcName);
+			event.arguments = JSON.stringify(args, null, 2);
+			if (result !== undefined)
+				event.result = result.declined ? { error: result.error } : result;
+			return event;
+		}
+	};
+
+	// Runs one tool call (OpenAI-style; prompt-based calls are converted by
+	// AIPromptTools.toToolCalls): parses the arguments, asks for approval,
+	// runs the tool and reports start and end to the chat window.
+	// Returns { message } on success, { error, declined: true } if the user
+	// declined, { error } otherwise. Never throws for tool errors.
+	async function executeToolCall(chatWindow, AgentState, protocol, toolCall, requestEngine) {
+		let funcName = toolCall.function ? toolCall.function.name : "";
+		let argsObj = {};
+		let argsError = toolCall.argumentsError || null;
+		if (!argsError) {
+			try {
+				argsObj = parseToolArguments(toolCall.function ? toolCall.function.arguments : null);
+			} catch (e) {
+				argsError = "Arguments are not valid JSON: " + e.message;
+			}
+		}
+
+		chatWindow.command("onToolCallStart", protocol.toolCallEvent(toolCall, undefined, argsObj));
+
+		let toolResult = {};
+		let declined = false;
+		try {
+			if (argsError)
+				throw new AgentState.ToolError(argsError);
+			let func = window.EditorHelper.names2funcs[funcName];
+			if (!func)
+				throw new AgentState.ToolError("Unknown tool \"" + funcName + "\". Available tools: " + Object.keys(window.EditorHelper.names2funcs).join(", "));
+
+			if (!(await requestToolApproval(AgentState, toolCall.id, funcName, argsObj))) {
+				declined = true;
+				throw new AgentState.ToolError(TOOL_DECLINED_MESSAGE);
+			}
+
+			let toolResultMessage = await runAgentTool(func, funcName, argsObj, requestEngine);
+			if (toolResultMessage)
+				toolResultMessage = Asc.plugin.tr("Function executed successfully") + "\n" + JSON.stringify(toolResultMessage);
+			else
+				toolResultMessage = Asc.plugin.tr("Function executed successfully");
+			toolResult.message = toolResultMessage;
+		} catch (e) {
+			if (declined) {
+				// Not a failure: let the model see the refusal and continue.
+				toolResult.error = TOOL_DECLINED_MESSAGE;
+				toolResult.declined = true;
+			} else {
+				console.error("Tool execution error:", e);
+				toolResult.error = Asc.plugin.tr("Error:") + "\n" + (e && e.message ? e.message : String(e));
+			}
+		}
+
+		chatWindow.command("onToolCallEnd", protocol.toolCallEvent(toolCall, toolResult, argsObj));
+		return toolResult;
+	}
+
 	// chatWindow: the Asc.PluginWindow of chat.html; AgentState: the state of
 	// that window (chatWindow.js); messageHistory: what chat.js sends,
 	// { messages, usedTools, turnId } or a plain message array.
@@ -218,159 +307,34 @@
 
 			let toolCalls = fullResponse.tool_calls || null;
 
-			// CHECK TOOLS
+			// Models without native tool support call tools in the reply text;
+			// promptTools.js turns that into tool_calls, so both kinds run on
+			// the same path below and differ only in the messages and events.
+			let protocol = NATIVE_TOOL_CALLS;
+			if (!toolCalls && window.AIPromptTools.isToolCall(result)) {
+				protocol = window.AIPromptTools;
+				toolCalls = protocol.toToolCalls(result);
+			}
+
 			if (toolCalls && toolCalls.length > 0) {
-				// One assistant message carrying all tool calls, followed by one
-				// tool message per call (required by OpenAI-compatible APIs).
-				pushTurnMessage({
-					role: 'assistant',
-					content: result || null,
-					tool_calls: toolCalls
-				});
+				protocol.callMessages(result, toolCalls).forEach(pushTurnMessage);
 
 				let failed = false;
 				for (let toolCall of toolCalls) {
-					let funcName = toolCall.function ? toolCall.function.name : "";
-
 					if (AgentState.isStopped || failed) {
-						pushTurnMessage({
-							role: 'tool',
-							tool_call_id: toolCall.id,
-							content: AgentState.isStopped ? "Cancelled by the user." : "Skipped because a previous tool call failed."
-						});
+						pushTurnMessage(protocol.resultMessage(toolCall, {
+							error: AgentState.isStopped ? "Cancelled by the user." : "Skipped because a previous tool call failed."
+						}));
 						continue;
 					}
 
-					let funcArgs = toolCall.function ? toolCall.function.arguments : null;
-					let argsObj = {};
-					let argsError = null;
-					try {
-						argsObj = parseToolArguments(funcArgs);
-					} catch (e) {
-						argsError = "Arguments are not valid JSON: " + e.message;
-					}
-
-					chatWindow.command("onToolCallStart", {
-						type: 'native',
-						id: toolCall.id,
-						functionName: funcName,
-						humanName: window.EditorHelper.getHumanName(funcName),
-						arguments: JSON.stringify(argsObj, null, 2)
-					});
-
-					let toolResult = {};
-					let declined = false;
-					try {
-						if (argsError)
-							throw new AgentState.ToolError(argsError);
-						let func = window.EditorHelper.names2funcs[funcName];
-						if (!func)
-							throw new AgentState.ToolError("Unknown tool \"" + funcName + "\". Available tools: " + Object.keys(window.EditorHelper.names2funcs).join(", "));
-
-						if (!(await requestToolApproval(AgentState, toolCall.id, funcName, argsObj))) {
-							declined = true;
-							throw new AgentState.ToolError(TOOL_DECLINED_MESSAGE);
-						}
-
-						let toolResultMessage = await runAgentTool(func, funcName, argsObj, requestEngine);
-						if (toolResultMessage)
-							toolResultMessage = Asc.plugin.tr("Function executed successfully") + "\n" + JSON.stringify(toolResultMessage);
-						else
-							toolResultMessage = Asc.plugin.tr("Function executed successfully");
-						toolResult.message = toolResultMessage;
-					} catch (e) {
-						if (declined) {
-							// Not a failure: let the model see the refusal and continue.
-							toolResult.error = TOOL_DECLINED_MESSAGE;
-						} else {
-							console.error("Tool execution error:", e);
-							toolResult.error = Asc.plugin.tr("Error:") + "\n" + (e && e.message ? e.message : String(e));
-							failed = true;
-						}
-					}
-
-					chatWindow.command("onToolCallEnd", {
-						type: 'native',
-						id: toolCall.id,
-						functionName: funcName,
-						arguments: JSON.stringify(argsObj, null, 2),
-						result: toolResult
-					});
-
-					pushTurnMessage({
-						role: 'tool',
-						tool_call_id: toolCall.id,
-						content: toolResult.message || toolResult.error || 'Success'
-					});
+					let toolResult = await executeToolCall(chatWindow, AgentState, protocol, toolCall, requestEngine);
+					if (toolResult.error && !toolResult.declined)
+						failed = true;
+					pushTurnMessage(protocol.resultMessage(toolCall, toolResult));
 				}
 				refreshToolSelection(); // loadTools may have added categories
 				continue;
-			}
-
-			// CHECK PROMT FUNCTION CALLING
-			if (!toolCalls && result.startsWith("[functionCalling")) {
-				if (AgentState.isStopped)
-					break;
-
-				try {
-					let toolCallId = 'system_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-
-					let sysFuncName = window.EditorHelper.parseFuncCall(result).funcName || '';
-
-					chatWindow.command("onToolCallStart", {
-						type: 'system_prompt',
-						id: toolCallId,
-						call: result,
-						humanName: sysFuncName ? window.EditorHelper.getHumanName(sysFuncName) : ''
-					});
-
-					let toolResult = await window.EditorHelper.callFunc(result, {
-						beforeCall: function(name, args) {
-							return requestToolApproval(AgentState, toolCallId, name, args);
-						},
-						call: function(func, name, args) {
-							return runAgentTool(func, name, args, requestEngine);
-						}
-					});
-
-					chatWindow.command("onToolCallEnd", {
-						type: 'system_prompt',
-						id: toolCallId,
-						call: result,
-						result: toolResult
-					});
-
-					pushTurnMessage({
-						role: 'assistant',
-						content: result
-					});
-
-					if (toolResult.declined) {
-						pushTurnMessage({
-							role: 'user',
-							content: "SYSTEM: " + TOOL_DECLINED_MESSAGE + " Do not repeat this call; continue without it or ask the user how to proceed."
-						});
-					} else if (toolResult.error) {
-						pushTurnMessage({
-							role: 'user',
-							content: "SYSTEM: Function execution failed with error: " + toolResult.error + "\nPlease try a different approach or inform the user about the issue."
-						});							
-					} else {
-						let resultMessage = "SYSTEM: " + toolResult.message;
-						if (toolResult.prompt) {
-							resultMessage += "\n" + toolResult.prompt;
-						}
-						pushTurnMessage({
-							role: 'user',
-							content: resultMessage
-						});							
-					}
-					refreshToolSelection(); // loadTools may have added categories
-					continue;
-				} catch (e) {
-					console.error("Tool execution error:", e);
-					break;
-				}
 			}
 
 			if (!isStreamToChat && result) {
