@@ -1,0 +1,50 @@
+# Optional override: preconfigure an OpenAI-compatible endpoint on the server.
+# The key stays on the server; the plugin calls it through /ai-proxy.
+# Usage: see README.md ("Use an OpenAI-compatible endpoint").
+services:
+  documentserver:
+    extra_hosts:
+      # Lets the proxy reach endpoints on your machine (LM Studio, vLLM, ...)
+      - "host.docker.internal:host-gateway"
+    configs:
+      - source: ai-settings
+        # Loaded after local.json (node-config, NODE_ENV=production-linux)
+        target: /etc/euro-office/documentserver/local-production-linux.json
+
+configs:
+  ai-settings:
+    content: |
+      {
+        "aiSettings": {
+          "version": 3,
+          "providers": {
+            "${OPENAI_PROVIDER_NAME:-OpenAI-compatible}": {
+              "name": "${OPENAI_PROVIDER_NAME:-OpenAI-compatible}",
+              "url": "${OPENAI_BASE_URL:?set OPENAI_BASE_URL, e.g. https://api.openai.com/v1}",
+              "key": "${OPENAI_API_KEY:-}",
+              "models": [
+                {
+                  "id": "${OPENAI_MODEL:?set OPENAI_MODEL}",
+                  "name": "${OPENAI_MODEL}",
+                  "endpoints": [1],
+                  "options": { "max_input_tokens": ${OPENAI_MAX_INPUT_TOKENS:-128000} }
+                }
+              ]
+            }
+          },
+          "models": [
+            {
+              "id": "${OPENAI_MODEL}",
+              "name": "${OPENAI_MODEL}",
+              "provider": "${OPENAI_PROVIDER_NAME:-OpenAI-compatible}",
+              "capabilities": ${OPENAI_MODEL_CAPABILITIES:-257}
+            }
+          ],
+          "actions": {
+            "Chat": { "model": "${OPENAI_MODEL}" },
+            "Summarization": { "model": "${OPENAI_MODEL}" },
+            "Translation": { "model": "${OPENAI_MODEL}" },
+            "TextAnalyze": { "model": "${OPENAI_MODEL}" }
+          }
+        }
+      }

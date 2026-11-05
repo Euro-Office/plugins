@@ -23,6 +23,33 @@ curl http://localhost:8080/healthcheck
 
 Open <http://localhost:8080/example/>, create or upload a document, then use the **AI** tab.
 
+## Use an OpenAI-compatible endpoint
+
+Preconfigure the server with any OpenAI-compatible API (OpenAI, Mistral, OpenRouter, vLLM, LiteLLM, LocalAI, …). The key stays on the server; the plugin sends requests through the Document Server's `/ai-proxy`, which adds the key. Chat, summarization, translation and text analysis use the model right away, with no setup in the browser.
+
+```sh
+OPENAI_BASE_URL=https://api.openai.com/v1 \
+OPENAI_API_KEY=sk-... \
+OPENAI_MODEL=gpt-4.1-mini \
+docker compose -f .dev/docker/compose.yml -f .dev/docker/compose.ai.yml up -d
+```
+
+Or put the variables in `.dev/docker/.env` (git-ignored) and drop the prefix.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENAI_BASE_URL` | required | Base URL including `/v1` (requests go to `<base>/chat/completions`) |
+| `OPENAI_API_KEY` | empty | Sent as `Authorization: Bearer …` by the proxy |
+| `OPENAI_MODEL` | required | Model id as the endpoint expects it |
+| `OPENAI_PROVIDER_NAME` | `OpenAI-compatible` | Name shown in the plugin |
+| `OPENAI_MODEL_CAPABILITIES` | `257` (chat + tools) | Bit mask: chat 1, image 2, vision 128, tools 256. Use `1` if the model has no tool calling |
+| `OPENAI_MAX_INPUT_TOKENS` | `128000` | Context size used for chunking long texts |
+
+- An endpoint on your machine (e.g. LM Studio or vLLM on port 1234): `OPENAI_BASE_URL=http://host.docker.internal:1234/v1`.
+- The bundled Ollama: add `--profile ollama` and use `OPENAI_BASE_URL=http://ollama:11434/v1`.
+
+While server settings are active, users can't change models in the plugin settings. Restart without `compose.ai.yml` to go back to settings in the browser.
+
 ## Use a model
 
 - **Ollama:** AI → Settings → add an Ollama model. The URL is `http://localhost:11434` (the default). Pick a model that supports tool calling, e.g. `qwen2.5:7b` or `llama3.1:8b`; otherwise the agent falls back to text-based function calls.
