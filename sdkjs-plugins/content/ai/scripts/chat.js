@@ -226,6 +226,7 @@
 			let htmlContent = c.render(activeContent);
 			$spanMessage.css('display', 'block');
 			$spanMessage.html(htmlContent);
+			decorateLocationLinks($spanMessage);
 
 			let plainText = htmlContent.replace(/<\/?[^>]+(>|$)/g, "").replace(/\n{3,}/g, "\n\n");
 	
@@ -265,7 +266,9 @@
 						let buttonEl = $('<button class="action_button btn-text-default"></button>');
 						buttonEl.append('<img class="icon" draggable="false" src="' + getFormattedPathForIcon(button.icon) + '"/>');
 						buttonEl.on('click', function() {
-							button.handler(item, activeContent, htmlContent, plainText);
+							// Location links only make sense in the chat: copy / insert
+							// their text, not eo:// hyperlinks.
+							button.handler(item, stripLocationLinksMarkdown(activeContent), stripLocationLinksHtml(htmlContent), plainText);
 						});
 		
 						if(button.tipOptions) {
@@ -397,6 +400,34 @@
 			return this._list;
 		}
 	};
+
+	// ── Document location links ────────────────────────────────────────────
+	// eo:// links from the model (scripts/helpers/citations.js) become small
+	// location chips; clicks are handled on #chat_wrapper. Links that fail
+	// validation are replaced by their plain text.
+	function decorateLocationLinks($container) {
+		$container.find('a').each(function() {
+			let href = this.getAttribute('href') || '';
+			if (!window.EOLinks.isLocationHref(href))
+				return;
+			let loc = window.EOLinks.parse(href);
+			if (!loc) {
+				$(this).replaceWith(document.createTextNode(this.textContent));
+				return;
+			}
+			this.classList.add('eo_location_link');
+			this.setAttribute('role', 'button');
+			this.setAttribute('title', window.Asc.plugin.tr('Go to location') + ': ' + window.EOLinks.describe(loc, function(t) { return window.Asc.plugin.tr(t); }));
+		});
+	}
+
+	function stripLocationLinksMarkdown(markdown) {
+		return String(markdown || '').replace(/\[([^\]]*)\]\(\s*<?eo:[^)\s>]*>?\s*\)/gi, '$1');
+	}
+
+	function stripLocationLinksHtml(html) {
+		return String(html || '').replace(/<a\s[^>]*href="eo:[^"]*"[^>]*>([\s\S]*?)<\/a>/gi, '$1');
+	}
 
 	// ── Tool approval prompts ───────────────────────────────────────────────
 	function renderToolApproval(approval) {
@@ -666,10 +697,20 @@
 		};
 
 		document.getElementById("chat_wrapper").addEventListener("click", function(e) {
-			if (e.target.tagName === "A") {
-				e.preventDefault();
-				window.open(e.target.href, "_blank");
+			let link = e.target.closest ? e.target.closest("a") : (e.target.tagName === "A" ? e.target : null);
+			if (!link)
+				return;
+			e.preventDefault();
+			let href = link.getAttribute("href") || "";
+			// Document location chips (eo://...): ask the plugin to select the
+			// place. Never navigate this iframe; invalid links do nothing.
+			if (window.EOLinks.isLocationHref(href)) {
+				if (!isAgentRunning && window.EOLinks.parse(href))
+					window.Asc.plugin.sendToPlugin("onNavigate", { href: href });
+				return;
 			}
+			if (/^(https?:|mailto:)/i.test(href))
+				window.open(link.href, "_blank");
 		});
 	};
 
@@ -1116,6 +1157,7 @@
 					let c = window.markdownit();
 					let htmlContent = c.render(streamingContent.replace(/\n---#/g, '\n---\n#'));
 					$spanMessage.html(htmlContent);
+					decorateLocationLinks($spanMessage);
 				}
 			}
 

@@ -248,6 +248,77 @@ async function registerButtons(window, undefined)
 			denyPendingApprovals();
 		});
 
+		// ── Citations ──────────────────────────────────────────────────────
+		// The chat sends the href of a clicked eo:// location link. It is
+		// validated again here (citations.js) and only ever selects / scrolls
+		// to a place in the open file: read-only, so no approval is needed.
+		// Invalid links and links for another editor type are ignored.
+		chatWindow.attachEvent("onNavigate", async function(data) {
+			let href = (data && typeof data === "object") ? data.href : data;
+			let loc = window.EOLinks ? window.EOLinks.parse(href) : null;
+			if (!loc || loc.editor !== Asc.Editor.getType())
+				return;
+			if (!window.EditorHelper)
+				window.EditorHelper = new EditorHelperImpl();
+			try {
+				await navigateToLocation(loc);
+			} catch (e) {
+				console.warn("[AI] could not navigate to " + href + ":", e && e.message ? e.message : e);
+			}
+		});
+
+		async function navigateToLocation(loc) {
+			let funcs = window.EditorHelper.names2funcs;
+			switch (loc.type) {
+				case "paragraph": {
+					Asc.scope.eoNavIndex = loc.index;
+					await Asc.Editor.callCommand(function() {
+						let doc = Api.GetDocument();
+						let el = doc.GetElement(Asc.scope.eoNavIndex - 1);
+						if (!el)
+							return false;
+						if (typeof el.Select === "function")
+							el.Select();
+						else if (typeof el.GetRange === "function")
+							el.GetRange().Select();
+						return true;
+					});
+					break;
+				}
+				case "find": {
+					// Same search + select as the selectText tool.
+					if (funcs.selectText)
+						await funcs.selectText.call({ query: loc.text });
+					break;
+				}
+				case "range": {
+					// Activates the sheet and selects the range (selectRange tool).
+					if (funcs.selectRange)
+						await funcs.selectRange.call({ range: loc.range, sheet: loc.sheet });
+					break;
+				}
+				case "slide": {
+					if (funcs.goToSlide)
+						await funcs.goToSlide.call({ slideNumber: loc.slide });
+					if (loc.shape) {
+						Asc.scope.eoNavShape = { slide: loc.slide, shape: loc.shape };
+						await Asc.Editor.callCommand(function() {
+							let p = Asc.scope.eoNavShape;
+							let slide = Api.GetPresentation().GetSlideByIndex(p.slide - 1);
+							if (!slide)
+								return false;
+							let drawings = slide.GetAllDrawings ? slide.GetAllDrawings() : slide.GetAllShapes();
+							let d = drawings[p.shape - 1];
+							if (d && typeof d.Select === "function")
+								d.Select();
+							return true;
+						});
+					}
+					break;
+				}
+			}
+		}
+
 		chatWindow.attachEvent("onChatMessage", async function(messageHistory) {
 			AgentState.isStopped = false;
 

@@ -295,6 +295,30 @@ EditorHelperImpl.prototype._getEditorContext = function() {
 	return { type: editorType, name: editorType, apiName: "API", macroExample: "", readTools: "writeMacro" };
 };
 
+// Clickable citations: the chat turns eo:// markdown links into location
+// chips that select the place in the editor (see citations.js).
+EditorHelperImpl.prototype.getCitationPrompt = function() {
+	let type = Asc.Editor.getType();
+	let formats = "";
+	if (type === "word") {
+		formats = "\
+- A paragraph or other top-level element by its 1-based index (as returned by readDocument, readOutline, findText, selectText): [paragraph 12](eo://word/paragraph/12)\n\
+- A short verbatim passage when you have no index (URL-encode it, max 100 characters): [“net 30 days”](eo://word/find?text=net%2030%20days)\n";
+	} else if (type === "cell") {
+		formats = "\
+- A cell or range with its sheet (URL-encode the sheet name, A1 notation): [Sales!B2:D10](eo://cell/Sales!B2:D10), [Q1 Data!C5](eo://cell/Q1%20Data!C5)\n";
+	} else if (type === "slide") {
+		formats = "\
+- A slide by its 1-based number: [slide 3](eo://slide/3); a shape on it by its 1-based index (as returned by readPresentation): [title on slide 3](eo://slide/3/shape/1)\n";
+	} else {
+		return "";
+	}
+	return "\n\
+CITING LOCATIONS:\n\
+When your answer refers to specific places in the " + this._getEditorContext().name + ", cite them as markdown links with the eo:// scheme so the user can click to jump there:\n" + formats + "\
+Only cite locations you got from tool results or the selection snapshot; never invent indexes or addresses. Keep the link text short. Do not use eo:// links inside code blocks.\n";
+};
+
 EditorHelperImpl.prototype.getToolsSystemPrompt = function() {
 	if (this.funcs.length === 0)
 		return "";
@@ -318,6 +342,8 @@ IMPORTANT RULES FOR DOCUMENT OPERATIONS:\n\
 \n\
 Always prefer specialized tools over writeMacro when available. Use writeMacro as a universal fallback for any " + ctx.name + " operation.\n\
 ";
+
+	prompt += this.getCitationPrompt();
 
 	return prompt;
 };
@@ -424,6 +450,8 @@ REMINDER\n\
 If the user’s question is about the " + ctx.name + " content — always use functions (specialized or writeMacro).\n\
 If the user’s question is NOT about the " + ctx.name + " — respond normally with clear helpful text.\n\
 ";
+
+	systemPrompt += this.getCitationPrompt();
 
 	this._systemPromptCache[cacheKey] = systemPrompt;
 	return systemPrompt;

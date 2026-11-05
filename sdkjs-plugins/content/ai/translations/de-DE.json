@@ -215,5 +215,7 @@
 	"Allow for this session": "Für diese Sitzung zulassen",
 	"Deny": "Ablehnen",
 	"Mark AI-generated content": "KI-generierte Inhalte kennzeichnen",
-	"Adds machine-readable markers (document properties, hidden content controls, image metadata) to content created with AI.": "Versieht mit KI erstellte Inhalte mit maschinenlesbaren Kennzeichnungen (Dokumenteigenschaften, ausgeblendete Inhaltssteuerelemente, Bildmetadaten)."
+	"Adds machine-readable markers (document properties, hidden content controls, image metadata) to content created with AI.": "Versieht mit KI erstellte Inhalte mit maschinenlesbaren Kennzeichnungen (Dokumenteigenschaften, ausgeblendete Inhaltssteuerelemente, Bildmetadaten).",
+	"Go to location": "Zur Stelle springen",
+	"Slide": "Folie"
 }
