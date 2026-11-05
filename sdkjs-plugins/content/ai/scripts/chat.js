@@ -1113,6 +1113,9 @@
 		if(!state) return;
 
 		if(state.messages) {
+			// States saved before transcripts were capped may hold many.
+			if (window.AgentHistory)
+				window.AgentHistory.pruneTranscripts(state.messages);
 			messagesList.set(state.messages);
 		}
 		if(state.inputValue) {
@@ -1481,6 +1484,8 @@
 				let messages = window.AgentHistory.compactTranscript(data.messages);
 				if (messages.length > 0)
 					list[i].agentTranscript = { messages: messages, hasFinalReply: !!data.hasFinalReply };
+				// Keep the stored chat bounded: transcripts of old turns are dropped.
+				window.AgentHistory.pruneTranscripts(list);
 				return;
 			}
 		}

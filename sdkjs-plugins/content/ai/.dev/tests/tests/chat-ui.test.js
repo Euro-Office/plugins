@@ -197,6 +197,44 @@ describe("sending messages and agent transcripts", () => {
 		expect(req.usedTools).toEqual(["readDocument"]);
 	});
 
+	test("stored transcripts are capped to the last turns", () => {
+		const N = win.AgentHistory.HISTORY_STORED_TRANSCRIPT_TURNS;
+		for (let n = 0; n < N + 2; n++) {
+			submit("Question " + n);
+			const turnId = chatMessages()[n].turnId;
+			fire("onAgentTranscript", { turnId, hasFinalReply: true, messages: [
+				{ role: "assistant", content: null, tool_calls: [{ id: "c" + n, type: "function", function: { name: "readDocument", arguments: "{}" } }] },
+				{ role: "tool", tool_call_id: "c" + n, content: "Function executed successfully" }
+			] });
+			fire("onChatReply", "Answer " + n);
+			fire("onChatStreamEnd");
+		}
+		fire("onUpdateState");
+		const stored = JSON.parse(win.localStorage.getItem("onlyoffice_ai_chat_state")).messages.filter((m) => m.role === "user");
+		expect(stored.map((m) => !!m.agentTranscript)).toEqual([false, false].concat(Array(N).fill(true)));
+	});
+
+	test("restoring an old chat state drops transcripts beyond the cap", () => {
+		const N = win.AgentHistory.HISTORY_STORED_TRANSCRIPT_TURNS;
+		const messages = [];
+		for (let n = 0; n < N + 3; n++) {
+			messages.push({ role: "user", content: "Q" + n, turnId: "t" + n, agentTranscript: { hasFinalReply: true, messages: [
+				{ role: "assistant", content: null, tool_calls: [{ id: "c" + n, type: "function", function: { name: "readDocument", arguments: "{}" } }] },
+				{ role: "tool", tool_call_id: "c" + n, content: "ok" }
+			] } });
+			messages.push({ role: "assistant", content: ["A" + n], activeContentIndex: 0 });
+		}
+		win.localStorage.setItem("onlyoffice_ai_chat_state", JSON.stringify({ messages }));
+		win.Asc.plugin.init();
+		submit("Next");
+		const req = chatMessages().pop();
+		expect(req.messages.filter((m) => m.role === "tool")).toHaveLength(win.AgentHistory.HISTORY_FULL_TOOL_TURNS);
+		fire("onUpdateState");
+		const stored = JSON.parse(win.localStorage.getItem("onlyoffice_ai_chat_state")).messages.filter((m) => m.role === "user");
+		expect(stored.filter((m) => m.agentTranscript)).toHaveLength(N);
+		expect(stored[0].agentTranscript).toBeUndefined();
+	});
+
 	test("transcripts for unknown turns are ignored", () => {
 		submit("Hi");
 		fire("onAgentTranscript", { turnId: "nope", hasFinalReply: true, messages: [{ role: "tool", tool_call_id: "x", content: "y" }] });

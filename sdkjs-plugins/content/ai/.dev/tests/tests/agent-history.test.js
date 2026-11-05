@@ -208,3 +208,36 @@ test("state survives a JSON round trip (persisted chat state)", () => {
 	const restored = JSON.parse(JSON.stringify(items));
 	assert.deepStrictEqual(H.build(restored), H.build(items));
 });
+
+test("pruneTranscripts keeps transcripts only for the last N user turns", () => {
+	const N = H.HISTORY_STORED_TRANSCRIPT_TURNS;
+	assert.ok(N > H.HISTORY_FULL_TOOL_TURNS, "pruning must not touch turns that keep the full exchange");
+	const items = [];
+	for (let n = 0; n < N + 3; n++)
+		items.push(user("q" + n, nativeTurn(n)), toolItem("readDocument"), reply("a" + n));
+	items.push(user("plain"), reply("ok"));
+
+	assert.strictEqual(H.pruneTranscripts(items), 4);
+	const kept = items.filter((i) => i.role === "user" && !i.isToolCall).map((i) => !!i.agentTranscript);
+	// N + 4 user turns: the 4 oldest lost their transcript, the plain last turn never had one.
+	assert.deepStrictEqual(kept, [false, false, false, false].concat(Array(N - 1).fill(true), [false]));
+	assert.strictEqual(H.pruneTranscripts(items), 0);
+	assertValid(H.build(items));
+
+	// The history of recent turns is unchanged by pruning.
+	const recent = (msgs) => msgs.slice(msgs.findIndex((m) => m.content === "q" + (N + 2 - H.HISTORY_FULL_TOOL_TURNS)));
+	const unpruned = [];
+	for (let n = 0; n < N + 3; n++)
+		unpruned.push(user("q" + n, nativeTurn(n)), toolItem("readDocument"), reply("a" + n));
+	unpruned.push(user("plain"), reply("ok"));
+	assert.deepStrictEqual(recent(H.build(items)), recent(H.build(unpruned)));
+
+	// Dropped turns fall back to plain text.
+	const built = H.build(items);
+	const i0 = built.findIndex((m) => m.content === "q0");
+	assert.deepStrictEqual(built[i0 + 1], { role: "assistant", content: "a0" });
+
+	// Explicit count.
+	assert.strictEqual(H.pruneTranscripts(items, 1), N - 1);
+	assert.strictEqual(H.pruneTranscripts(null), 0);
+});

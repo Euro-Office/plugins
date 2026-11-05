@@ -13,7 +13,9 @@
 //
 // Budget: tool results and arguments are truncated, only the last
 // HISTORY_FULL_TOOL_TURNS turns keep the full tool exchange, older turns
-// collapse into a one-line summary in front of their reply.
+// collapse into a one-line summary in front of their reply, and only the
+// last HISTORY_STORED_TRANSCRIPT_TURNS user turns keep a transcript at all
+// (pruneTranscripts).
 //
 // flatten() rewrites tool exchanges as plain assistant/user text for models
 // or providers that can not take tool messages (prompt-based function
@@ -31,6 +33,11 @@
 	const HISTORY_FULL_TOOL_TURNS = 3;
 	// Max tool names listed in the summary of an older turn.
 	const HISTORY_SUMMARY_MAX_TOOLS = 10;
+	// Number of most recent user turns whose transcript is stored with the
+	// chat. Older transcripts are dropped from the chat state (their turns
+	// are sent as plain user/assistant text, without the tool summary), so
+	// the persisted chat does not grow with every tool result.
+	const HISTORY_STORED_TRANSCRIPT_TURNS = 10;
 
 	const FUNC_CALL_RE = /^\s*\[functionCalling\s*\(\s*([A-Za-z_$][\w$.-]*)\s*\)\s*\]\s*:?\s*([\s\S]*)$/;
 	const MISSING_RESULT = "No result was recorded for this call.";
@@ -305,6 +312,29 @@
 		return names;
 	}
 
+	// Drops the stored transcripts of all but the last `keepTurns` user
+	// turns (default HISTORY_STORED_TRANSCRIPT_TURNS). Changes the items in
+	// place; returns the number of transcripts removed.
+	function pruneTranscripts(items, keepTurns) {
+		if (!Array.isArray(items))
+			return 0;
+		if (typeof keepTurns !== "number" || keepTurns < 0)
+			keepTurns = HISTORY_STORED_TRANSCRIPT_TURNS;
+		let userTurns = 0;
+		let removed = 0;
+		for (let i = items.length - 1; i >= 0; i--) {
+			let item = items[i];
+			if (!item || item.role !== "user" || isToolItem(item))
+				continue;
+			userTurns++;
+			if (userTurns > keepTurns && item.agentTranscript) {
+				delete item.agentTranscript;
+				removed++;
+			}
+		}
+		return removed;
+	}
+
 	// Rewrites tool exchanges as plain text in the prompt-based format:
 	//   assistant: "[functionCalling (name)]: {args}"
 	//   user:      "SYSTEM: Result of name: ..."
@@ -350,13 +380,15 @@
 		HISTORY_TOOL_ARGS_MAX_CHARS: HISTORY_TOOL_ARGS_MAX_CHARS,
 		HISTORY_FULL_TOOL_TURNS: HISTORY_FULL_TOOL_TURNS,
 		HISTORY_SUMMARY_MAX_TOOLS: HISTORY_SUMMARY_MAX_TOOLS,
+		HISTORY_STORED_TRANSCRIPT_TURNS: HISTORY_STORED_TRANSCRIPT_TURNS,
 		truncate: truncate,
 		compactTranscript: compactTranscript,
 		sanitize: sanitize,
 		summarize: summarize,
 		build: build,
 		flatten: flatten,
-		collectToolNames: collectToolNames
+		collectToolNames: collectToolNames,
+		pruneTranscripts: pruneTranscripts
 	};
 
 	root.AgentHistory = api;
