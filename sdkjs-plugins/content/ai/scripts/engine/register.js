@@ -686,7 +686,6 @@ async function registerButtons(window, undefined)
 	}
 
 	// Submenu Text Analysis
-	if (true)
 	{
 		let button1 = new Asc.ButtonContextMenu(buttonMain);
 		button1.text = "Text analysis";
@@ -835,7 +834,6 @@ async function registerButtons(window, undefined)
 	}
 
 	// Submenu Translate
-	if (true)
 	{
 		let button1 = new Asc.ButtonContextMenu(buttonMain);
 		button1.text = "Translate";
@@ -900,7 +898,7 @@ async function registerButtons(window, undefined)
 		button10.data = "Italian";
 	}
 
-	if (true)
+	// Hyperlink preview
 	{
 		let button1 = new Asc.ButtonContextMenu(buttonMain);
 		button1.text = "Show hyperlink content";
@@ -952,27 +950,7 @@ async function registerButtons(window, undefined)
 		await Asc.Library.InsertAsMD(result, [Asc.PluginsMD.latex, Asc.PluginsMD.hr], provMeta("ocr", requestEngine));
 	}
 
-	const on_click_text_to_image = async function (params) {
-		let requestEngine = AI.Request.create(AI.ActionType.ImageGeneration);
-		if (!requestEngine)
-			return;
-
-		let content = await Asc.Library.GetSelectedText();
-		if (!content) {
-			console.log("you need to select text to generate image")
-			return;
-		}
-
-		let result = await requestEngine.imageGenerationRequest(content);
-		if (!result) return;
-
-		let meta = provMeta("textToImage", requestEngine);
-		if (Asc.plugin.info.editorSubType === "pdf")
-			return await Asc.Library.AddGeneratedImage(result, meta);
-		await Asc.Library.AddOleObject(result, content, meta);
-	}
-
-	if (true)
+	// Submenu Image
 	{
 		let buttonImages = new Asc.ButtonContextMenu(buttonMain);
 		buttonImages.text = "Image";
@@ -1064,29 +1042,15 @@ async function registerButtons(window, undefined)
 		}
 	}
 
-	if (true)
-	{
-		let button1 = new Asc.ButtonContextMenu(buttonMain);
-		button1.text = "Chatbot";
-		button1.separator = true;
-		button1.icons = getContextMenuButtonIcons("ask-ai");
-		button1.addCheckers("All");
-		button1.attachOnClick(async function(){
-			let selectedText = await Asc.Library.GetSelectedText();
-			chatWindowShow(selectedText);
-		});
-	}
-
-	if (false)
-	{
-		let button1 = new Asc.ButtonContextMenu(buttonMain);
-		button1.text = "Settings";
-		button1.separator = true;
-		button1.addCheckers("All");
-		button1.attachOnClick(function(){
-			onOpenSettingsModal();
-		});
-	}
+	let buttonChat = new Asc.ButtonContextMenu(buttonMain);
+	buttonChat.text = "Chatbot";
+	buttonChat.separator = true;
+	buttonChat.icons = getContextMenuButtonIcons("ask-ai");
+	buttonChat.addCheckers("All");
+	buttonChat.attachOnClick(async function(){
+		let selectedText = await Asc.Library.GetSelectedText();
+		chatWindowShow(selectedText);
+	});
 
 	// register toolbar buttons
 	let buttonMainToolbar = new Asc.ButtonToolbar();
@@ -1107,162 +1071,141 @@ async function registerButtons(window, undefined)
 		});
 	}
 
-	if (true)
-	{
-		let button1 = new Asc.ButtonToolbar(buttonMainToolbar);
+	let buttonChatToolbar = new Asc.ButtonToolbar(buttonMainToolbar);
 
-		if (!AI.serverSettings)
-			button1.separator = true;
-		
-		button1.text = "Chatbot";
-		button1.icons = getToolBarButtonIcons("ask-ai");
-		button1.attachOnClick(function(data){
-			chatWindowShow();
-		});
+	if (!AI.serverSettings)
+		buttonChatToolbar.separator = true;
+	
+	buttonChatToolbar.text = "Chatbot";
+	buttonChatToolbar.icons = getToolBarButtonIcons("ask-ai");
+	buttonChatToolbar.attachOnClick(function(data){
+		chatWindowShow();
+	});
 
-		if (Asc.Editor.getType() !== "pdf") {
-			let button2 = new Asc.ButtonToolbar(buttonMainToolbar);
-			button2.text = "Summarization";
-			button2.icons = getToolBarButtonIcons("summarization");
-			button2.attachOnClick(async function(data){
-				let requestEngine = AI.Request.create(AI.ActionType.Summarization);
-				if (!requestEngine)
-					return;
-
-				onOpenSummarizationModal();
-			});
-		}
-
-		if (false) {
-			let button3 = new Asc.ButtonToolbar(buttonMainToolbar);
-			button3.text = "Text to Image";
-			button3.icons = getToolBarButtonIcons("text-to-image");
-			button3.attachOnClick(on_click_text_to_image);
-		}
-
-		let button4 = new Asc.ButtonToolbar(buttonMainToolbar);
-		button4.text = "Translation";
-		button4.icons = getToolBarButtonIcons("translation");
-		button4.menu = [{
-				text:'Settings',
-				id:'t10n-settings',
-				onclick: () => {
-					onTranslateSettingsModal();
-				}}];
-		button4.split = true;
-		button4.attachOnClick(async function(){
-			let requestEngine = AI.Request.create(AI.ActionType.Translation);
+	if (Asc.Editor.getType() !== "pdf") {
+		let buttonSummaryToolbar = new Asc.ButtonToolbar(buttonMainToolbar);
+		buttonSummaryToolbar.text = "Summarization";
+		buttonSummaryToolbar.icons = getToolBarButtonIcons("summarization");
+		buttonSummaryToolbar.attachOnClick(async function(data){
+			let requestEngine = AI.Request.create(AI.ActionType.Summarization);
 			if (!requestEngine)
 				return;
 
-			const ls_lang_key = "onlyoffice_ai_plugin_translate_lang";
-			const currLang = window.localStorage.getItem(ls_lang_key);
-
-			let lang = !!currLang ? currLang : "english";
-			let content = await Asc.Library.GetSelectedText();
-			if (!content)
-				return;
-
-			let prompt = Asc.Prompts.getTranslatePrompt(content, lang);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			result = Asc.Library.getTranslateResult(result, content);
-			await Asc.Library.PasteText(result, provMeta("translate", requestEngine));
+			onOpenSummarizationModal();
 		});
+	}
 
-		if (false && Asc.Editor.getType() !== "pdf")
+	let buttonTranslateToolbar = new Asc.ButtonToolbar(buttonMainToolbar);
+	buttonTranslateToolbar.text = "Translation";
+	buttonTranslateToolbar.icons = getToolBarButtonIcons("translation");
+	buttonTranslateToolbar.menu = [{
+			text:'Settings',
+			id:'t10n-settings',
+			onclick: () => {
+				onTranslateSettingsModal();
+			}}];
+	buttonTranslateToolbar.split = true;
+	buttonTranslateToolbar.attachOnClick(async function(){
+		let requestEngine = AI.Request.create(AI.ActionType.Translation);
+		if (!requestEngine)
+			return;
+
+		const ls_lang_key = "onlyoffice_ai_plugin_translate_lang";
+		const currLang = window.localStorage.getItem(ls_lang_key);
+
+		let lang = !!currLang ? currLang : "english";
+		let content = await Asc.Library.GetSelectedText();
+		if (!content)
+			return;
+
+		let prompt = Asc.Prompts.getTranslatePrompt(content, lang);
+		let result = await requestEngine.chatRequest(prompt);
+		if (!result) return;
+
+		result = Asc.Library.getTranslateResult(result, content);
+		await Asc.Library.PasteText(result, provMeta("translate", requestEngine));
+	});
+
+	let lastButton = null;
+	if (editorVersion >= 9002000 && Asc.Editor.getType() === "word")
+	{
+		let buttonGS = new Asc.ButtonToolbar(buttonMainToolbar);
+		buttonGS.text = "Grammar & Spelling";
+		buttonGS.icons = getToolBarButtonIcons("grammar");
+		buttonGS.menu = [{
+			text: 'Check all',
+			id: 'sg10n-check-all',
+			onclick: () => onCheckGrammarSpelling(false)
+		}, 
 		{
-			let button2 = new Asc.ButtonToolbar(buttonMainToolbar);
-			button2.text = "OCR";
-			button2.icons = getToolBarButtonIcons("ocr");
-			button2.attachOnClick(on_click_ocr);
-		}
+			text: 'Check current text',
+			id: 'sg10n-check-text',
+			onclick: () => onCheckGrammarSpelling(true)
+		}];
+		buttonGS.attachOnClick(async function(){
+			onCheckGrammarSpelling(true);
+		});
+		lastButton = buttonGS;			
+	}
 
-		let lastButton = null;
-		if (editorVersion >= 9002000 && Asc.Editor.getType() === "word")
+	if (editorVersion >= 9003000) {
+
+		if (window.AscDesktopEditor && Asc.Editor.getType() === "word") 
 		{
-			let buttonGS = new Asc.ButtonToolbar(buttonMainToolbar);
-			buttonGS.text = "Grammar & Spelling";
-			buttonGS.icons = getToolBarButtonIcons("grammar");
-			buttonGS.menu = [{
-				text: 'Check all',
-				id: 'sg10n-check-all',
-				onclick: () => onCheckGrammarSpelling(false)
-			}, 
+			let isFillForm = await Asc.Editor.callMethod("IsFillingOFormMode");
+			if (true === isFillForm)
 			{
-				text: 'Check current text',
-				id: 'sg10n-check-text',
-				onclick: () => onCheckGrammarSpelling(true)
-			}];
-			buttonGS.attachOnClick(async function(){
-				onCheckGrammarSpelling(true);
-			});
-			lastButton = buttonGS;			
-		}
+				let buttonGenerate = new Asc.ButtonToolbar(buttonMainToolbar);
+				buttonGenerate.text = "Generate Document";
+				buttonGenerate.icons = window.getToolBarButtonIcons("form-to-doc");
+				
+				buttonGenerate.attachOnClick(async function(){
+					let content = await getFormGenerationPrompt();
+					window.AscDesktopEditor.generateNew("docx", "ai", content);
+				});
 
-		if (editorVersion >= 9003000) {
-
-			if (window.AscDesktopEditor && Asc.Editor.getType() === "word") 
-			{
-				let isFillForm = await Asc.Editor.callMethod("IsFillingOFormMode");
-				if (true === isFillForm)
-				{
-					let buttonGenerate = new Asc.ButtonToolbar(buttonMainToolbar);
-					buttonGenerate.text = "Generate Document";
-					buttonGenerate.icons = window.getToolBarButtonIcons("form-to-doc");
-					
-					buttonGenerate.attachOnClick(async function(){
-						let content = await getFormGenerationPrompt();
-						window.AscDesktopEditor.generateNew("docx", "ai", content);
-					});
-
-					lastButton = buttonGenerate;
-				}
+				lastButton = buttonGenerate;
 			}
 		}
+	}
 
-		if (lastButton)
-			lastButton.split = true;
+	if (lastButton)
+		lastButton.split = true;
 
-		let neededVersionForAiAssistant = 9002000;
-		/*if (window.AscDesktopEditor) {
-			neededVersionForAiAssistant = 9003000;
-		}*/
-		if (editorVersion >= neededVersionForAiAssistant && Asc.Editor.getType() === "word")
-		{	
-			const buttonCustomAssistant = new Asc.ButtonToolbar(buttonMainToolbar);
-			buttonCustomAssistant.text = "Create AI assistant";
-			buttonCustomAssistant.icons = getToolBarButtonIcons("plugin-writer");
-			buttonCustomAssistant.separator = true;
-			buttonCustomAssistant.attachOnClick(function(){
-				customAssistantWindowShow();
+	let neededVersionForAiAssistant = 9002000;
+	if (editorVersion >= neededVersionForAiAssistant && Asc.Editor.getType() === "word")
+	{	
+		const buttonCustomAssistant = new Asc.ButtonToolbar(buttonMainToolbar);
+		buttonCustomAssistant.text = "Create AI assistant";
+		buttonCustomAssistant.icons = getToolBarButtonIcons("plugin-writer");
+		buttonCustomAssistant.separator = true;
+		buttonCustomAssistant.attachOnClick(function(){
+			customAssistantWindowShow();
+		});
+		const savedAssistants = JSON.parse(
+			localStorage.getItem("onlyoffice_ai_saved_assistants") || "[]"
+		);
+
+		savedAssistants.forEach(element => {
+			const buttonAssistant = new Asc.ButtonToolbar(buttonMainToolbar);
+			buttonAssistant.text = element.name;
+			buttonAssistant.icons = getToolBarButtonIcons("written-plugin");
+			buttonAssistant.split = true;
+			buttonAssistant.enableToggle = true;
+			buttonAssistant.menu = [{
+				text: 'Edit',
+				id: element.id + '-edit',
+				onclick: () => customAssistantWindowShow(element.id, buttonAssistant)
+			}, 
+			{
+				text: 'Delete',
+				id: element.id + '-delete',
+				onclick: () => customAssistantWindowDeleteConfirm(element.id, buttonAssistant)
+			}];
+			buttonAssistant.attachOnClick(async function(){
+				customAssistantOnClickToolbarIcon(element.id, buttonAssistant);
 			});
-			const savedAssistants = JSON.parse(
-				localStorage.getItem("onlyoffice_ai_saved_assistants") || "[]"
-			);
-
-			savedAssistants.forEach(element => {
-				const buttonAssistant = new Asc.ButtonToolbar(buttonMainToolbar);
-				buttonAssistant.text = element.name;
-				buttonAssistant.icons = getToolBarButtonIcons("written-plugin");
-				buttonAssistant.split = true;
-				buttonAssistant.enableToggle = true;
-				buttonAssistant.menu = [{
-					text: 'Edit',
-					id: element.id + '-edit',
-					onclick: () => customAssistantWindowShow(element.id, buttonAssistant)
-				}, 
-				{
-					text: 'Delete',
-					id: element.id + '-delete',
-					onclick: () => customAssistantWindowDeleteConfirm(element.id, buttonAssistant)
-				}];
-				buttonAssistant.attachOnClick(async function(){
-					customAssistantOnClickToolbarIcon(element.id, buttonAssistant);
-				});
-			});
-		}
+		});
 	}
 
 	// register actions

@@ -475,15 +475,10 @@ function fetchExternal(url, options, isStreaming) {
 				if (this.errorHandler)
 					this.errorHandler(err);
 				else {
-					if (true) {
-						// timer for exit from long action
-						setTimeout(async function(){
-							await Asc.Library.SendError(err.message, 0);
-						}, 100);						
-					} else {
-						// since 8.3.0!!!
-						await Asc.Editor.callMethod("ShowError", [err.message, 0]);
-					}
+					// timer for exit from long action
+					setTimeout(async function(){
+						await Asc.Library.SendError(err.message, 0);
+					}, 100);
 				}
 				return;
 			}
@@ -541,11 +536,6 @@ function fetchExternal(url, options, isStreaming) {
 			max_input_tokens = this.model.options.max_input_tokens;
 
 		let header_footer_overhead = 500;
-		// for test chunks:
-		if (false) {
-			max_input_tokens = 50;
-			let header_footer_overhead = 0;
-		}
 
 		if (max_input_tokens < header_footer_overhead)
 			max_input_tokens = header_footer_overhead + 1000;
@@ -668,7 +658,6 @@ function fetchExternal(url, options, isStreaming) {
 					let resultObj = getStreamedResult(tail + readData.value);
 					tail = resultObj.tail;
 
-					//let chunks = eval(resultObj.result);
 					let chunks = JSON.parse(resultObj.result);
 
 					let errorObj = null;

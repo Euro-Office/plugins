@@ -32,6 +32,9 @@
 
 (function(window, undefined) {
 	const maxTokens = 16000;
+	// Feature flag: the token counter next to the input is not finished, so
+	// its info badge stays hidden.
+	const SHOW_TOKENS_INFO = false;
 	let apiKey = '';
 	let interval = null;
 	let tokenTimeot = null;
@@ -901,11 +904,8 @@
 			attachedText.clear();
 		});
 		
-		// TODO:
-		if (true)
-		{
+		if (!SHOW_TOKENS_INFO)
 			document.getElementById('tokens_info').style.display = "none";
-		}
 
 		document.getElementById('tokens_info').addEventListener('mouseenter', function (event) {
 			event.target.children[0].classList.remove('hidden');

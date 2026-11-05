@@ -439,12 +439,6 @@
 	Library.prototype.InsertAsMD = async function(data, plugins, meta)
 	{
 		let htmlContent = Asc.Library.ConvertMdToHTML(data, plugins);
-
-		if (false) {
-			console.log("MD Content:\n" + data);
-			console.log("HTML Content:\n" + htmlContent);
-		}
-
 		return await Asc.Library.InsertAsHTML(htmlContent, meta);
 	};
 
@@ -462,26 +456,10 @@
 	{
 		switch (Asc.Editor.getType()) {
 			case "word": {
-				if (true) {
-					await Editor.callCommand(function() {
-						let document = Api.GetDocument();
-						document.RemoveSelection();
-					}, false);
-				} else {
-					await Editor.callCommand(function() {
-						let doc = Api.GetDocument();
-						let paras = doc.GetAllParagraphs();
-						if (paras.length)
-						{
-							let lastPara = paras[paras.length - 1];
-							let lastElement = lastPara.GetElement(lastPara.GetElementsCount() - 1);
-							if (lastElement && lastElement.MoveCursorToPos)
-							{
-								lastElement.MoveCursorToPos(100000);
-							}
-						}
-					});
-				}
+				await Editor.callCommand(function() {
+					let document = Api.GetDocument();
+					document.RemoveSelection();
+				}, false);
 			}
 			default:
 				break;
