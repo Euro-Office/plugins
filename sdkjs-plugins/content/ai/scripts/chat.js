@@ -260,7 +260,7 @@
 						'<div class="message_content_error_desc">' + errorObj.description + '</div>'
 					);
 					$messageContent.append($error);
-				} else {
+				} else if (!item.aiEditsOnly) {
 					let $actionButtons = $('<div class="action_buttons_list"></div>');
 					actionButtons.forEach(function(button, index) {
 						let buttonEl = $('<button class="action_button btn-text-default"></button>');
@@ -310,6 +310,8 @@
 					}
 				}
 			}
+			if (item.role == 'assistant' && item.aiEdits)
+				$messageContent.append(renderAIEditsBar(item));
 			item.$el.prepend($messageContent);
 			if($attachedWrapper) {
 				setTimeout(function() {
@@ -441,6 +443,10 @@
 		$question.attr('id', questionId);
 		$question.text(window.Asc.plugin.tr('Allow this action?') + ' ' + (data.humanName || data.functionName || ''));
 		$box.append($question);
+		if (data.source === 'editor')
+			$box.append($('<div class="tool_call_approval_label"></div>').text(window.Asc.plugin.tr('Requested by the editor integration, not by this chat.')));
+		if (data.preview && typeof data.preview === 'object')
+			$box.append(renderToolPreview(data.preview));
 
 		if (isMacro) {
 			$box.append($('<div class="tool_call_approval_label"></div>').text(window.Asc.plugin.tr('The assistant wants to run this macro:')));
@@ -496,6 +502,231 @@
 		}
 		for (let listIndex in touched)
 			rerenderToolCallAt(Number(listIndex));
+	}
+
+	// ── Before/after preview in the approval card ───────────────────────────
+	// preview: { items?, table?, text?, note? } (scripts/helpers/toolPreviews.js).
+	// Plain data from the plugin; only ever inserted as text.
+	function previewString(value) {
+		return (value === undefined || value === null) ? '' : String(value);
+	}
+
+	function renderPreviewChange($cell, before, after) {
+		before = previewString(before);
+		after = previewString(after);
+		if (before === after) {
+			$cell.text(before);
+			return;
+		}
+		if (before !== '')
+			$cell.append($('<del class="ai_preview_old"></del>').text(before));
+		if (after !== '')
+			$cell.append($('<ins class="ai_preview_new"></ins>').text(after));
+	}
+
+	function renderToolPreview(preview) {
+		let $preview = $('<div class="tool_call_preview"></div>');
+		$preview.append($('<div class="tool_call_approval_label"></div>').text(window.Asc.plugin.tr('Preview of the changes:')));
+
+		if (Array.isArray(preview.items) && preview.items.length) {
+			let $list = $('<dl class="tool_call_preview_items"></dl>');
+			preview.items.forEach(function(entry) {
+				if (!entry)
+					return;
+				$list.append($('<dt></dt>').text(previewString(entry.label)));
+				$list.append($('<dd></dd>').text(previewString(entry.value)));
+			});
+			$preview.append($list);
+		}
+
+		if (preview.text && typeof preview.text === 'object') {
+			let $text = $('<div class="tool_call_preview_text"></div>');
+			$text.append($('<div class="tool_call_preview_caption"></div>').text(window.Asc.plugin.tr('Current text')));
+			$text.append($('<del class="ai_preview_old" tabindex="0"></del>').text(previewString(preview.text.before)));
+			$text.append($('<div class="tool_call_preview_caption"></div>').text(window.Asc.plugin.tr('New text')));
+			$text.append($('<ins class="ai_preview_new" tabindex="0"></ins>').text(previewString(preview.text.after)));
+			$preview.append($text);
+		}
+
+		let table = preview.table;
+		if (table && Array.isArray(table.rows) && table.rows.length) {
+			let $wrap = $('<div class="tool_call_preview_table_wrap" tabindex="0"></div>');
+			let $table = $('<table class="tool_call_preview_table"></table>');
+			$table.append($('<caption class="visually_hidden"></caption>').text(window.Asc.plugin.tr('Current and new cell values')));
+			let $head = $('<tr></tr>').append($('<th scope="col"></th>'));
+			(table.columns || []).forEach(function(col) {
+				$head.append($('<th scope="col"></th>').text(previewString(col)));
+			});
+			$table.append($('<thead></thead>').append($head));
+			let $body = $('<tbody></tbody>');
+			table.rows.forEach(function(row) {
+				let $row = $('<tr></tr>').append($('<th scope="row"></th>').text(previewString(row && row.label)));
+				((row && row.cells) || []).forEach(function(cell) {
+					let $cell = $('<td></td>');
+					renderPreviewChange($cell, cell && cell.before, cell && cell.after);
+					$row.append($cell);
+				});
+				$body.append($row);
+			});
+			$table.append($body);
+			$wrap.append($table);
+			$preview.append($wrap);
+			if (table.truncated)
+				$preview.append($('<div class="tool_call_preview_note"></div>').text('…'));
+		}
+
+		if (preview.note)
+			$preview.append($('<div class="tool_call_preview_note"></div>').text(previewString(preview.note)));
+		return $preview;
+	}
+
+	// ── "Undo AI changes" bar on an answer that changed the document ───────
+	// item.aiEdits: summary from scripts/engine/aiEdits.js
+	//   { turnId, steps, canUndo, undoAvailable, revisionCount, editorType }
+	// plus UI state: busy, undone, resolved ("accept"|"reject"), message.
+	function aiEditsStatusText(edits) {
+		if (edits.undone)
+			return window.Asc.plugin.tr('AI changes undone.');
+		if (edits.resolved === 'accept')
+			return window.Asc.plugin.tr('AI changes accepted.');
+		if (edits.resolved === 'reject')
+			return window.Asc.plugin.tr('AI changes rejected.');
+		if (edits.revisionCount > 0)
+			return window.Asc.plugin.tr('The AI made %1 tracked changes.').replace('%1', edits.revisionCount);
+		return window.Asc.plugin.tr('The AI changed the document.');
+	}
+
+	function renderAIEditsBar(item) {
+		let edits = item.aiEdits;
+		let $bar = $('<div class="ai_edits_bar" role="group"></div>');
+		$bar.attr('aria-label', window.Asc.plugin.tr('AI changes'));
+		$bar.append($('<span class="ai_edits_status"></span>').text(aiEditsStatusText(edits)));
+
+		let $buttons = $('<div class="ai_edits_buttons"></div>');
+		function addButton(label, action, title, enabled) {
+			let $btn = $('<button type="button" class="btn-text-default ai_edits_button"></button>');
+			$btn.text(window.Asc.plugin.tr(label));
+			if (title)
+				$btn.attr('title', title);
+			if (!enabled || edits.busy)
+				$btn.attr('disabled', 'disabled');
+			$btn.on('click', function(e) {
+				e.stopPropagation();
+				requestAIEditsAction(item, action);
+			});
+			$buttons.append($btn);
+		}
+
+		let open = !edits.undone && !edits.resolved;
+		if (open && edits.canUndo) {
+			let undoTitle = edits.undoAvailable
+				? window.Asc.plugin.tr('Undoes the AI changes of this answer (%1 undo steps). If you edited the document since, those edits may be undone too.').replace('%1', edits.steps)
+				: window.Asc.plugin.tr('Not available: the document was changed by the AI afterwards. Use Undo in the editor.');
+			addButton('Undo AI changes', 'undo', undoTitle, !!edits.undoAvailable);
+		}
+		if (open && edits.revisionCount > 0) {
+			addButton('Accept all', 'accept', window.Asc.plugin.tr('Accept the tracked changes made in this answer'), true);
+			addButton('Reject all', 'reject', window.Asc.plugin.tr('Reject the tracked changes made in this answer'), true);
+		}
+		if ($buttons.children().length)
+			$bar.append($buttons);
+
+		if (open && !edits.canUndo) {
+			let hint = edits.steps > 1
+				? window.Asc.plugin.tr('To undo, press Ctrl+Z %1 times.').replace('%1', edits.steps)
+				: window.Asc.plugin.tr('To undo, press Ctrl+Z.');
+			$bar.append($('<div class="ai_edits_hint"></div>').text(hint));
+		}
+
+		let $message = $('<div class="ai_edits_message" role="status" aria-live="polite"></div>');
+		if (edits.message)
+			$message.text(edits.message);
+		$bar.append($message);
+		return $bar;
+	}
+
+	function requestAIEditsAction(item, action) {
+		if (!item.aiEdits || item.aiEdits.busy)
+			return;
+		item.aiEdits.busy = true;
+		item.aiEdits.message = '';
+		messagesList._renderItem(item);
+		window.Asc.plugin.sendToPlugin("onAIEditsAction", { turnId: item.aiEdits.turnId, action: action });
+	}
+
+	function findAIEditsItem(turnId) {
+		let list = messagesList.get();
+		for (let i = list.length - 1; i >= 0; i--) {
+			if (list[i].aiEdits && list[i].aiEdits.turnId === turnId)
+				return list[i];
+		}
+		return null;
+	}
+
+	function attachAIEditsSummary(summary) {
+		let list = messagesList.get();
+		// Only the newest turn can still be undone.
+		list.forEach(function(entry) {
+			if (entry.aiEdits && entry.aiEdits.undoAvailable) {
+				entry.aiEdits.undoAvailable = false;
+				if (entry.$el)
+					messagesList._renderItem(entry);
+			}
+		});
+
+		let target = null;
+		for (let i = list.length - 1; i >= 0; i--) {
+			let entry = list[i];
+			if (entry.role === 'user')
+				break;
+			if (entry.role === 'assistant' && !entry.isToolCall && !entry.error && !entry.aiEdits) {
+				target = entry;
+				break;
+			}
+		}
+		let edits = Object.assign({}, summary, { busy: false, message: '' });
+		if (target) {
+			target.aiEdits = edits;
+			messagesList._renderItem(target);
+		} else {
+			messagesList.add({ role: 'assistant', content: [''], aiEditsOnly: true, aiEdits: edits });
+		}
+	}
+
+	function applyAIEditsResult(res) {
+		let item = findAIEditsItem(res.turnId);
+		if (!item)
+			return;
+		let edits = item.aiEdits;
+		edits.busy = false;
+		if (res.summary) {
+			edits.undoAvailable = res.summary.undoAvailable;
+			edits.canUndo = res.summary.canUndo;
+		}
+		let tr = window.Asc.plugin.tr;
+		if (res.action === 'undo') {
+			if (res.ok || res.reason === 'partial') {
+				edits.undone = true;
+				edits.message = res.ok ? '' : tr('Only part of the AI changes could be undone.');
+			} else if (res.reason === 'stale') {
+				edits.undoAvailable = false;
+				edits.message = tr('Not available: the document was changed by the AI afterwards. Use Undo in the editor.');
+			} else {
+				edits.message = tr('The AI changes could not be undone.');
+			}
+		} else {
+			edits.revisionCount = typeof res.left === 'number' ? res.left : edits.revisionCount;
+			edits.undoAvailable = false;
+			if (res.reason === 'unsupported' || res.reason === 'error' || res.reason === 'unknown') {
+				edits.message = tr('The tracked changes could not be processed. Use the Review tab instead.');
+			} else if (res.left > 0) {
+				edits.message = tr('%1 changes share a paragraph with other tracked changes. Review them in the Review tab.').replace('%1', res.left);
+			} else {
+				edits.resolved = res.action;
+				edits.message = '';
+			}
+		}
+		messagesList._renderItem(item);
 	}
 
 	let attachedText = {
@@ -892,6 +1123,12 @@
 		}
 	};
 
+	// Items that are part of the conversation sent to the model. The
+	// "AI changes" placeholder (aiEditsOnly) is UI only.
+	function isHistoryItem(item) {
+		return !item.aiEditsOnly;
+	}
+
 	function sendMessage(text) {
 		// turnId links the agent transcript of this turn back to this message
 		// (see onAgentTranscript).
@@ -918,8 +1155,8 @@
 		// collapsed to a summary). Every assistant tool_calls message is
 		// followed by exactly its tool results, so no orphan tool messages.
 		window.Asc.plugin.sendToPlugin("onChatMessage", {
-			messages: window.AgentHistory.build(list),
-			usedTools: window.AgentHistory.collectToolNames(list),
+			messages: window.AgentHistory.build(list.filter(isHistoryItem)),
+			usedTools: window.AgentHistory.collectToolNames(list.filter(isHistoryItem)),
 			turnId: message.turnId
 		});
 	};
@@ -1341,6 +1578,16 @@
 			let $box = item.$el.find('.tool_call_approval').last();
 			if ($box.length) $box[0].focus({ preventScroll: true });
 		}
+	});
+
+	window.Asc.plugin.attachEvent("onAIEditsSummary", function(summary) {
+		if (summary && summary.turnId)
+			attachAIEditsSummary(summary);
+	});
+
+	window.Asc.plugin.attachEvent("onAIEditsActionResult", function(res) {
+		if (res && res.turnId)
+			applyAIEditsResult(res);
 	});
 
 	// Keep old event for backward compatibility (deprecated)

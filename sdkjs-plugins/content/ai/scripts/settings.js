@@ -91,6 +91,15 @@ window.Asc.plugin.init = function() {
 		heightUpdateConditions.updateModelsReady();
 	});
 	window.Asc.plugin.attachEvent("onThemeChanged", onThemeChanged);
+	window.Asc.plugin.attachEvent("onUpdateReviewTrackChanges", function(state) {
+		state = state || {};
+		$('#review-setting').toggleClass('hidden', !state.visible);
+		$('#review-track-changes').prop('checked', !!state.enabled);
+		$('#review-track-changes').prop('disabled', !!state.locked);
+	});
+	$('#review-track-changes').on('change', function() {
+		window.Asc.plugin.sendToPlugin("onChangeReviewTrackChanges", $(this).is(':checked'));
+	});
 	window.Asc.plugin.attachEvent("onUpdateProvenance", function(state) {
 		$('#provenance-enabled').prop('checked', !!(state && state.enabled));
 		$('#provenance-enabled').prop('disabled', !!(state && state.locked));

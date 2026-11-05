@@ -43,13 +43,19 @@ async function registerButtons(window, undefined)
 	}
 
 	// Runs an agent tool; tools that are not readOnly are recorded as AI
-	// edits (AIProvenance.runTool).
+	// edits (AIProvenance.runTool) and run as one undo step, optionally as
+	// tracked changes (AIEdits.runTool, scripts/engine/aiEdits.js).
 	function runAgentTool(func, funcName, args, requestEngine) {
-		if (!window.AIProvenance)
+		let isReadOnly = window.EditorHelper.isReadOnly(funcName);
+		let run = function() {
 			return func.call(args);
-		return window.AIProvenance.runTool(funcName, window.EditorHelper.isReadOnly(funcName), requestEngine, function() {
-			return func.call(args);
-		});
+		};
+		let marked = !window.AIProvenance ? run : function() {
+			return window.AIProvenance.runTool(funcName, isReadOnly, requestEngine, run);
+		};
+		if (!window.AIEdits)
+			return marked();
+		return window.AIEdits.runTool(funcName, isReadOnly, marked, { engine: requestEngine });
 	}
 
 	function getToolBarButtonIcons(icon) {
@@ -252,7 +258,18 @@ async function registerButtons(window, undefined)
 			}
 		}
 
-		chatWindow.attachEvent("onChatMessage", async function(messageHistory) {
+		// "Undo AI changes" / "Accept all" / "Reject all" on a chat message
+		// (scripts/engine/aiEdits.js).
+		chatWindow.attachEvent("onAIEditsAction", async function(data) {
+			if (!data || !data.turnId)
+				return;
+			let res = await window.AIEdits.performAction(data.turnId, data.action);
+			chatWindow.command("onAIEditsActionResult", res);
+		});
+
+		// One AI turn per message: its document changes are summarized for the
+		// "Undo AI changes" bar (AIEdits.wrapChatHandler).
+		chatWindow.attachEvent("onChatMessage", window.AIEdits.wrapChatHandler(function() { return window.chatWindow === chatWindow ? chatWindow : null; }, async function(messageHistory) {
 			AgentState.isStopped = false;
 
 			let requestEngine = AI.Request.create(AI.ActionType.Chat);
@@ -566,7 +583,7 @@ async function registerButtons(window, undefined)
 
 			// always end (may be twice)
 			chatWindow.command("onChatStreamEnd");
-		});
+		}));
 		chatWindow.attachEvent("onChatReplace", async function(data) {
 			// Chat answers applied to the document with the message buttons.
 			let meta = provMeta("chat:" + data.type, AI.Request.create(AI.ActionType.Chat, true));

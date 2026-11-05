@@ -10,18 +10,25 @@ body {
     line-height: 16px;
 }
 
+#review-setting,
 #provenance-setting {
     margin-top: 16px;
 }
+#review-setting.hidden {
+    display: none;
+}
+#review-setting label,
 #provenance-setting label {
     display: flex;
     align-items: center;
     gap: 6px;
     cursor: pointer;
 }
+#review-setting input:disabled + span,
 #provenance-setting input:disabled + span {
     opacity: 0.6;
 }
+#review-hint,
 #provenance-hint {
     margin-top: 4px;
     margin-left: 22px;

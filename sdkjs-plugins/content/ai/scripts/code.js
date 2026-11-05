@@ -849,6 +849,14 @@ function onOpenSettingsModal() {
 	if (!settingsWindow) {
 		settingsWindow = new window.Asc.PluginWindow();
 		settingsWindow.attachEvent("onInit", function() {
+			// Sent first so the window height includes the section.
+			if (window.AIEdits) {
+				settingsWindow.command("onUpdateReviewTrackChanges", {
+					enabled: window.AIEdits.isTrackChangesEnabled(),
+					locked: window.AIEdits.isLocked(),
+					visible: window.AIEdits.isTrackingSupported()
+				});
+			}
 			updateActions();
 			updateModels();
 			if (window.AIProvenance) {
@@ -857,6 +865,10 @@ function onOpenSettingsModal() {
 					locked: window.AIProvenance.isLocked()
 				});
 			}
+		});
+		settingsWindow.attachEvent("onChangeReviewTrackChanges", function(enabled) {
+			if (window.AIEdits && !window.AIEdits.isLocked())
+				window.AIEdits.setUserTrackChanges(enabled === true);
 		});
 		settingsWindow.attachEvent("onChangeProvenance", function(enabled) {
 			if (window.AIProvenance && !window.AIProvenance.isLocked())

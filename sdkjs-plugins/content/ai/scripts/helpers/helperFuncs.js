@@ -43,6 +43,11 @@ function RegisteredFunction(obj)
 	// Tool group used to send only relevant tools per request
 	// (see toolCategories.js). Not sent to providers.
 	this.category = obj.category || "";
+	// Optional async preview(params) for the approval card (before/after,
+	// read only; see scripts/helpers/toolPreviews.js). Not sent to providers.
+	this.preview = typeof obj.preview === "function" ? obj.preview : null;
+	// Set for tools that switch track changes themselves (scripts/engine/aiEdits.js).
+	this.managesTrackChanges = obj.managesTrackChanges === true;
 
 	this.call = null;
 }
@@ -95,6 +100,9 @@ function EditorHelperImpl() {
 		let func = this.funcs[i];
 		this.names2funcs[func.name] = func;
 	}
+
+	if (window.ToolPreviews)
+		window.ToolPreviews.attach(editorType, this.names2funcs);
 
 	if (HELPERS.names && HELPERS.names[editorType]) {
 		for (let name in HELPERS.names[editorType]) {
@@ -467,8 +475,8 @@ EditorHelperImpl.prototype.getTools = function(categories) {
 	if (this._toolsCache[cacheKey])
 		return JSON.parse(this._toolsCache[cacheKey]);
 
-	// Only serialize the schema fields; internal flags (readOnly, category,
-	// call) stay local.
+	// Only serialize the schema fields; internal fields (readOnly, category,
+	// preview, managesTrackChanges, call) stay local.
 	let funcs = this._getSelectedFuncs(categories);
 	let tools = [];
 	for (let i = 0; i < funcs.length; i++) {
