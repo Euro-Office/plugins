@@ -43,6 +43,7 @@
 		if (!html || !html.trim())
 			throw new window.AgentState.ToolError('The markdown produced no content.');
 
+		let provenanceAnchor = null;
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 		try {
 			if (position === "replaceSelection") {
@@ -67,10 +68,15 @@
 					doc.MoveCursorToEnd();
 				});
 			}
+			// Provenance: wrap the inserted paragraphs in "ai-generated"
+			// content controls (after the paste, outside this undo group).
+			provenanceAnchor = window.AIProvenance ? await window.AIProvenance.captureAnchor(window.AIProvenance.scopeMeta("insertMarkdown")) : null;
 			await Asc.Editor.callMethod("PasteHtml", [html]);
 		} finally {
 			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
 		}
+		if (provenanceAnchor)
+			await window.AIProvenance.markInsertion(provenanceAnchor, { html: html });
 
 		return { position: position, insertedCharacters: params.markdown.length };
 	};

@@ -459,6 +459,9 @@ function fetchExternal(url, options, isStreaming) {
 	};
 
 	AI.Request.prototype._wrapRequest = async function(func, data, block, streamFunc) {
+		// Lets AIProvenance know which models an agent tool used.
+		if (window.AIProvenance)
+			window.AIProvenance.noteRequest(this);
 		let isActionRestriction = (block && (undefined !== streamFunc)) ? true : undefined;
 		if (block)
 			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + this.modelUI.name + ")"]);
@@ -986,7 +989,12 @@ function fetchExternal(url, options, isStreaming) {
 
 	// IMAGE REQUESTS
 	AI.Request.prototype.imageGenerationRequest = async function(data, block) {
-		return await this._wrapRequest(this._imageGenerationRequest, data, block !== false);
+		let result = await this._wrapRequest(this._imageGenerationRequest, data, block !== false);
+		// Embed IPTC/XMP provenance (DigitalSourceType trainedAlgorithmicMedia)
+		// into every generated PNG/JPEG before it can be inserted anywhere.
+		if (result && typeof result === "string" && window.AIProvenance)
+			result = window.AIProvenance.markImage(result, window.AIProvenance.meta("imageGeneration", this));
+		return result;
 	};
 
 	AI.Request.prototype._imageGenerationRequest = async function(data) {

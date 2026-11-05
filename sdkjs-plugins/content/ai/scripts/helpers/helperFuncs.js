@@ -335,7 +335,9 @@ EditorHelperImpl.prototype.callFunc = async function(data, hooks) {
 				return { error: TOOL_DECLINED_MESSAGE, declined: true };
 		}
 
-		let toolResultMessage = await func.call(parsed.args);
+		let toolResultMessage = (hooks && typeof hooks.call === "function")
+			? await hooks.call(func, parsed.funcName, parsed.args)
+			: await func.call(parsed.args);
 		if (toolResultMessage)
 			toolResultMessage = Asc.plugin.tr("Function executed successfully") + "\n" + JSON.stringify(toolResultMessage);
 		else

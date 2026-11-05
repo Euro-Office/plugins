@@ -286,6 +286,19 @@ async function streamPromptResultToDocument(prompt)
 		await markdownStreamer.onStreamChunk(data, end);
 	}
 
+	// Provenance: remember where the text goes, then wrap the generated
+	// paragraphs in "ai-generated" content controls (aiProvenance.js). Inside
+	// an agent tool the metadata comes from the agent's tool scope.
+	let provenanceMeta = null;
+	let provenanceAnchor = null;
+	let generatedMd = "";
+	if (window.AIProvenance) {
+		provenanceMeta = window.AIProvenance.scopeMeta("generateDocument");
+		if (!provenanceMeta.model)
+			provenanceMeta = window.AIProvenance.meta("generateDocument", requestEngine);
+		provenanceAnchor = await window.AIProvenance.captureAnchor(provenanceMeta);
+	}
+
 	let result = await requestEngine.chatRequest(agentHistory, false, isSupportStreaming ? async function(data) {
 		if (!data)
 			return;
@@ -293,17 +306,25 @@ async function streamPromptResultToDocument(prompt)
 		if (isSupportStreaming)
 			await checkEndAction();
 		
+		generatedMd += data;
 		await onStreamEvent(data);
 
 		return window.AgentState && window.AgentState.isStopped ? true : false;
 	} : undefined);
 
 	if (!isSupportStreaming) {
+		generatedMd = result || "";
 		await markdownStreamer.onStreamChunk(result, true);
 	}
-	markdownStreamer.onStreamEnd();
+	await markdownStreamer.onStreamEnd();
 
 	await checkEndAction();
+
+	if (provenanceAnchor && generatedMd) {
+		await window.AIProvenance.markInsertion(provenanceAnchor, {
+			html: Asc.Library.getHTMLFromMD(generatedMd, markdownStreamer.msPlugins, false)
+		});
+	}
 }
 
 async function getFormGenerationPrompt() {
@@ -472,13 +493,18 @@ window.checkGenerationInfo = async function() {
 
 	if (Asc.Editor.getType() === "word" && generationValueString !== "") {
 		await streamPromptResultToDocument(generationValueString);
+		if (window.AIProvenance)
+			await window.AIProvenance.record(window.AIProvenance.meta("generateDocument", AI.Request.create(AI.ActionType.Chat, true)));
 		return;
 	}
 
 	let func = window.EditorHelper.names2funcs[functionName];
 	if (func && generationValue) {
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
-		await func.call(generationValue);
+		if (window.AIProvenance)
+			await window.AIProvenance.runTool(functionName, false, AI.Request.create(AI.ActionType.Chat, true), function() { return func.call(generationValue); });
+		else
+			await func.call(generationValue);
 		await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
 	}
 }

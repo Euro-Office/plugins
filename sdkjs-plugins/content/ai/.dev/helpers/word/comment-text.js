@@ -90,6 +90,11 @@
 		if (!requestEngine)
 			return;
 
+		// Comments are not body content: no content control, but the author
+		// says that the AI wrote it. Footnote text is pasted in streamed chunks
+		// and is not range-marked (the action is still recorded).
+		Asc.scope.commentAuthor = window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.meta("commentText", requestEngine)) : requestEngine.modelUI.name;
+
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
@@ -144,7 +149,7 @@
 						if (!range)
 							return null;
 
-						let comment = range.AddComment(Asc.scope.data, Asc.scope.model, "uid" + Asc.scope.model);
+						let comment = range.AddComment(Asc.scope.data, Asc.scope.commentAuthor, "uid" + Asc.scope.model);
 						if (!comment)
 							return null;
 						doc.ShowComment([comment.GetId()]);

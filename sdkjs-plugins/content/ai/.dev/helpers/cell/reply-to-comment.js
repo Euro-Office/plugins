@@ -2,7 +2,7 @@
 	let func = new RegisteredFunction({
 		"name": "replyToComment",
 		"text": "Reply to Comment",
-		"description": "Adds a reply to an existing cell comment in the workbook, or marks it as resolved. The reply is appended after existing replies and is authored as 'AI'. Get comment ids from getComments.",
+		"description": "Adds a reply to an existing cell comment in the workbook, or marks it as resolved. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
 		"parameters": {
 			"type": "object",
 			"properties": {
@@ -41,6 +41,7 @@
 			throw new window.AgentState.ToolError('Provide a non-empty "text" for the reply and/or "resolved".');
 
 		Asc.scope.replyParams = {
+			author: window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.scopeMeta("replyToComment")) : "AI",
 			id: String(params.commentId),
 			text: hasText ? params.text : null,
 			resolved: typeof params.resolved === 'boolean' ? params.resolved : null
@@ -52,7 +53,7 @@
 			if (!comment)
 				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
 			if (p.text !== null)
-				comment.AddReply(p.text, "AI", "uid-ai");
+				comment.AddReply(p.text, p.author, "uid-ai");
 			if (p.resolved !== null)
 				comment.SetSolved(p.resolved);
 			// Re-read: ApiComment wraps a copy of the comment data.

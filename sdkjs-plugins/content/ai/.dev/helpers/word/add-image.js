@@ -139,11 +139,20 @@
 				Asc.scope.imageUrl = imageUrl;
 				Asc.scope.width = widthEmu;
 				Asc.scope.height = heightEmu;
+				// Provenance: alt text on the inserted image (the XMP packet is
+				// already embedded by imageGenerationRequest).
+				Asc.scope.aiAlt = window.AIProvenance ? window.AIProvenance.altText(window.AIProvenance.meta("addImage", requestEngine)) : null;
 				
 				await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 				await Asc.Editor.callCommand(function () {
 					let doc = Api.GetDocument();
 					doc.ReplaceCurrentImage(Asc.scope.imageUrl, Asc.scope.width, Asc.scope.height);
+					// The new image is the selected drawing afterwards.
+					if (Asc.scope.aiAlt && typeof doc.GetSelectedDrawings === "function") {
+						let drawings = doc.GetSelectedDrawings();
+						if (drawings && drawings.length === 1 && typeof drawings[0].SetDescription === "function")
+							drawings[0].SetDescription(Asc.scope.aiAlt);
+					}
 				});
 				await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
 			}

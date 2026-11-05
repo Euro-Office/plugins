@@ -47,8 +47,12 @@
 			}
 		}
 
+		// Provenance: wrap the new text in "ai-generated" content controls.
+		let provenanceAnchor = window.AIProvenance ? await window.AIProvenance.captureAnchor(window.AIProvenance.scopeMeta("replaceSelection")) : null;
 		try {
 			await Asc.Library.ReplaceTextSmart(params.text.split("\n"));
+			if (provenanceAnchor)
+				await window.AIProvenance.markInsertion(provenanceAnchor, { text: params.text });
 		} finally {
 			if (turnOffTrackChanges) {
 				await Asc.Editor.callCommand(function(){

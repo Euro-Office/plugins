@@ -313,6 +313,30 @@
 			.replace(/&nbsp;/g, ' ');
 	}
 
+	// Provenance (scripts/helpers/aiProvenance.js): the insert methods below
+	// take an optional `meta` ({ action, provider, model }, see
+	// AIProvenance.meta). With it, AI text inserted into a text document is
+	// wrapped in "ai-generated" content controls and the action is recorded
+	// in the document properties. Without it nothing is marked (callers that
+	// mark on their own, e.g. agent tools, which the agent loop records).
+	function provenance(meta) {
+		return (meta && window.AIProvenance) ? window.AIProvenance : null;
+	}
+
+	async function provenanceBefore(meta) {
+		let p = provenance(meta);
+		return p ? await p.captureAnchor(meta) : null;
+	}
+
+	async function provenanceAfter(meta, anchor, inserted) {
+		let p = provenance(meta);
+		if (!p)
+			return;
+		if (anchor)
+			await p.markInsertion(anchor, inserted);
+		await p.record(meta);
+	}
+
 	Library.prototype.GetEditorVersion = async function()
 	{
 		if (this.version !== 0)
@@ -360,25 +384,51 @@
 		return res.substring(index1, index2);
 	};
 
-	Library.prototype.ReplaceTextSmart = async function(text)
+	Library.prototype.ReplaceTextSmart = async function(text, meta)
 	{
-		return await Editor.callMethod("ReplaceTextSmart", [text]);
+		let anchor = await provenanceBefore(meta);
+		let result = await Editor.callMethod("ReplaceTextSmart", [text]);
+		await provenanceAfter(meta, anchor, { text: Array.isArray(text) ? text.join("\n") : String(text || "") });
+		return result;
 	};
 
-	Library.prototype.InsertAsText = async function(text)
+	Library.prototype.InsertAsText = async function(text, meta)
 	{
 		Asc.scope.data = (text || "").split("\n\n");
-		return await Editor.callCommand(function() {
+		// Appended paragraphs are built here, so they go straight into one
+		// block-level "ai-generated" content control.
+		let p = provenance(meta);
+		Asc.scope.aiCC = p ? p.cc(meta) : null;
+		let result = await Editor.callCommand(function() {
 			let oDocument = Api.GetDocument();
+			let cc = Asc.scope.aiCC;
+			let sdt = null;
+			if (cc && typeof Api.CreateBlockLvlSdt === "function") {
+				sdt = Api.CreateBlockLvlSdt();
+				sdt.SetTag(cc.tag);
+				sdt.SetAlias(cc.alias);
+				if (typeof sdt.SetAppearance === "function")
+					sdt.SetAppearance("hidden");
+			}
+			let count = 0;
 			for (let ind = 0; ind < Asc.scope.data.length; ind++) {
 				let text = Asc.scope.data[ind];
 				if (text.length) {
 					let oParagraph = Api.CreateParagraph();
 					oParagraph.AddText(text);
-					oDocument.Push(oParagraph);
+					if (sdt)
+						sdt.AddElement(oParagraph, count);
+					else
+						oDocument.Push(oParagraph);
+					count++;
 				}
 			}
+			if (sdt && count > 0)
+				oDocument.Push(sdt);
 		});
+		Asc.scope.aiCC = null;
+		await provenanceAfter(meta, null);
+		return result;
 	};
 
 	Library.prototype.getHTMLFromMD = function(data, plugins, isStreaming)
@@ -386,7 +436,7 @@
 		return Asc.Library.ConvertMdToHTML(data, plugins, isStreaming !== false);
 	};
 
-	Library.prototype.InsertAsMD = async function(data, plugins)
+	Library.prototype.InsertAsMD = async function(data, plugins, meta)
 	{
 		let htmlContent = Asc.Library.ConvertMdToHTML(data, plugins);
 
@@ -395,7 +445,7 @@
 			console.log("HTML Content:\n" + htmlContent);
 		}
 
-		return await Asc.Library.InsertAsHTML(htmlContent);
+		return await Asc.Library.InsertAsHTML(htmlContent, meta);
 	};
 
 	Library.prototype.ConvertMdToHTML = function(data, plugins, isStreaming)
@@ -408,7 +458,7 @@
 		return c.render(this.getMarkdownResult(data, isStreaming));
 	};
 
-	Library.prototype.InsertAsHTML = async function(data)
+	Library.prototype.InsertAsHTML = async function(data, meta)
 	{
 		switch (Asc.Editor.getType()) {
 			case "word": {
@@ -436,20 +486,29 @@
 			default:
 				break;
 		}
-		return await Editor.callMethod("PasteHtml", [data]);
+		let anchor = await provenanceBefore(meta);
+		let result = await Editor.callMethod("PasteHtml", [data]);
+		await provenanceAfter(meta, anchor, { html: data });
+		return result;
 	};
 
-	Library.prototype.InsertAsComment = async function(text)
+	// Comments are not document body content: they are not wrapped in
+	// content controls, the author name says that the AI wrote them.
+	Library.prototype.InsertAsComment = async function(text, meta)
 	{
-		return await Editor.callMethod("AddComment", [{
-			UserName : "AI",
+		let result = await Editor.callMethod("AddComment", [{
+			UserName : window.AIProvenance ? window.AIProvenance.commentAuthor(meta) : "AI",
 			Text : decodeHtmlText(text),
 			Time: Date.now(),
 			Solver: false
 		}]);
+		await provenanceAfter(meta, null);
+		return result;
 	};
 
-	Library.prototype.InsertAsHyperlink = async function(content, hint)
+	// Only the link target comes from the AI; the linked text is the user's,
+	// so it is not wrapped in a content control (the action is recorded).
+	Library.prototype.InsertAsHyperlink = async function(content, hint, meta)
 	{
 		let text = content;
 		start = text.indexOf('htt');
@@ -458,14 +517,16 @@
 			end = text.length;
 
 		Asc.scope.link = text.slice(start, end);
-		return await Editor.callCommand(function(){
+		let result = await Editor.callCommand(function(){
 			let oDocument = Api.GetDocument();
 			let oRange = oDocument.GetRangeBySelect();
 			oRange.AddHyperlink(Asc.scope.link, "Meaning of the word");
 		});
+		await provenanceAfter(meta, null);
+		return result;
 	};
 
-	Library.prototype.InsertAsReview = async function(content, isHtml) 
+	Library.prototype.InsertAsReview = async function(content, isHtml, meta) 
 	{
 		let isTrackRevisions = await Editor.callCommand(function(){
 			let res = Api.asc_GetLocalTrackRevisions();
@@ -475,7 +536,9 @@
 
 		Asc.scope.localTrackRevisions = isTrackRevisions;
 
+		let anchor = await provenanceBefore(meta);
 		await Editor.callMethod(isHtml ? "PasteHtml" : "PasteText", [content.trim()]);
+		await provenanceAfter(meta, anchor, isHtml ? { html: content } : { text: content });
 
 		if (true !== isTrackRevisions) 
 		{
@@ -485,9 +548,12 @@
 		}
 	};
 
-	Library.prototype.PasteText = async function(text)
+	Library.prototype.PasteText = async function(text, meta)
 	{
-		return await Editor.callMethod("PasteText", [text]);
+		let anchor = await provenanceBefore(meta);
+		let result = await Editor.callMethod("PasteText", [text]);
+		await provenanceAfter(meta, anchor, { text: text });
+		return result;
 	};
 
 	Library.prototype.SendError = async function(text, errorLevel)
@@ -503,8 +569,22 @@
 		return await Editor.callMethod("getLocalImagePath", [url]);
 	};
 
-	Library.prototype.AddGeneratedImage = async function(base64) {
+	Library.prototype.AddGeneratedImage = async function(base64, meta) {
 		let editorVersion = await Asc.Library.GetEditorVersion();
+		let p = provenance(meta);
+		if (p) {
+			// No-op if the image request already embedded the XMP packet.
+			base64 = p.markImage(base64, meta);
+		}
+		// Alt text, where ApiDrawing.SetDescription exists (10.0+).
+		Asc.scope.aiAlt = p ? p.altText(meta) : null;
+		let result = await this._addGeneratedImage(base64, editorVersion);
+		Asc.scope.aiAlt = null;
+		await provenanceAfter(meta, null);
+		return result;
+	};
+
+	Library.prototype._addGeneratedImage = async function(base64, editorVersion) {
 
 		if (Asc.Editor.getType() === "pdf") {
 			return await Editor.callMethod("PasteHtml", ["<img src=\"" + base64 + "\" />"]);
@@ -526,6 +606,8 @@
 					let document = Api.GetDocument();
 					let paragraph = Api.CreateParagraph();
 					let drawing = Api.CreateImage(Asc.scope.url, 100 * 36000, 100 * 36000);
+					if (Asc.scope.aiAlt && typeof drawing.SetDescription === "function")
+						drawing.SetDescription(Asc.scope.aiAlt);
 					paragraph.AddDrawing(drawing);
 					document.RemoveSelection();
 					document.InsertContent([paragraph], true);
@@ -534,7 +616,9 @@
 			case "cell": {
 				return await Editor.callCommand(function() {
 					let worksheet = Api.GetActiveSheet();
-					worksheet.AddImage(Asc.scope.url, 100 * 36000, 100 * 36000, 0, 2 * 36000, 2, 3 * 36000);
+					let image = worksheet.AddImage(Asc.scope.url, 100 * 36000, 100 * 36000, 0, 2 * 36000, 2, 3 * 36000);
+					if (image && Asc.scope.aiAlt && typeof image.SetDescription === "function")
+						image.SetDescription(Asc.scope.aiAlt);
 				}, false);
 			}
 			case "slide": {
@@ -542,6 +626,8 @@
 					let presentation = Api.GetPresentation();
 					let slide = presentation.GetCurrentSlide();
 					let image = Api.CreateImage(Asc.scope.url, 150 * 36000, 150 * 36000);
+					if (Asc.scope.aiAlt && typeof image.SetDescription === "function")
+						image.SetDescription(Asc.scope.aiAlt);
 					slide.AddObject(image);
 				}, false);
 			}
@@ -550,7 +636,16 @@
 		}
 	};
 
-	Library.prototype.AddOleObject = async function(imageUrl, data) {
+	Library.prototype.AddOleObject = async function(imageUrl, data, meta) {
+		let p = provenance(meta);
+		if (p)
+			imageUrl = p.markImage(imageUrl, meta);
+		let result = await this._addOleObject(imageUrl, data);
+		await provenanceAfter(meta, null);
+		return result;
+	};
+
+	Library.prototype._addOleObject = async function(imageUrl, data) {
 		switch (window.Asc.plugin.info.editorType) {
 			case "word": {
 				await Editor.callCommand(function(){

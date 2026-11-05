@@ -153,6 +153,13 @@
 			}
 		}
 
+		// Provenance: the anchor is taken right before the first chunk is
+		// pasted, the streamed text is wrapped at the end.
+		let provenanceMeta = window.AIProvenance ? window.AIProvenance.scopeMeta("rewriteText") : null;
+		let provenanceAnchor = null;
+		let isFirstChunk = true;
+		let newText = "";
+
 		await requestEngine.chatRequest(argPromt, false, async function(data) {
 			if (!data)
 				return;
@@ -168,6 +175,13 @@
 				text = null;
 			}
 
+			if (isFirstChunk) {
+				isFirstChunk = false;
+				if (provenanceMeta)
+					provenanceAnchor = await window.AIProvenance.captureAnchor(provenanceMeta);
+			}
+			newText += data;
+
 			await Asc.Library.PasteText(data);
 		});
 		
@@ -177,6 +191,9 @@
 			await Asc.Editor.callCommand(function(){return Api.GetDocument().SetTrackRevisions(false);});
 
 		await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+
+		if (provenanceAnchor && newText)
+			await window.AIProvenance.markInsertion(provenanceAnchor, { text: newText });
 	};
 
 	return func;

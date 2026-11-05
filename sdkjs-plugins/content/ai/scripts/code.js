@@ -849,7 +849,7 @@ function onOpenSettingsModal() {
 		],
 		isModal : true,
 		EditorsSupport : ["word", "slide", "cell", "pdf"],
-		size : [320, 350]
+		size : [320, 390]
 	};
 
 	if (!settingsWindow) {
@@ -857,6 +857,16 @@ function onOpenSettingsModal() {
 		settingsWindow.attachEvent("onInit", function() {
 			updateActions();
 			updateModels();
+			if (window.AIProvenance) {
+				settingsWindow.command("onUpdateProvenance", {
+					enabled: window.AIProvenance.isEnabled(),
+					locked: window.AIProvenance.isLocked()
+				});
+			}
+		});
+		settingsWindow.attachEvent("onChangeProvenance", function(enabled) {
+			if (window.AIProvenance && !window.AIProvenance.isLocked())
+				window.AIProvenance.setUserEnabled(enabled === true);
 		});
 		settingsWindow.attachEvent("onUpdateHeight", function(height) {
 			if(height > variation.size[1]) {
@@ -1470,24 +1480,26 @@ function onOpenSummarizationModal() {
 		});
 	});
 	summarizationWindow.attachEvent("onSummarize", async function(data) {
+		// Provenance: mark the summary and record the action (aiProvenance.js).
+		let meta = window.AIProvenance ? window.AIProvenance.meta("summarization", AI.Request.create(AI.ActionType.Summarization, true)) : null;
 		switch (data.type) {
 		case "review": {
 			if (Asc.plugin.info.editorType === "word")
-				await Asc.Library.InsertAsReview(data.data);
+				await Asc.Library.InsertAsReview(data.data, false, meta);
 			else
-				await Asc.Library.InsertAsComment(data.data);
+				await Asc.Library.InsertAsComment(data.data, meta);
 			break;
 		}
 		case "comment": {
-			await Asc.Library.InsertAsComment(data.data);
+			await Asc.Library.InsertAsComment(data.data, meta);
 			break;
 		}
 		case "replace": {
-			await Asc.Library.PasteText(data.data);
+			await Asc.Library.PasteText(data.data, meta);
 			break;
 		}
 		case "end": {
-			await Asc.Library.InsertAsText(data.data);
+			await Asc.Library.InsertAsText(data.data, meta);
 			break;
 		}
 		}

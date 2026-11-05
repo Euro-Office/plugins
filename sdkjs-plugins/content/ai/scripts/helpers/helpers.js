@@ -141,11 +141,20 @@ HELPERS.word.push((function(){
 				Asc.scope.imageUrl = imageUrl;
 				Asc.scope.width = widthEmu;
 				Asc.scope.height = heightEmu;
+				// Provenance: alt text on the inserted image (the XMP packet is
+				// already embedded by imageGenerationRequest).
+				Asc.scope.aiAlt = window.AIProvenance ? window.AIProvenance.altText(window.AIProvenance.meta("addImage", requestEngine)) : null;
 				
 				await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 				await Asc.Editor.callCommand(function () {
 					let doc = Api.GetDocument();
 					doc.ReplaceCurrentImage(Asc.scope.imageUrl, Asc.scope.width, Asc.scope.height);
+					// The new image is the selected drawing afterwards.
+					if (Asc.scope.aiAlt && typeof doc.GetSelectedDrawings === "function") {
+						let drawings = doc.GetSelectedDrawings();
+						if (drawings && drawings.length === 1 && typeof drawings[0].SetDescription === "function")
+							drawings[0].SetDescription(Asc.scope.aiAlt);
+					}
 				});
 				await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
 			}
@@ -332,6 +341,11 @@ HELPERS.word.push((function(){
 		if (!requestEngine)
 			return;
 
+		// Comments are not body content: no content control, but the author
+		// says that the AI wrote it. Footnote text is pasted in streamed chunks
+		// and is not range-marked (the action is still recorded).
+		Asc.scope.commentAuthor = window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.meta("commentText", requestEngine)) : requestEngine.modelUI.name;
+
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
@@ -386,7 +400,7 @@ HELPERS.word.push((function(){
 						if (!range)
 							return null;
 
-						let comment = range.AddComment(Asc.scope.data, Asc.scope.model, "uid" + Asc.scope.model);
+						let comment = range.AddComment(Asc.scope.data, Asc.scope.commentAuthor, "uid" + Asc.scope.model);
 						if (!comment)
 							return null;
 						doc.ShowComment([comment.GetId()]);
@@ -463,7 +477,10 @@ HELPERS.word.push((function(){
 			pos: Math.floor(params.index) - 1,
 			action: params.action,
 			text: params.text || "",
-			style: params.style || null
+			style: params.style || null,
+			// Provenance: new text goes into an inline "ai-generated" content
+			// control per paragraph (inline keeps the element indexes stable).
+			cc: window.AIProvenance ? window.AIProvenance.cc(window.AIProvenance.scopeMeta("editParagraph")) : null
 		};
 
 		let result = await Asc.Editor.callCommand(function(){
@@ -473,6 +490,27 @@ HELPERS.word.push((function(){
 			if (p.pos >= total)
 				return { error: "Index " + (p.pos + 1) + " is out of range. The document has " + total + " elements." };
 			let el = doc.GetElement(p.pos);
+
+			// Adds the text to the paragraph, inside an "ai-generated" content
+			// control when marking is on (needs Api.CreateInlineLvlSdt).
+			function addText(par, text, textPr) {
+				let run = Api.CreateRun();
+				if (textPr)
+					run.SetTextPr(textPr);
+				run.AddText(text);
+				if (p.cc && text !== "" && typeof Api.CreateInlineLvlSdt === "function") {
+					let sdt = Api.CreateInlineLvlSdt();
+					sdt.SetTag(p.cc.tag);
+					sdt.SetAlias(p.cc.alias);
+					if (typeof sdt.SetAppearance === "function")
+						sdt.SetAppearance("hidden");
+					if (sdt.AddElement(run, 0)) {
+						par.AddElement(sdt);
+						return;
+					}
+				}
+				par.AddElement(run);
+			}
 
 			function applyStyle(par) {
 				if (!p.style)
@@ -497,11 +535,7 @@ HELPERS.word.push((function(){
 					let firstRun = el.GetElementsCount() > 0 ? el.GetElement(0) : null;
 					let textPr = (firstRun && firstRun.GetClassType() === "run") ? firstRun.GetTextPr() : null;
 					el.RemoveAllElements();
-					let run = Api.CreateRun();
-					if (textPr)
-						run.SetTextPr(textPr);
-					run.AddText(lines[0]);
-					el.AddElement(run);
+					addText(el, lines[0], textPr);
 					warning = applyStyle(el);
 					let insertAt = p.pos + 1;
 					for (let i = 1; i < lines.length; i++) {
@@ -509,7 +543,7 @@ HELPERS.word.push((function(){
 						let st = el.GetStyle();
 						if (st)
 							par.SetStyle(st);
-						par.AddText(lines[i]);
+						addText(par, lines[i], null);
 						doc.AddElement(insertAt++, par);
 					}
 					break;
@@ -520,7 +554,7 @@ HELPERS.word.push((function(){
 					let lines = p.text.split("\n");
 					for (let i = 0; i < lines.length; i++) {
 						let par = Api.CreateParagraph();
-						par.AddText(lines[i]);
+						addText(par, lines[i], null);
 						let w = applyStyle(par);
 						if (w)
 							warning = w;
@@ -538,6 +572,132 @@ HELPERS.word.push((function(){
 		if (result && result.error)
 			throw new window.AgentState.ToolError(result.error);
 		return result;
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "findAIContent",
+		"readOnly": true,
+		"description": "Lists the parts of the text document that were marked as AI-generated (content controls tagged 'ai-generated', added when AI text is inserted) together with the document-level AI provenance properties (AIGenerated, AIGeneratedModels, AIGeneratedLastUpdate). For each marked part returns its 1-based number in document order, kind (inline/block), the 1-based index of the top-level element that contains it (same numbering as readDocument; omitted when it is nested in a table or another container), the model and date, the character count and a text snippet. Use it to answer questions like 'What in this document was written by AI?'. Text that was edited by the user afterwards stays inside the mark.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of marked parts to return (1-200).",
+					"default": 50
+				},
+				"maxChars": {
+					"type": "number",
+					"description": "Truncate each snippet to this many characters (20-2000).",
+					"default": 200
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What in this document was AI-generated?",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let max = params.maxResults === undefined || params.maxResults === null ? 50 : params.maxResults;
+		let maxChars = params.maxChars === undefined || params.maxChars === null ? 200 : params.maxChars;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+		if (typeof maxChars !== 'number' || maxChars < 1)
+			throw new window.AgentState.ToolError('Parameter "maxChars" must be a number >= 1. Got: ' + JSON.stringify(params.maxChars));
+
+		Asc.scope.findAIParams = {
+			tag: window.AIProvenance ? window.AIProvenance.TAG : "ai-generated",
+			max: Math.min(200, Math.floor(max)),
+			maxChars: Math.max(20, Math.min(2000, Math.floor(maxChars)))
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.findAIParams;
+			let doc = Api.GetDocument();
+
+			let fileLevel = null;
+			if (typeof doc.GetCustomProperties === "function") {
+				let props = doc.GetCustomProperties();
+				fileLevel = {
+					AIGenerated: props.Get("AIGenerated"),
+					AIGeneratedModels: props.Get("AIGeneratedModels"),
+					AIGeneratedLastUpdate: props.Get("AIGeneratedLastUpdate"),
+					AIGeneratedPolicy: props.Get("AIGeneratedPolicy")
+				};
+			}
+
+			let list = [];
+			if (typeof doc.GetContentControlsByTag === "function") {
+				list = doc.GetContentControlsByTag(p.tag) || [];
+			} else {
+				let all = doc.GetAllContentControls() || [];
+				for (let i = 0; i < all.length; i++) {
+					if (all[i].GetTag && all[i].GetTag() === p.tag)
+						list.push(all[i]);
+				}
+			}
+
+			// Top-level index of the element holding the mark, if it is not nested.
+			function topLevelIndex(el) {
+				if (!el || typeof el.GetPosInParent !== "function")
+					return undefined;
+				if (typeof el.GetParentTableCell === "function" && el.GetParentTableCell())
+					return undefined;
+				if (typeof el.GetParentContentControl === "function" && el.GetParentContentControl())
+					return undefined;
+				let pos = el.GetPosInParent();
+				return (typeof pos === "number" && pos >= 0) ? pos + 1 : undefined;
+			}
+
+			let items = [];
+			let totalChars = 0;
+			for (let i = 0; i < list.length; i++) {
+				let cc = list[i];
+				let kind = cc.GetClassType() === "blockLvlSdt" ? "block" : "inline";
+				let content = "";
+				try {
+					let range = cc.GetRange();
+					content = range ? (range.GetText() || "") : "";
+				} catch (e) {}
+				content = content.replace(/\r/g, "");
+				totalChars += content.length;
+				if (items.length >= p.max)
+					continue;
+
+				let alias = typeof cc.GetAlias === "function" ? (cc.GetAlias() || "") : "";
+				let item = { number: i + 1, kind: kind, label: alias, characters: content.length };
+				let m = /^AI-generated \((.*), (\d{4}-\d{2}-\d{2})\)$/.exec(alias);
+				if (m) {
+					item.model = m[1];
+					item.date = m[2];
+				}
+
+				let holder = kind === "block" ? cc : (typeof cc.GetParentParagraph === "function" ? cc.GetParentParagraph() : null);
+				let index = topLevelIndex(holder);
+				if (index !== undefined)
+					item.index = index;
+
+				item.snippet = content.length > p.maxChars ? content.substring(0, p.maxChars) + "…" : content;
+				items.push(item);
+			}
+
+			return {
+				fileLevel: fileLevel,
+				markedParts: list.length,
+				markedCharacters: totalChars,
+				returned: items.length,
+				parts: items,
+				note: list.length ? undefined : "No marked AI-generated text found. Text inserted before marking was enabled, or edited outside the AI plugin, is not marked."
+			};
+		});
 	};
 
 	return func;
@@ -1199,6 +1359,7 @@ HELPERS.word.push((function(){
 		if (!html || !html.trim())
 			throw new window.AgentState.ToolError('The markdown produced no content.');
 
+		let provenanceAnchor = null;
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 		try {
 			if (position === "replaceSelection") {
@@ -1223,10 +1384,15 @@ HELPERS.word.push((function(){
 					doc.MoveCursorToEnd();
 				});
 			}
+			// Provenance: wrap the inserted paragraphs in "ai-generated"
+			// content controls (after the paste, outside this undo group).
+			provenanceAnchor = window.AIProvenance ? await window.AIProvenance.captureAnchor(window.AIProvenance.scopeMeta("insertMarkdown")) : null;
 			await Asc.Editor.callMethod("PasteHtml", [html]);
 		} finally {
 			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
 		}
+		if (provenanceAnchor)
+			await window.AIProvenance.markInsertion(provenanceAnchor, { html: html });
 
 		return { position: position, insertedCharacters: params.markdown.length };
 	};
@@ -1599,8 +1765,12 @@ HELPERS.word.push((function(){
 			}
 		}
 
+		// Provenance: wrap the new text in "ai-generated" content controls.
+		let provenanceAnchor = window.AIProvenance ? await window.AIProvenance.captureAnchor(window.AIProvenance.scopeMeta("replaceSelection")) : null;
 		try {
 			await Asc.Library.ReplaceTextSmart(params.text.split("\n"));
+			if (provenanceAnchor)
+				await window.AIProvenance.markInsertion(provenanceAnchor, { text: params.text });
 		} finally {
 			if (turnOffTrackChanges) {
 				await Asc.Editor.callCommand(function(){
@@ -1617,7 +1787,7 @@ HELPERS.word.push((function(){
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
 		"name": "replyToComment",
-		"description": "Adds a reply to an existing comment in the text document. The reply is appended after existing replies and is authored as 'AI'. Get comment ids from getComments.",
+		"description": "Adds a reply to an existing comment in the text document. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
 		"parameters": {
 			"type": "object",
 			"properties": {
@@ -1646,14 +1816,14 @@ HELPERS.word.push((function(){
 		if (typeof params.text !== 'string' || params.text.trim() === "")
 			throw new window.AgentState.ToolError('Parameter "text" must be a non-empty string.');
 
-		Asc.scope.replyParams = { id: String(params.commentId), text: params.text };
+		Asc.scope.replyParams = { author: window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.scopeMeta("replyToComment")) : "AI", id: String(params.commentId), text: params.text };
 
 		let result = await Asc.Editor.callCommand(function(){
 			let p = Asc.scope.replyParams;
 			let comment = Api.GetDocument().GetCommentById(p.id);
 			if (!comment)
 				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
-			comment.AddReply(p.text, "AI", "uid-ai");
+			comment.AddReply(p.text, p.author, "uid-ai");
 			return { commentId: p.id, replies: comment.GetRepliesCount() };
 		});
 
@@ -1908,6 +2078,13 @@ HELPERS.word.push((function(){
 			}
 		}
 
+		// Provenance: the anchor is taken right before the first chunk is
+		// pasted, the streamed text is wrapped at the end.
+		let provenanceMeta = window.AIProvenance ? window.AIProvenance.scopeMeta("rewriteText") : null;
+		let provenanceAnchor = null;
+		let isFirstChunk = true;
+		let newText = "";
+
 		await requestEngine.chatRequest(argPromt, false, async function(data) {
 			if (!data)
 				return;
@@ -1923,6 +2100,13 @@ HELPERS.word.push((function(){
 				text = null;
 			}
 
+			if (isFirstChunk) {
+				isFirstChunk = false;
+				if (provenanceMeta)
+					provenanceAnchor = await window.AIProvenance.captureAnchor(provenanceMeta);
+			}
+			newText += data;
+
 			await Asc.Library.PasteText(data);
 		});
 		
@@ -1932,6 +2116,9 @@ HELPERS.word.push((function(){
 			await Asc.Editor.callCommand(function(){return Api.GetDocument().SetTrackRevisions(false);});
 
 		await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+
+		if (provenanceAnchor && newText)
+			await window.AIProvenance.markInsertion(provenanceAnchor, { text: newText });
 	};
 
 	return func;
@@ -3081,6 +3268,8 @@ HELPERS.slide.push((function(){
 
 			if (imageUrl) {
 				Asc.scope.imageUrl = imageUrl;
+				// Provenance: alt text (XMP is embedded by imageGenerationRequest).
+				Asc.scope.aiAlt = window.AIProvenance ? window.AIProvenance.altText(window.AIProvenance.meta("addImage", requestEngine)) : null;
 				let callResult = await Asc.Editor.callCommand(function () {
 					let oPresentation = Api.GetPresentation();
 					let oSlide;
@@ -3100,6 +3289,8 @@ HELPERS.slide.push((function(){
 					let y = (slideHeight - Asc.scope.height) / 2;
 
 					let oImage = Api.CreateImage(Asc.scope.imageUrl, Asc.scope.width, Asc.scope.height);
+					if (Asc.scope.aiAlt && typeof oImage.SetDescription === "function")
+						oImage.SetDescription(Asc.scope.aiAlt);
 					oImage.SetPosition(x, y);
 					oSlide.AddObject(oImage);
 				});
@@ -4332,6 +4523,8 @@ HELPERS.slide.push((function(){
 					let img = await this.loadImage(url);
 					Asc.scope._url = url;
 					Asc.scope._drawId = job.drawingId;
+					// Provenance: alt text (XMP is embedded by imageGenerationRequest).
+					Asc.scope._aiAlt = window.AIProvenance ? window.AIProvenance.altText(window.AIProvenance.meta("generatePresentationWithTheme", imageEngine)) : null;
 					let scaleW = img.naturalWidth / job.width;
 					let scaleH = img.naturalHeight / job.height;
 					if (scaleW > scaleH) {
@@ -4347,6 +4540,8 @@ HELPERS.slide.push((function(){
 					await checkEndAction();
 					await Asc.Editor.callCommand(function () {
 						const img = Api.CreateImage(Asc.scope._url, Asc.scope.phW, Asc.scope.phH);
+						if (Asc.scope._aiAlt && typeof img.SetDescription === "function")
+							img.SetDescription(Asc.scope._aiAlt);
 						const d = Api.GetByInternalId(Asc.scope._drawId);
 						if (d) {
 							if (d.ReplacePlaceholder(img)) {
@@ -9713,7 +9908,7 @@ HELPERS.cell.push((function(){
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
 		"name": "replyToComment",
-		"description": "Adds a reply to an existing cell comment in the workbook, or marks it as resolved. The reply is appended after existing replies and is authored as 'AI'. Get comment ids from getComments.",
+		"description": "Adds a reply to an existing cell comment in the workbook, or marks it as resolved. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
 		"parameters": {
 			"type": "object",
 			"properties": {
@@ -9752,6 +9947,7 @@ HELPERS.cell.push((function(){
 			throw new window.AgentState.ToolError('Provide a non-empty "text" for the reply and/or "resolved".');
 
 		Asc.scope.replyParams = {
+			author: window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.scopeMeta("replyToComment")) : "AI",
 			id: String(params.commentId),
 			text: hasText ? params.text : null,
 			resolved: typeof params.resolved === 'boolean' ? params.resolved : null
@@ -9763,7 +9959,7 @@ HELPERS.cell.push((function(){
 			if (!comment)
 				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
 			if (p.text !== null)
-				comment.AddReply(p.text, "AI", "uid-ai");
+				comment.AddReply(p.text, p.author, "uid-ai");
 			if (p.resolved !== null)
 				comment.SetSolved(p.resolved);
 			// Re-read: ApiComment wraps a copy of the comment data.
@@ -11300,6 +11496,7 @@ HELPERS.names.word = {
 	"checkSpelling": "Check and Fix Spelling",
 	"commentText": "Add Comment to Text",
 	"editParagraph": "Edit Paragraph",
+	"findAIContent": "Find AI-Generated Content",
 	"findText": "Find Text",
 	"generateDocx": "Generate Document",
 	"generateForm": "Generate Form Template",

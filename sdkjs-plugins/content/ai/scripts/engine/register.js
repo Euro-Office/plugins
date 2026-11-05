@@ -35,6 +35,23 @@ async function registerButtons(window, undefined)
 	window.AI = window.AI || {};
 	var AI = window.AI;
 	
+	// Provenance metadata for an AI action (see scripts/helpers/aiProvenance.js).
+	// Passed to the Asc.Library insert methods, which mark the inserted
+	// content and record the action in the document properties.
+	function provMeta(action, requestEngine) {
+		return window.AIProvenance ? window.AIProvenance.meta(action, requestEngine) : null;
+	}
+
+	// Runs an agent tool; tools that are not readOnly are recorded as AI
+	// edits (AIProvenance.runTool).
+	function runAgentTool(func, funcName, args, requestEngine) {
+		if (!window.AIProvenance)
+			return func.call(args);
+		return window.AIProvenance.runTool(funcName, window.EditorHelper.isReadOnly(funcName), requestEngine, function() {
+			return func.call(args);
+		});
+	}
+
 	function getToolBarButtonIcons(icon) {
 		return "resources/icons/%theme-type%(light|dark)/big/" + icon + "%scale%(default).png";
 	}
@@ -391,7 +408,7 @@ async function registerButtons(window, undefined)
 								throw new AgentState.ToolError(TOOL_DECLINED_MESSAGE);
 							}
 
-							let toolResultMessage = await func.call(argsObj);
+							let toolResultMessage = await runAgentTool(func, funcName, argsObj, requestEngine);
 							if (toolResultMessage)
 								toolResultMessage = Asc.plugin.tr("Function executed successfully") + "\n" + JSON.stringify(toolResultMessage);
 							else
@@ -445,6 +462,9 @@ async function registerButtons(window, undefined)
 						let toolResult = await window.EditorHelper.callFunc(result, {
 							beforeCall: function(name, args) {
 								return requestToolApproval(toolCallId, name, args);
+							},
+							call: function(func, name, args) {
+								return runAgentTool(func, name, args, requestEngine);
 							}
 						});
 
@@ -501,24 +521,26 @@ async function registerButtons(window, undefined)
 			chatWindow.command("onChatStreamEnd");
 		});
 		chatWindow.attachEvent("onChatReplace", async function(data) {
+			// Chat answers applied to the document with the message buttons.
+			let meta = provMeta("chat:" + data.type, AI.Request.create(AI.ActionType.Chat, true));
 			switch (data.type) {
 				case "review": {
 					if (Asc.plugin.info.editorType === "word")
-						await Asc.Library.InsertAsReview(data.data, true);
+						await Asc.Library.InsertAsReview(data.data, true, meta);
 					else
-						await Asc.Library.InsertAsComment(data.data);
+						await Asc.Library.InsertAsComment(data.data, meta);
 					break;
 				}
 				case "comment": {
-					await Asc.Library.InsertAsComment(data.data);
+					await Asc.Library.InsertAsComment(data.data, meta);
 					break;
 				}
 				case "insert": {
-					await Asc.Library.InsertAsHTML(data.data);
+					await Asc.Library.InsertAsHTML(data.data, meta);
 					break;
 				}
 				case "replace": {
-					await Asc.Library.ReplaceTextSmart([data.data]);
+					await Asc.Library.ReplaceTextSmart([data.data], meta);
 					break;
 				}
 			}
@@ -593,7 +615,7 @@ async function registerButtons(window, undefined)
 			if (!result) return;
 
 			result = "Summary:\n\n" + result;
-			await Asc.Library.InsertAsText(result);
+			await Asc.Library.InsertAsText(result, provMeta("summarization", requestEngine));
 		});
 	}
 
@@ -621,7 +643,7 @@ async function registerButtons(window, undefined)
 			if (!result) return;
 
 			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.PasteText(result);
+			await Asc.Library.PasteText(result, provMeta("rewrite", requestEngine));
 		});
 
 		let button3 = new Asc.ButtonContextMenu(button1);
@@ -639,7 +661,7 @@ async function registerButtons(window, undefined)
 			if (!result) return;
 
 			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.PasteText(result);
+			await Asc.Library.PasteText(result, provMeta("makeLonger", requestEngine));
 		});
 
 		let button4 = new Asc.ButtonContextMenu(button1);
@@ -657,7 +679,7 @@ async function registerButtons(window, undefined)
 			if (!result) return;
 
 			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.PasteText(result);
+			await Asc.Library.PasteText(result, provMeta("makeShorter", requestEngine));
 		});
 
 		let button5 = new Asc.ButtonContextMenu(button1);
@@ -682,7 +704,7 @@ async function registerButtons(window, undefined)
 			if (!result) return;
 
 			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.InsertAsComment(result);
+			await Asc.Library.InsertAsComment(result, provMeta("explainComment", requestEngine));
 		});
 
 		let button6 = new Asc.ButtonContextMenu(button1);
@@ -701,7 +723,7 @@ async function registerButtons(window, undefined)
 			if (!result) return;
 
 			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.InsertAsHyperlink(result);
+			await Asc.Library.InsertAsHyperlink(result, undefined, provMeta("explainHyperlink", requestEngine));
 		});
 
 		let button7 = new Asc.ButtonContextMenu(button1);
@@ -720,8 +742,10 @@ async function registerButtons(window, undefined)
 			let result = await requestEngine.chatRequest(prompt);
 			if (!result) return;
 
+			// "fixSpellingGrammar" is an assistive edit: AIProvenance.EXEMPT_ACTIONS
+			// keeps it unmarked (Art. 50(2) standard-editing exception).
 			if (result !== 'The text is correct, there are no errors in it.')
-			   await Asc.Library.ReplaceTextSmart([result]);
+			   await Asc.Library.ReplaceTextSmart([result], provMeta("fixSpellingGrammar", requestEngine));
 			else
 				console.log('The text is correct, there are no errors in it.');
 		});
@@ -740,7 +764,7 @@ async function registerButtons(window, undefined)
 			let result = await requestEngine.chatRequest(prompt);
 			if (!result) return;
 
-			await Asc.Library.InsertAsText(result);
+			await Asc.Library.InsertAsText(result, provMeta("keywords", requestEngine));
 		});
 	}
 
@@ -774,7 +798,7 @@ async function registerButtons(window, undefined)
 
 			result = Asc.Library.getTranslateResult(result, content);
 
-			await Asc.Library.PasteText(result);
+			await Asc.Library.PasteText(result, provMeta("translate", requestEngine));
 		});
 
 		let button3 = button2.copy();
@@ -859,7 +883,7 @@ async function registerButtons(window, undefined)
 		let result = await requestEngine.imageOCRRequest(content);
 		if (!result) return;
 
-		await Asc.Library.InsertAsMD(result, [Asc.PluginsMD.latex, Asc.PluginsMD.hr]);
+		await Asc.Library.InsertAsMD(result, [Asc.PluginsMD.latex, Asc.PluginsMD.hr], provMeta("ocr", requestEngine));
 	}
 
 	const on_click_text_to_image = async function (params) {
@@ -876,9 +900,10 @@ async function registerButtons(window, undefined)
 		let result = await requestEngine.imageGenerationRequest(content);
 		if (!result) return;
 
+		let meta = provMeta("textToImage", requestEngine);
 		if (Asc.plugin.info.editorSubType === "pdf")
-			return await Asc.Library.AddGeneratedImage(result);
-		await Asc.Library.AddOleObject(result, content);
+			return await Asc.Library.AddGeneratedImage(result, meta);
+		await Asc.Library.AddOleObject(result, content, meta);
 	}
 
 	if (true)
@@ -903,9 +928,10 @@ async function registerButtons(window, undefined)
 			let result = await requestEngine.imageGenerationRequest(content);
 			if (!result) return;
 
+			let meta = provMeta("textToImage", requestEngine);
 			if (Asc.plugin.info.editorSubType === "pdf")
-				return await Asc.Library.AddGeneratedImage(result);
-			await Asc.Library.AddOleObject(result, content);
+				return await Asc.Library.AddGeneratedImage(result, meta);
+			await Asc.Library.AddOleObject(result, content, meta);
 		});
 
 		let buttonOCR = new Asc.ButtonContextMenu(buttonImages);
@@ -931,7 +957,7 @@ async function registerButtons(window, undefined)
 			});
 			if (!result) return;
 
-			await Asc.Library.InsertAsMD(result);
+			await Asc.Library.InsertAsMD(result, undefined, provMeta("imageToText", requestEngine));
 		});
 	}
 
@@ -1076,7 +1102,7 @@ async function registerButtons(window, undefined)
 			if (!result) return;
 
 			result = Asc.Library.getTranslateResult(result, content);
-			await Asc.Library.PasteText(result);
+			await Asc.Library.PasteText(result, provMeta("translate", requestEngine));
 		});
 
 		if (false && Asc.Editor.getType() !== "pdf")

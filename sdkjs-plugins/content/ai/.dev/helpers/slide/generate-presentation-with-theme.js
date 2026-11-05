@@ -901,6 +901,8 @@
 					let img = await this.loadImage(url);
 					Asc.scope._url = url;
 					Asc.scope._drawId = job.drawingId;
+					// Provenance: alt text (XMP is embedded by imageGenerationRequest).
+					Asc.scope._aiAlt = window.AIProvenance ? window.AIProvenance.altText(window.AIProvenance.meta("generatePresentationWithTheme", imageEngine)) : null;
 					let scaleW = img.naturalWidth / job.width;
 					let scaleH = img.naturalHeight / job.height;
 					if (scaleW > scaleH) {
@@ -916,6 +918,8 @@
 					await checkEndAction();
 					await Asc.Editor.callCommand(function () {
 						const img = Api.CreateImage(Asc.scope._url, Asc.scope.phW, Asc.scope.phH);
+						if (Asc.scope._aiAlt && typeof img.SetDescription === "function")
+							img.SetDescription(Asc.scope._aiAlt);
 						const d = Api.GetByInternalId(Asc.scope._drawId);
 						if (d) {
 							if (d.ReplacePlaceholder(img)) {

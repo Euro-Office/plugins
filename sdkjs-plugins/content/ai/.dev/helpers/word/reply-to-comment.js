@@ -2,7 +2,7 @@
 	let func = new RegisteredFunction({
 		"name": "replyToComment",
 		"text": "Reply to Comment",
-		"description": "Adds a reply to an existing comment in the text document. The reply is appended after existing replies and is authored as 'AI'. Get comment ids from getComments.",
+		"description": "Adds a reply to an existing comment in the text document. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
 		"parameters": {
 			"type": "object",
 			"properties": {
@@ -31,14 +31,14 @@
 		if (typeof params.text !== 'string' || params.text.trim() === "")
 			throw new window.AgentState.ToolError('Parameter "text" must be a non-empty string.');
 
-		Asc.scope.replyParams = { id: String(params.commentId), text: params.text };
+		Asc.scope.replyParams = { author: window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.scopeMeta("replyToComment")) : "AI", id: String(params.commentId), text: params.text };
 
 		let result = await Asc.Editor.callCommand(function(){
 			let p = Asc.scope.replyParams;
 			let comment = Api.GetDocument().GetCommentById(p.id);
 			if (!comment)
 				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
-			comment.AddReply(p.text, "AI", "uid-ai");
+			comment.AddReply(p.text, p.author, "uid-ai");
 			return { commentId: p.id, replies: comment.GetRepliesCount() };
 		});
 

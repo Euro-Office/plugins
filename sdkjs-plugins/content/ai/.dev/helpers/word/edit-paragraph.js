@@ -53,7 +53,10 @@
 			pos: Math.floor(params.index) - 1,
 			action: params.action,
 			text: params.text || "",
-			style: params.style || null
+			style: params.style || null,
+			// Provenance: new text goes into an inline "ai-generated" content
+			// control per paragraph (inline keeps the element indexes stable).
+			cc: window.AIProvenance ? window.AIProvenance.cc(window.AIProvenance.scopeMeta("editParagraph")) : null
 		};
 
 		let result = await Asc.Editor.callCommand(function(){
@@ -63,6 +66,27 @@
 			if (p.pos >= total)
 				return { error: "Index " + (p.pos + 1) + " is out of range. The document has " + total + " elements." };
 			let el = doc.GetElement(p.pos);
+
+			// Adds the text to the paragraph, inside an "ai-generated" content
+			// control when marking is on (needs Api.CreateInlineLvlSdt).
+			function addText(par, text, textPr) {
+				let run = Api.CreateRun();
+				if (textPr)
+					run.SetTextPr(textPr);
+				run.AddText(text);
+				if (p.cc && text !== "" && typeof Api.CreateInlineLvlSdt === "function") {
+					let sdt = Api.CreateInlineLvlSdt();
+					sdt.SetTag(p.cc.tag);
+					sdt.SetAlias(p.cc.alias);
+					if (typeof sdt.SetAppearance === "function")
+						sdt.SetAppearance("hidden");
+					if (sdt.AddElement(run, 0)) {
+						par.AddElement(sdt);
+						return;
+					}
+				}
+				par.AddElement(run);
+			}
 
 			function applyStyle(par) {
 				if (!p.style)
@@ -87,11 +111,7 @@
 					let firstRun = el.GetElementsCount() > 0 ? el.GetElement(0) : null;
 					let textPr = (firstRun && firstRun.GetClassType() === "run") ? firstRun.GetTextPr() : null;
 					el.RemoveAllElements();
-					let run = Api.CreateRun();
-					if (textPr)
-						run.SetTextPr(textPr);
-					run.AddText(lines[0]);
-					el.AddElement(run);
+					addText(el, lines[0], textPr);
 					warning = applyStyle(el);
 					let insertAt = p.pos + 1;
 					for (let i = 1; i < lines.length; i++) {
@@ -99,7 +119,7 @@
 						let st = el.GetStyle();
 						if (st)
 							par.SetStyle(st);
-						par.AddText(lines[i]);
+						addText(par, lines[i], null);
 						doc.AddElement(insertAt++, par);
 					}
 					break;
@@ -110,7 +130,7 @@
 					let lines = p.text.split("\n");
 					for (let i = 0; i < lines.length; i++) {
 						let par = Api.CreateParagraph();
-						par.AddText(lines[i]);
+						addText(par, lines[i], null);
 						let w = applyStyle(par);
 						if (w)
 							warning = w;
