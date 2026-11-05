@@ -9904,7 +9904,9 @@ HELPERS.cell.push((function(){
 
 			let range = null;
 			if (p.range) {
-				range = ws.GetRange(p.range);
+				try {
+					range = ws.GetRange(p.range); // ApiWorksheet.GetRange throws on an invalid address
+				} catch (e) {}
 				if (!range)
 					return { error: "Invalid range \"" + p.range + "\"." };
 			} else {
@@ -10089,7 +10091,10 @@ HELPERS.cell.push((function(){
 			let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
 			if (!ws)
 				return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
-			let range = ws.GetRange(p.range);
+			let range = null;
+			try {
+				range = ws.GetRange(p.range); // ApiWorksheet.GetRange throws on an invalid address
+			} catch (e) {}
 			if (!range)
 				return { error: "Invalid range \"" + p.range + "\". Use A1 notation such as \"B2\" or \"A1:D20\"." };
 			if (p.sheet)
@@ -10486,7 +10491,10 @@ HELPERS.cell.push((function(){
 				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
 				if (!ws)
 					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
-				let range = ws.GetRange(p.range);
+				let range = null;
+				try {
+					range = ws.GetRange(p.range); // ApiWorksheet.GetRange throws on an invalid address
+				} catch (e) {}
 				if (!range)
 					return { error: "Invalid range \"" + p.range + "\"." };
 				try {
@@ -10811,7 +10819,10 @@ HELPERS.cell.push((function(){
 			let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
 			if (!ws)
 				return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
-			let range = p.range ? ws.GetRange(p.range) : Api.GetSelection();
+			let range = null;
+			try {
+				range = p.range ? ws.GetRange(p.range) : Api.GetSelection(); // ApiWorksheet.GetRange throws on an invalid address
+			} catch (e) {}
 			if (!range)
 				return { error: p.range ? "Invalid range \"" + p.range + "\"." : "No range selected. Pass \"range\"." };
 			range.SetNumberFormat(p.format);
@@ -11529,7 +11540,10 @@ HELPERS.cell.push((function(){
 				if (!ws)
 					return { error: "Sheet \"" + p.sheet + "\" not found." };
 
-				let start = p.startCell ? ws.GetRange(p.startCell) : Api.GetSelection();
+				let start = null;
+				try {
+					start = p.startCell ? ws.GetRange(p.startCell) : Api.GetSelection(); // ApiWorksheet.GetRange throws on an invalid address
+				} catch (e) {}
 				if (!start)
 					return { error: "Invalid start cell \"" + p.startCell + "\"." };
 

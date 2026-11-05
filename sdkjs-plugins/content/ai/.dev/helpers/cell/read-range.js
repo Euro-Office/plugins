@@ -78,7 +78,9 @@
 
 			let range = null;
 			if (p.range) {
-				range = ws.GetRange(p.range);
+				try {
+					range = ws.GetRange(p.range); // ApiWorksheet.GetRange throws on an invalid address
+				} catch (e) {}
 				if (!range)
 					return { error: "Invalid range \"" + p.range + "\"." };
 			} else {

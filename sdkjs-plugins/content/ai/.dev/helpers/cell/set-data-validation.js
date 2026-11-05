@@ -148,7 +148,10 @@
 				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
 				if (!ws)
 					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
-				let range = ws.GetRange(p.range);
+				let range = null;
+				try {
+					range = ws.GetRange(p.range); // ApiWorksheet.GetRange throws on an invalid address
+				} catch (e) {}
 				if (!range)
 					return { error: "Invalid range \"" + p.range + "\"." };
 				try {

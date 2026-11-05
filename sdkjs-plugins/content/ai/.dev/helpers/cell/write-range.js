@@ -63,7 +63,10 @@
 				if (!ws)
 					return { error: "Sheet \"" + p.sheet + "\" not found." };
 
-				let start = p.startCell ? ws.GetRange(p.startCell) : Api.GetSelection();
+				let start = null;
+				try {
+					start = p.startCell ? ws.GetRange(p.startCell) : Api.GetSelection(); // ApiWorksheet.GetRange throws on an invalid address
+				} catch (e) {}
 				if (!start)
 					return { error: "Invalid start cell \"" + p.startCell + "\"." };
 

@@ -49,7 +49,10 @@
 			let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
 			if (!ws)
 				return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
-			let range = p.range ? ws.GetRange(p.range) : Api.GetSelection();
+			let range = null;
+			try {
+				range = p.range ? ws.GetRange(p.range) : Api.GetSelection(); // ApiWorksheet.GetRange throws on an invalid address
+			} catch (e) {}
 			if (!range)
 				return { error: p.range ? "Invalid range \"" + p.range + "\"." : "No range selected. Pass \"range\"." };
 			range.SetNumberFormat(p.format);
