@@ -857,6 +857,7 @@
 		isAgentRunning = true;
 		isAgentStopped = false;
 		updateControlButtonsState();
+		window.ChatChips && window.ChatChips.setBusy(true);
 
 		let list = messagesList.get();
 
@@ -903,6 +904,7 @@
 		isAgentRunning = false;
 		isAgentStopped = false;
 		updateControlButtonsState();
+		window.ChatChips && window.ChatChips.setBusy(false);
 	};
 
 	function createLoader() {

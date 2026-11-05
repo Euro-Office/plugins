@@ -108,6 +108,10 @@ async function registerButtons(window, undefined)
 			chatWindow.command("onVoiceInputSupport", isSupportVoiceInput());
 
 			hasOpenedOnce = true;
+
+			// Selection suggestion chips (scripts/engine/selectionSuggestions.js).
+			if (window.SelectionSuggestions)
+				window.SelectionSuggestions.attach(chatWindow, chatWindowShow);
 		});
 		
 		var AgentState = {
@@ -936,35 +940,9 @@ async function registerButtons(window, undefined)
 	// (see DocumentContext) and can read/modify the document through tools.
 	if (Asc.Editor.getType() !== "pdf")
 	{
-		const LANG_HINT = " Reply in the language of the selected content.";
-		const SMART_ACTIONS = {
-			word: [
-				{ text: "Improve writing", prompt: "Improve the clarity, grammar and style of the selected text while keeping its meaning, tone and language. Apply the result to the document with replaceSelection and trackChanges set to true, then briefly say what you changed." },
-				{ text: "Make shorter", prompt: "Shorten the selected text by roughly half without losing key information. Apply it with replaceSelection (trackChanges true)." },
-				{ text: "Summarize in chat", prompt: "Summarize the selected text in 3-5 bullet points. Answer in the chat only; do not modify the document." },
-				{ text: "Extract action items", prompt: "List all action items, decisions and deadlines found in the selected text as a checklist. Answer in the chat only; do not modify the document." },
-				{ text: "Convert to table", prompt: "Convert the selected text into a well-structured table in the document, replacing the selection. Use writeMacro if needed." },
-				{ text: "Continue writing", prompt: "Continue writing one paragraph after the selected text, matching its style and language. Insert it as a new paragraph directly after the last selected paragraph (use getSelection to find its index and editParagraph with insertAfter)." }
-			],
-			cell: [
-				{ text: "Explain this data", prompt: "Explain the selected data: what it represents, its structure, and the key patterns, trends or outliers. Use readRange if the preview is truncated. Answer in the chat only; do not modify the sheet." },
-				{ text: "Summarize & insights", prompt: "Analyse the selected data and give a short summary with the 3-5 most important insights, including relevant totals, averages or changes. Answer in the chat only; do not modify the sheet." },
-				{ text: "Clean up data", prompt: "Clean the selected data: trim extra spaces, make capitalization consistent, convert numbers and dates stored as text, and normalize obvious inconsistencies. Do not change formulas. Read it with readRange, write the cleaned values back to the same range with writeRange, then list what you changed." },
-				{ text: "Fill missing values", prompt: "Fill the empty cells in the selected data with sensible values inferred from the surrounding data, then explain what you filled." },
-				{ text: "Add calculated column", prompt: "Look at the selected table and add one useful calculated column directly to its right (e.g. total, difference, growth or ratio) with a header and real spreadsheet formulas, using writeRange. Explain the formula." },
-				{ text: "Create chart", prompt: "Create the most suitable chart for the selected data and briefly explain why you chose that chart type." },
-				{ text: "Highlight anomalies", prompt: "Find and highlight anomalies or outliers in the selected data, then explain what you found." },
-				{ text: "Explain formula", prompt: "Explain the formulas in the selected cells in plain language (read them with readRange and includeFormulas true) and point out possible errors. Answer in the chat only." }
-			],
-			slide: [
-				{ text: "Improve text", prompt: "Improve the selected slide text: clearer, more concise and more engaging, keeping the meaning and language. Replace the selection with the result using replaceSelection." },
-				{ text: "Make concise", prompt: "Rewrite the selected slide text as short, punchy bullet points suitable for a slide and replace the selection with replaceSelection." },
-				{ text: "Summarize this slide", prompt: "Summarize the current slide (use readPresentation with currentSlideOnly) in 2-3 sentences that could be used as speaker notes. Answer in the chat only." }
-			]
-		};
-
 		let editorType = Asc.Editor.getType();
-		let actions = SMART_ACTIONS[editorType] || [];
+		// Action table: scripts/helpers/smartActions.js (shared with the chat chips).
+		let actions = window.SmartActions ? window.SmartActions.all(editorType) : [];
 		if (actions.length) {
 			let buttonSmart = new Asc.ButtonContextMenu(buttonMain);
 			buttonSmart.text = "Smart actions";
@@ -979,7 +957,7 @@ async function registerButtons(window, undefined)
 				button.editors = [editorType];
 				button.addCheckers("Selection");
 				button.attachOnClick(function() {
-					chatWindowShow(action.prompt + LANG_HINT, true);
+					chatWindowShow(action.prompt + window.SmartActions.LANG_HINT, true);
 				});
 			}
 
