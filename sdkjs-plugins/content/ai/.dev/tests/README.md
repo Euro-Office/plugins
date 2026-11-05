@@ -14,7 +14,7 @@ npm run test:watch       # re-run on change
 npm run test:coverage    # with v8 coverage of scripts/**
 ```
 
-The suite needs Node 20 or newer. It also needs `python3` for the check that `scripts/helpers/helpers.js` matches `.dev/helpers` (that test is skipped without Python). Set `AI_TESTS_VERBOSE=1` to see the plugin's console output.
+The suite needs Node 20 or newer. It also needs `python3` for the check that `scripts/helpers/helpers.js` matches `.dev/helpers` (locally that test is skipped without Python; with `CI` set it fails instead). Set `AI_TESTS_VERBOSE=1` to see the plugin's console output.
 
 CI runs the same suite in `.github/workflows/ai-plugin-tests.yml` on every PR and push that touches `sdkjs-plugins/content/ai/**`. Before the unit tests, CI also runs `node --check` on every plugin script and validates every JSON file.
 

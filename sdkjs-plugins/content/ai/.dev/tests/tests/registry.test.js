@@ -163,7 +163,9 @@ describe("generated helpers.js", () => {
 		try { execFileSync(p, ["--version"], { stdio: "ignore" }); return true; } catch { return false; }
 	});
 
-	test.skipIf(!python)("is in sync with .dev/helpers (run `cd .dev/helpers && python3 helpers.py`)", () => {
+	// Locally the check is skipped without Python; in CI it must run.
+	test.skipIf(!python && !process.env.CI)("is in sync with .dev/helpers (run `cd .dev/helpers && python3 helpers.py`)", () => {
+		expect(python, "python3 is needed to check scripts/helpers/helpers.js").toBeTruthy();
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ai-helpers-"));
 		try {
 			fs.cpSync(path.join(PLUGIN_DIR, ".dev/helpers"), path.join(tmp, ".dev/helpers"), { recursive: true });

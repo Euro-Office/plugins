@@ -62,12 +62,21 @@ jobs:
           find . -name '*.json' -not -path './vendor/*' -not -path '*/node_modules/*' -print0 \
             | xargs -0 -n1 node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))'
 
+      # scripts/helpers/helpers.js is generated from .dev/helpers but stays
+      # committed: the repository contents are served as they are (GitHub
+      # Pages / plugin store), without a build step. See .dev/helpers/README.md.
+      - name: Generated helpers.js is in sync with .dev/helpers
+        run: |
+          (cd .dev/helpers && python3 helpers.py)
+          git diff --exit-code -- scripts/helpers/helpers.js \
+            || { echo "::error file=sdkjs-plugins/content/ai/scripts/helpers/helpers.js::helpers.js is out of date. Run: cd sdkjs-plugins/content/ai/.dev/helpers && python3 helpers.py"; exit 1; }
+
       - name: Install test dependencies
         working-directory: sdkjs-plugins/content/ai/.dev/tests
         run: npm ci
 
-      # Includes the check that scripts/helpers/helpers.js matches .dev/helpers
-      # (needs python3, preinstalled on ubuntu-latest).
+      # Includes the helpers.js sync check again (needs python3, preinstalled
+      # on ubuntu-latest; the test fails instead of skipping when CI is set).
       - name: Unit tests with coverage
         working-directory: sdkjs-plugins/content/ai/.dev/tests
         run: npx vitest run --coverage --coverage.reporter=text-summary --coverage.reporter=text

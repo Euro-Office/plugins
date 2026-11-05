@@ -58,7 +58,7 @@ While server settings are active, users can't change models in the plugin settin
 ## Edit and reload
 
 The plugin folder is mounted read-only into the container. Edit files, then reload the editor tab (use a hard reload, or disable the cache in dev tools).
-After changing a tool in `.dev/helpers`, regenerate `scripts/helpers/helpers.js`:
+After changing a tool in `.dev/helpers`, regenerate `scripts/helpers/helpers.js` (it is committed on purpose, see `.dev/helpers/README.md`):
 
 ```sh
 (cd .dev/helpers && python3 helpers.py)
