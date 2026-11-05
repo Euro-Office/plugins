@@ -365,6 +365,7 @@ async function registerButtons(window, undefined)
 
 			// LOOP
 			let iteration = 0;
+			let isAnswered = false;
 			while (iteration < AgentState.MAX_LOOP_ITERATIONS && !AgentState.isStopped) {
 				iteration++;
 
@@ -565,10 +566,11 @@ async function registerButtons(window, undefined)
 					chatWindow.command("onChatReply", result);
 				}
 				hasFinalReply = !!result;
+				isAnswered = true;
 				break;
 			}
 
-			if (iteration >= AgentState.MAX_LOOP_ITERATIONS) {
+			if (!isAnswered && !AgentState.isStopped && iteration >= AgentState.MAX_LOOP_ITERATIONS) {
 				chatWindow.command("onChatReply", "Maximum iterations reached. Please try again.");
 			}
 
