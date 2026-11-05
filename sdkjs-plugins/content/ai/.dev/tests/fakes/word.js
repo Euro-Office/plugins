@@ -5,7 +5,14 @@
 // semantics follow sdkjs word/apiBuilder.js:
 //  - ApiDocument.GetElement(i) returns null past the end
 //  - ApiParagraph.GetStyle() returns the paragraph style or null
-//  - ApiTable has no GetText() (tools must cope)
+//  - ApiTable and ApiBlockLvlSdt have no GetText() (tools must cope); their
+//    text is read through ApiTable.GetRow().GetCell().GetContent() and
+//    ApiBlockLvlSdt.GetContent(), both ApiDocumentContent with GetText(options)
+//  - ApiParagraph.GetPosInParent() is the index in the paragraph's own
+//    container (a table cell or content control content for nested
+//    paragraphs, not the document); ApiParagraph has no GetParent(), but
+//    GetParentTable() / GetParentTableCell() / GetParentContentControl()
+//    return the innermost container or null
 //  - ApiParaPr.GetOutlineLvl() is 1-based or undefined
 //  - ApiParagraph.Search() returns ApiRange[]
 //  - GetReviewReport() returns { author: [{ Type, Value, Date, ReviewedElement }] }
@@ -74,6 +81,9 @@ class Paragraph {
 		return { GetOutlineLvl: () => lvl };
 	}
 	GetPosInParent() { return this.parent ? this.parent.elements.indexOf(this) : -1; }
+	GetParentTable() { return enclosing(this, Table); }
+	GetParentTableCell() { return enclosing(this, TableCell); }
+	GetParentContentControl() { return enclosing(this, BlockSdt); }
 	GetRange(start, end) {
 		const len = this.GetText().length;
 		return new Range(this, start === undefined ? 0 : start, end === undefined ? len : end);
@@ -145,6 +155,7 @@ class BlockSdt {
 		this.alias = "";
 		this.appearance = null;
 		this.paragraphs = [];
+		this.content = new DocumentContent(this, this.paragraphs);
 		this.parent = null;
 	}
 	GetClassType() { return "blockLvlSdt"; }
@@ -154,25 +165,84 @@ class BlockSdt {
 	GetAlias() { return this.alias; }
 	SetAlias(a) { this.alias = a; return true; }
 	SetAppearance(a) { this.appearance = a; return true; }
-	AddElement(par, pos) { this.paragraphs.splice(pos === undefined ? this.paragraphs.length : pos, 0, par); par._doc = this.parent; return true; }
-	GetText() { return this.paragraphs.map((p) => p.GetText()).join("\r\n"); }
-	GetRange() { return { GetText: () => this.GetText() }; }
+	AddElement(par, pos) { this.paragraphs.splice(pos === undefined ? this.paragraphs.length : pos, 0, par); par.parent = this.content; par._doc = this.parent; return true; }
+	// Note: the real ApiBlockLvlSdt has no GetText().
+	GetContent() { return this.content; }
+	GetRange() { return { GetText: () => this.content.GetText() }; }
 	GetPosInParent() { return this.parent ? this.parent.elements.indexOf(this) : -1; }
+	GetParentTable() { return enclosing(this, Table); }
+	GetParentTableCell() { return enclosing(this, TableCell); }
+	GetParentContentControl() { return enclosing(this, BlockSdt); }
 	MoveCursorOutside() { return true; }
+}
+
+// ApiDocumentContent: the content of a table cell or block content control.
+class DocumentContent {
+	constructor(owner, elements) {
+		this.parent = owner;
+		this.elements = elements;
+		elements.forEach((p) => { p.parent = this; });
+	}
+	GetClassType() { return "documentContent"; }
+	GetElementsCount() { return this.elements.length; }
+	GetElement(i) { return (i >= 0 && i < this.elements.length) ? this.elements[i] : null; }
+	// sdkjs defaults: ParaSeparator "\r\n", numbering and math included.
+	GetText(options) {
+		const sep = options && typeof options.ParaSeparator === "string" ? options.ParaSeparator : "\r\n";
+		return this.elements.map((p) => p.GetText()).join(sep);
+	}
+}
+
+class TableCell {
+	constructor(table, paragraph) {
+		this.parent = table;
+		this.content = new DocumentContent(this, [paragraph]);
+	}
+	GetClassType() { return "tableCell"; }
+	GetContent() { return this.content; }
+	GetParentTable() { return this.parent; }
 }
 
 class Table {
 	constructor(rows) {
 		// rows: string[][]; each cell holds one paragraph
-		this.rows = rows.map((r) => r.map((t) => new Paragraph(t)));
+		this.cells = rows.map((r) => r.map((t) => new TableCell(this, new Paragraph(t))));
+		this.rows = this.cells.map((r) => r.map((c) => c.content.elements[0]));
 		this.parent = null;
+		this.id = "table_" + (++idSeq);
 	}
 	GetClassType() { return "table"; }
+	GetInternalId() { return this.id; }
 	GetRowsCount() { return this.rows.length; }
+	// ApiTableRow: GetCellsCount(), GetCell(i) (null when out of range)
+	GetRow(i) {
+		const cells = typeof i === "number" ? this.cells[i] : undefined;
+		if (!cells) return null;
+		return {
+			GetClassType: () => "tableRow",
+			GetCellsCount: () => cells.length,
+			GetCell: (j) => (j >= 0 && j < cells.length ? cells[j] : null)
+		};
+	}
+	GetPosInParent() { return this.parent ? this.parent.elements.indexOf(this) : -1; }
+	GetParentTable() { return enclosing(this, Table); }
+	GetParentTableCell() { return enclosing(this, TableCell); }
+	GetParentContentControl() { return enclosing(this, BlockSdt); }
 	Search(text, matchCase) {
 		return this.rows.flat().flatMap((p) => p.Search(text, matchCase));
 	}
 	// Note: the real ApiTable has no GetText().
+}
+
+// Innermost container of `el` of the given class (sdkjs walks the document
+// position of the element), or null.
+function enclosing(el, cls) {
+	let p = el.parent;
+	while (p && !(p instanceof Document)) {
+		if (p instanceof cls) return p;
+		p = p.parent;
+	}
+	return null;
 }
 
 class Range {
@@ -319,7 +389,7 @@ class Document {
 		return res;
 	}
 	// test helpers
-	texts() { return this.elements.map((e) => e instanceof Paragraph ? e.GetText() : e instanceof BlockSdt ? e.GetText() : "[table]"); }
+	texts() { return this.elements.map((e) => e instanceof Paragraph ? e.GetText() : e instanceof BlockSdt ? e.GetContent().GetText() : "[table]"); }
 	controls() { return this.GetAllContentControls(); }
 	selectedText() { const r = this.GetRangeBySelect(); return r ? r.GetText() : ""; }
 }
@@ -329,8 +399,9 @@ class Document {
  * @param {object} spec
  * @param {Array<string|{text, style?, list?, outlineLvl?, textPr?}|{table: string[][]}>} spec.body
  * @param {Array<string|[string, number]>} [spec.styles] extra style names; "Heading N" get outline level N
- * @param {{ paragraph: number, start?: number, end?: number } | Array} [spec.selection] 1-based paragraph index
- * @param {number} [spec.cursor] 1-based paragraph index of the cursor
+ * @param {{ paragraph: number, row?: number, cell?: number, start?: number, end?: number } | Array} [spec.selection]
+ *        1-based element index; row/cell (0-based) select a paragraph in that table
+ * @param {number | { paragraph: number, row?: number, cell?: number }} [spec.cursor] paragraph holding the cursor
  * @param {Array<object>} [spec.comments]
  * @param {object} [spec.revisions] author -> [{ Type, Value, paragraph }]
  */
@@ -356,13 +427,19 @@ export function createWordDocument(spec = {}) {
 		}
 	}
 	const sel = spec.selection ? (Array.isArray(spec.selection) ? spec.selection : [spec.selection]) : null;
+	// { paragraph: n } is the n-th top-level element; with row/cell it is the
+	// paragraph in that cell of the table at n (0-based row and cell).
+	const paraAt = (s) => {
+		const el = doc.elements[s.paragraph - 1];
+		return s.row !== undefined ? el.rows[s.row][s.cell || 0] : el;
+	};
 	if (sel) {
 		doc.selection = sel.map((s) => {
-			const para = doc.elements[s.paragraph - 1];
+			const para = paraAt(s);
 			return { para, start: s.start || 0, end: s.end === undefined ? para.GetText().length : s.end };
 		});
 	}
-	if (spec.cursor) doc.cursor = doc.elements[spec.cursor - 1];
+	if (spec.cursor) doc.cursor = paraAt(typeof spec.cursor === "number" ? { paragraph: spec.cursor } : spec.cursor);
 	doc.comments = (spec.comments || []).map((c) => new Comment(c));
 	for (const author in spec.revisions || {}) {
 		doc.revisions[author] = spec.revisions[author].map((r) => ({
@@ -438,4 +515,4 @@ export function createWordDocument(spec = {}) {
 	return { Api, doc, methods };
 }
 
-export { Paragraph, Table, Comment, Style, InlineSdt, BlockSdt };
+export { Paragraph, Table, TableCell, DocumentContent, Comment, Style, InlineSdt, BlockSdt };

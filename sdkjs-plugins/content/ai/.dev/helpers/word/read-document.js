@@ -4,7 +4,7 @@
 		"category": "core",
 		"readOnly": true,
 		"text": "Read Document",
-		"description": "Reads the content of the open text document. Returns the total number of top-level elements and, for the requested window, each element's 1-based index, type (paragraph/table/blockLvlSdt), style name and text. Use it to understand the document before editing it, to locate paragraphs by content, or to answer questions about the document. Call it again with a different startIndex to page through long documents.",
+		"description": "Reads the content of the open text document. Returns the total number of top-level elements and, for the requested window, each element's 1-based index, type (paragraph/table/blockLvlSdt), style name and text (tables: one line per row, cells separated by \" | \"). Use it to understand the document before editing it, to locate paragraphs by content, or to answer questions about the document. Call it again with a different startIndex to page through long documents.",
 		"parameters": {
 			"type": "object",
 			"properties": {
@@ -59,6 +59,34 @@
 			let p = Asc.scope.readParams;
 			let doc = Api.GetDocument();
 			let total = doc.GetElementsCount();
+			// ApiTable and ApiBlockLvlSdt have no GetText(): a table is read
+			// cell by cell (one line per row, cells separated by " | "), a
+			// content control through its ApiDocumentContent.
+			let cellOptions = { ParaSeparator: " ", NewLineSeparator: " ", TableCellSeparator: " | ", TableRowSeparator: " / " };
+			function elementText(el, type) {
+				if (type === "table") {
+					let rows = [];
+					let rowsCount = el.GetRowsCount();
+					for (let r = 0; r < rowsCount; r++) {
+						let row = el.GetRow(r);
+						let cells = [];
+						let cellsCount = row ? row.GetCellsCount() : 0;
+						for (let c = 0; c < cellsCount; c++) {
+							let cell = row.GetCell(c);
+							let content = cell ? cell.GetContent() : null;
+							cells.push(content ? (content.GetText(cellOptions) || "").trim() : "");
+						}
+						rows.push(cells.join(" | "));
+					}
+					return rows.join("\n");
+				}
+				if (type === "blockLvlSdt" && el.GetContent) {
+					let content = el.GetContent();
+					return content ? content.GetText({ ParaSeparator: "\n" }) : "";
+				}
+				return el.GetText ? el.GetText() : "";
+			}
+
 			let elements = [];
 			let end = Math.min(total, p.start - 1 + p.count);
 			for (let i = p.start - 1; i < end; i++) {
@@ -81,7 +109,7 @@
 				} catch (e) {}
 				let text = "";
 				try {
-					text = el.GetText ? el.GetText() : "";
+					text = elementText(el, type);
 				} catch (e) {}
 				text = (text || "").replace(/\r/g, "");
 				if (text.length > p.maxChars) {

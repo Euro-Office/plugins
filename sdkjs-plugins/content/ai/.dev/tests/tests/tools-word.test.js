@@ -4,7 +4,7 @@
 
 import { describe, test, expect } from "vitest";
 import { createToolEnv, expectToolError } from "../lib/plugin.js";
-import { createWordDocument } from "../fakes/word.js";
+import { createWordDocument, BlockSdt, Paragraph } from "../fakes/word.js";
 
 function word(spec) {
 	const fake = createWordDocument(spec);
@@ -32,6 +32,28 @@ describe("readDocument", () => {
 		expect(r.elements[0]).toEqual({ index: 1, type: "paragraph", style: "Heading 1", text: "Quarterly report" });
 		expect(r.elements[3]).toMatchObject({ index: 4, type: "table", rows: 2 });
 		expect(r.elements[4]).toMatchObject({ list: true, text: "First item" });
+	});
+
+	test("reads table text row by row, cells separated by |", async () => {
+		const { call } = word(SAMPLE);
+		const r = await call("readDocument");
+		expect(r.elements[3]).toEqual({ index: 4, type: "table", rows: 2, text: "Region | Revenue\nNorth | deadline 5" });
+	});
+
+	test("reads the text of block content controls", async () => {
+		const fake = createWordDocument({ body: ["Intro"] });
+		const sdt = new BlockSdt();
+		sdt.AddElement(new Paragraph("Inside one"));
+		sdt.AddElement(new Paragraph("Inside two"));
+		fake.doc.Push(sdt);
+		const r = await createToolEnv("word", fake).call("readDocument");
+		expect(r.elements[1]).toEqual({ index: 2, type: "blockLvlSdt", text: "Inside one\nInside two" });
+	});
+
+	test("long tables are truncated like other elements", async () => {
+		const { call } = word({ body: [{ table: [["a".repeat(40), "b".repeat(40)]] }] });
+		const r = await call("readDocument", { maxCharsPerElement: 50 });
+		expect(r.elements[0]).toMatchObject({ truncated: true, text: "a".repeat(40) + " | " + "b".repeat(7) + "…" });
 	});
 
 	test("pages with startIndex/count and reports hasMore", async () => {
@@ -80,6 +102,38 @@ describe("getSelection", () => {
 		const r = await call("getSelection");
 		expect(r.paragraphIndexes).toEqual([1, 2]);
 		expect(r.text).toContain("Quarterly report");
+	});
+
+	test("a selection inside a table reports the table's index", async () => {
+		const { call } = word({ ...SAMPLE, selection: { paragraph: 4, row: 1, cell: 1, start: 0, end: 8 } });
+		const r = await call("getSelection");
+		expect(r).toEqual({ hasSelection: true, text: "deadline", paragraphIndexes: [4] });
+	});
+
+	test("the cursor in a table cell reports the table's index, not the position in the cell", async () => {
+		// The cell paragraph is the first in its cell (GetPosInParent() === 0),
+		// which must not be reported as paragraph 1.
+		const { call } = word({ ...SAMPLE, cursor: { paragraph: 4, row: 0, cell: 1 } });
+		const r = await call("getSelection");
+		expect(r).toEqual({ hasSelection: false, text: "", currentParagraphText: "Revenue", paragraphIndexes: [4] });
+	});
+
+	test("a paragraph in a block content control reports the control's index", async () => {
+		const fake = createWordDocument({ body: ["Intro", "Middle"] });
+		const sdt = new BlockSdt();
+		const inner = new Paragraph("Inside");
+		sdt.AddElement(new Paragraph("First"));
+		sdt.AddElement(inner);
+		fake.doc.Push(sdt);
+		fake.doc.cursor = inner;
+		const r = await createToolEnv("word", fake).call("getSelection");
+		expect(r.paragraphIndexes).toEqual([3]);
+	});
+
+	test("duplicates are reported once (several paragraphs of one table)", async () => {
+		const { call } = word({ ...SAMPLE, selection: [{ paragraph: 3 }, { paragraph: 4, row: 0, cell: 0 }, { paragraph: 4, row: 1, cell: 1 }, { paragraph: 5 }] });
+		const r = await call("getSelection");
+		expect(r.paragraphIndexes).toEqual([3, 4, 5]);
 	});
 
 	test("without a selection returns the paragraph at the cursor", async () => {

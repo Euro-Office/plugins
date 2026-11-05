@@ -38,7 +38,8 @@ CI runs the same suite in `.github/workflows/ai-plugin-tests.yml` on every PR an
   - `ApiWorksheet.GetRange("bad")` throws instead of returning null.
   - `ApiRange.GetFormula()` returns `"= SUM(...)"` with a space after the `=`.
   - `GetUsedRange()` always starts at A1.
-  - `ApiTable` has no `GetText()`.
+  - `ApiTable` and `ApiBlockLvlSdt` have no `GetText()`; their text comes from `ApiDocumentContent.GetText()` (table cells, `GetContent()`).
+  - `ApiParagraph.GetPosInParent()` is the position inside the innermost container (a table cell, for example), and `ApiParagraph` has no `GetParent()`.
   - Outline levels are 1-based.
 - **Unknown plugin methods are not ignored.** An `executeMethod` call that the fake does not implement throws.
 
