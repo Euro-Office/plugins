@@ -105,7 +105,7 @@ EditorHelperImpl.prototype._getEditorContext = function() {
 			name: "text document",
 			apiName: "Document API",
 			macroExample: "Api.GetDocument().GetElement(0).GetText()",
-			readTools: "readDocument, getSelection"
+			readTools: "readDocument, readOutline, findText, getSelection"
 		};
 	} else if (editorType === "cell") {
 		return {
@@ -113,7 +113,7 @@ EditorHelperImpl.prototype._getEditorContext = function() {
 			name: "spreadsheet",
 			apiName: "Spreadsheet API",
 			macroExample: "Api.GetActiveSheet().GetRange(\"A1\").GetValue()",
-			readTools: "getWorkbookInfo, readRange"
+			readTools: "getWorkbookInfo, readRange, findInSheet"
 		};
 	} else if (editorType === "slide") {
 		return {
@@ -121,7 +121,7 @@ EditorHelperImpl.prototype._getEditorContext = function() {
 			name: "presentation",
 			apiName: "Presentation API",
 			macroExample: "Api.GetPresentation().GetSlidesCount()",
-			readTools: "readPresentation"
+			readTools: "readPresentation, findInPresentation"
 		};
 	}
 	return { type: editorType, name: editorType, apiName: "API", macroExample: "", readTools: "writeMacro" };
