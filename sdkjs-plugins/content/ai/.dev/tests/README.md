@@ -27,7 +27,7 @@ CI runs the same suite in `.github/workflows/ai-plugin-tests.yml` on every PR an
 | `fakes/word.js`, `cell.js`, `slide.js` | Small in-memory Document, Spreadsheet and Presentation Builder APIs (paragraphs/runs/tables/styles/comments/tracked changes/content controls; sheets/cells/formulas/comments/validation/freeze panes; slides/shapes/notes). |
 | `fakes/aiedits/` | Minimal mocks used by the ported `aiEdits` / `toolApproval` / `toolPreviews` tests. |
 | `lib/plugin.js` | `createToolEnv(editor, fake)`: loads library, provenance, helpers and the tool registry. `call(name, args)` runs a tool. `expectToolError()` checks for a `ToolError`. |
-| `lib/agent.js` | `createAgent()`: runs the real `registerButtons()` from `register.js` with stub UI classes, opens the chat window and fires `onChatMessage` like `chat.js` does. A scripted fake provider stands in for the model. |
+| `lib/agent.js` | `createAgent()`: runs the real `registerButtons()` (`scripts/engine/register.js` and the files it wires up: `actions.js`, `chatWindow.js`, `agentLoop.js`, `contextMenu.js`, `toolbar.js`) with stub UI classes that follow the SDK `Button` classes, opens the chat window and fires `onChatMessage` like `chat.js` does. A scripted fake provider stands in for the model. |
 | `tests/` | The test files (see below). |
 | `e2e/` | Opt-in end-to-end test against a real Document Server. |
 
@@ -50,6 +50,7 @@ CI runs the same suite in `.github/workflows/ai-plugin-tests.yml` on every PR an
 | `tools-word/cell/slide.test.js` | Tool behaviour against the fakes: happy paths, argument errors (ToolError messages) and edge cases. |
 | `tool-arguments.test.js` | Safe argument parsing (`parseToolArguments`, `parseFuncCall`, `callFunc`): lenient JSON, payloads that try to inject code, unknown tools, and the decline hook. |
 | `agent-loop.test.js` | The real `onChatMessage` loop:<ul><li>message order for tool calls and tool results;</li><li>approval allow/always/deny, including the session-only "always" for writeMacro;</li><li>stop and the iteration cap;</li><li>prompt-based tool calls;</li><li>selection context in the system prompt;</li><li>request format, tool categories and `loadTools`;</li><li>history, transcripts and citations (`onNavigate`);</li><li>AI edits tracked as revisions, with undo.</li></ul> |
+| `actions-menu.test.js` | Context menu and toolbar built by `registerButtons()`: the full menu outline per editor (snapshot), and for every one-shot action the request type, prompt, `Asc.Library` insert call and provenance meta. |
 | `document-context.test.js`, `smart-actions.test.js` | `DocumentContext` snapshots and prompts, SmartActions ranking, and the selection-suggestion chips (debounce and fingerprint, with fake timers). |
 | `providers.test.js` | OpenAI and Anthropic adapters (tool mapping, `tool_use`/`tool_result`, merging consecutive roles) and `engine.js` `_chatRequestAgent` with a stubbed `fetch` (streamed tool-call deltas, errors, stop). |
 | `chat-ui.test.js` | `chat.html`, `chat.js` and `chatChips.js` in jsdom:<ul><li>approval cards (macro code is shown as text);</li><li>chips;</li><li>request format and transcripts;</li><li>`eo://` location links.</li></ul> |

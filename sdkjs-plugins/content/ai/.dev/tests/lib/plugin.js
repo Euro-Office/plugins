@@ -35,7 +35,7 @@ export function createToolEnv(editorType, fake = {}, globals = {}) {
 		...globals
 	});
 	sandbox.load(...TOOL_SCRIPTS);
-	// register.js defines AgentState.ToolError when the chat opens; tools need it.
+	// chatWindow.js defines AgentState.ToolError when the chat opens; tools need it.
 	sandbox.run(`
 		window.AgentState = window.AgentState || { isStopped: false };
 		window.AgentState.ToolError = class ToolError extends Error {

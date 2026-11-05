@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Tool approval shared by the two ways a tool can be called:
-//  1. the chat agent (scripts/engine/register.js, onChatMessage), and
+//  1. the chat agent (scripts/engine/agentLoop.js, onChatMessage), and
 //  2. the editor event "ai_onCallTool" (scripts/code.js), sent by an external
 //     host through the DocsAPI connector (see handleEditorToolCall below).
 //

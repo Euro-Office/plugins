@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// Layer 4: the agent loop in scripts/engine/register.js ("onChatMessage"),
+// Layer 4: the agent loop in scripts/engine/agentLoop.js ("onChatMessage"),
 // driven end-to-end with a scripted provider and the fake Document API.
 
 import { describe, test, expect } from "vitest";

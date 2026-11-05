@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// Drives the real chat agent loop in scripts/engine/register.js: loads the
+// Drives the real chat agent loop (scripts/engine/agentLoop.js): loads the
 // background-plugin scripts, calls registerButtons(window) with stub UI
 // classes, opens the chat window and fires "onChatMessage" like chat.js does.
 // The request engine is replaced by a scripted fake provider.
@@ -15,6 +15,11 @@ const SCRIPTS = [
 	"scripts/helpers/aiProvenance.js",
 	"scripts/engine/aiEdits.js",
 	"scripts/engine/toolApproval.js",
+	"scripts/engine/actions.js",
+	"scripts/engine/chatWindow.js",
+	"scripts/engine/agentLoop.js",
+	"scripts/engine/contextMenu.js",
+	"scripts/engine/toolbar.js",
 	"scripts/engine/register.js",
 	"scripts/helpers/helperFuncs.js",
 	"scripts/helpers/helpers.js",
