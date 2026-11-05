@@ -34,6 +34,137 @@ async function registerButtons(window, undefined)
 {
 	window.AI = window.AI || {};
 	var AI = window.AI;
+
+	// register actions
+
+	AI.ActionType = {
+		Chat             : "Chat",
+		Summarization    : "Summarization",
+		Translation      : "Translation",
+		TextAnalyze      : "TextAnalyze",
+		ImageGeneration  : "ImageGeneration",
+		OCR              : "OCR",
+		Vision           : "Vision"
+	};
+
+	AI.Actions = Object.create(null);
+
+	function ActionUI(name, icon, modelId, capabilities) {
+		this.name = name || "";
+		this.icon = icon || "";
+		this.model = modelId || "";
+		this.capabilities = (capabilities === undefined) ? AI.CapabilitiesUI.Chat : capabilities;
+	}
+
+	AI.Actions[AI.ActionType.Chat]            = new ActionUI("Chatbot", "ask-ai");
+	AI.Actions[AI.ActionType.Summarization]   = new ActionUI("Summarization", "summarization");
+	AI.Actions[AI.ActionType.Translation]     = new ActionUI("Translation", "translation");
+	AI.Actions[AI.ActionType.TextAnalyze]     = new ActionUI("Text analysis", "text-analysis-ai");
+	AI.Actions[AI.ActionType.ImageGeneration] = new ActionUI("Image generation", "image-ai", "", AI.CapabilitiesUI.Image);
+	AI.Actions[AI.ActionType.OCR]             = new ActionUI("OCR", "ocr", "", AI.CapabilitiesUI.Vision);
+	AI.Actions[AI.ActionType.Vision]          = new ActionUI("Vision", "vision-ai", "", AI.CapabilitiesUI.Vision);
+
+	AI.ActionsGetKeys = function()
+	{
+		return [
+			AI.ActionType.Chat,
+			AI.ActionType.Summarization,
+			AI.ActionType.Translation,
+			AI.ActionType.TextAnalyze,
+			AI.ActionType.ImageGeneration,
+			AI.ActionType.OCR,
+			AI.ActionType.Vision
+		];
+	};
+
+	AI.ActionsGetSorted = function()
+	{
+		let keys = AI.ActionsGetKeys();
+		let count = keys.length;
+		let actions = new Array(count);
+		for (let i = 0; i < count; i++)
+		{
+			let src = AI.Actions[keys[i]];
+			actions[i] = {
+				id : keys[i],
+				name : Asc.plugin.tr(src.name),
+				icon : src.icon,
+				model : src.model,
+				capabilities : src.capabilities
+			}
+		}
+		return actions;
+	};
+
+	var actions_key = "onlyoffice_ai_actions_key";
+	AI.ActionsSave = function()
+	{
+		try
+		{
+			// exclude external models
+			let excludeMap = Object.create(null);
+			for (let key in AI.Actions) {
+				if (AI.Actions[key].model.startsWith(AI.externalModelPrefix)) {
+					excludeMap[key] = AI.Actions[key].model;
+					AI.Actions[key].model = "";
+				}
+			}
+
+			window.localStorage.setItem(actions_key, JSON.stringify(AI.Actions));
+			
+			// restore excluded
+			for (let key in excludeMap) {
+				AI.Actions[key].model = excludeMap[key];
+			}
+			return true;
+		}
+		catch (e)
+		{
+		}		
+		return false;
+	};
+
+	AI.ActionsLoad = function()
+	{
+		let obj = null;
+		try
+		{
+			if (AI.serverSettings) {
+				obj = AI.serverSettings.actions;
+			} else {
+				obj = JSON.parse(window.localStorage.getItem(actions_key));
+			}
+		}
+		catch (e)
+		{
+			obj = (AI.DEFAULT_SERVER_SETTINGS && AI.DEFAULT_SERVER_SETTINGS.actions) ? AI.DEFAULT_SERVER_SETTINGS.actions : null;
+		}
+		
+		if (obj)
+		{
+			for (let i in obj)
+			{
+				if (AI.Actions[i] && obj[i].model)
+					AI.Actions[i].model = obj[i].model;
+			}
+			return true;
+		}
+		return false;
+	};
+
+	AI.ActionsChange = function(id, model)
+	{
+		if (AI.Actions[id])
+		{
+			AI.Actions[id].model = model;
+			AI.ActionsSave();
+		}
+
+		if (Asc.plugin.sendEvent)
+			Asc.plugin.sendEvent("ai_onActionsChange", window.getActionsInfo());
+	};
+
+	AI.ActionsLoad();
 	
 	// Provenance metadata for an AI action (see scripts/helpers/aiProvenance.js).
 	// Passed to the Asc.Library insert methods, which mark the inserted
@@ -634,423 +765,257 @@ async function registerButtons(window, undefined)
 	window.chatWindowShow = chatWindowShow;
 
 	let editorVersion = await Asc.Library.GetEditorVersion();
-	if (editorVersion >= 9002000 && Asc.Editor.getType() !== "pdf")
-	{
-		let buttonSub = new Asc.ButtonContextMenu(buttonMain);
-		buttonSub.text = "Grammar & Spelling";
-		buttonSub.icons = getContextMenuButtonIcons("grammar");
-		buttonSub.editors = ["word"];
-		buttonSub.addCheckers("Target", "Selection");
-		
-		let buttonAll = new Asc.ButtonContextMenu(buttonSub);
-		buttonAll.text = "Check all";
-		buttonAll.editors = ["word"];
-		buttonAll.addCheckers("Target", "Selection");
+	let editorType = Asc.Editor.getType();
 
-		buttonAll.attachOnClick(async function(data){
-			onCheckGrammarSpelling(false);
-		});
+	// ── One-shot actions ───────────────────────────────────────────────────
+	// A one-shot action reads the selection, asks the model once and inserts
+	// the answer. Fields of an action (see runOneShotAction):
+	//   id          provenance action name (aiProvenance.js)
+	//   actionType  AI.ActionType: which model the request uses
+	//   input       "text" (selected text, default), "textOrWord" (selected
+	//               text, else the word at the cursor) or "image"
+	//   required    do nothing when the input is empty
+	//   request     ONE_SHOT_REQUESTS key, default "chat"
+	//   prompt      (input, data) => prompt; data is the menu item's data
+	//   transform   (answer, input) => text to insert
+	//   accept      (answer) => false to insert nothing
+	//   insert      ONE_SHOT_INSERTS key: how the answer goes into the file
+	// The Asc.Library insert methods are looked up on every call: aiEdits.js
+	// wraps them to group and track the change, and the provenance meta
+	// argument marks the inserted content.
 
-		let buttonCurrent = new Asc.ButtonContextMenu(buttonSub);
-		buttonCurrent.text = "Check current text";
-		buttonCurrent.editors = ["word"];
-		buttonCurrent.addCheckers("Target", "Selection");
-
-		buttonCurrent.attachOnClick(async function(data){
-			onCheckGrammarSpelling(true);
-		});
-	
+	function singleNewlines(text) {
+		return text.replace(/\n\n/g, '\n');
 	}
 
-	// Submenu summarize:
-	if (Asc.Editor.getType() !== "pdf")
-	{
-		let button = new Asc.ButtonContextMenu(buttonMain);
-		button.text = "Summarization";
-		button.icons = getContextMenuButtonIcons("summarization");
-		button.editors = ["word"];
-		button.addCheckers("Selection");
-		button.attachOnClick(async function(data){
-			let requestEngine = AI.Request.create(AI.ActionType.Summarization);
-			if (!requestEngine)
-				return;
+	const ONE_SHOT_REQUESTS = {
+		chat   : function(engine, prompt) { return engine.chatRequest(prompt); },
+		image  : function(engine, prompt, input) { return engine.imageGenerationRequest(input); },
+		ocr    : function(engine, prompt, input) { return engine.imageOCRRequest(input); },
+		vision : function(engine, prompt, input) { return engine.imageVisionRequest({ prompt : prompt, image : input }); }
+	};
 
-			let content = await Asc.Library.GetSelectedText();
-			let prompt = Asc.Prompts.getSummarizationPrompt(content);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
+	const ONE_SHOT_INSERTS = {
+		text         : function(result, meta) { return Asc.Library.InsertAsText(result, meta); },
+		paste        : function(result, meta) { return Asc.Library.PasteText(result, meta); },
+		comment      : function(result, meta) { return Asc.Library.InsertAsComment(result, meta); },
+		hyperlink    : function(result, meta) { return Asc.Library.InsertAsHyperlink(result, undefined, meta); },
+		replaceSmart : function(result, meta) { return Asc.Library.ReplaceTextSmart([result], meta); },
+		md           : function(result, meta) { return Asc.Library.InsertAsMD(result, undefined, meta); },
+		mdMath       : function(result, meta) { return Asc.Library.InsertAsMD(result, [Asc.PluginsMD.latex, Asc.PluginsMD.hr], meta); },
+		// The generated image, as an OLE object that keeps the prompt (a
+		// plain image in PDF).
+		image        : function(result, meta, input) {
+			if (Asc.plugin.info.editorSubType === "pdf")
+				return Asc.Library.AddGeneratedImage(result, meta);
+			return Asc.Library.AddOleObject(result, input, meta);
+		}
+	};
 
-			result = "Summary:\n\n" + result;
-			await Asc.Library.InsertAsText(result, provMeta("summarization", requestEngine));
-		});
+	async function readOneShotInput(kind) {
+		switch (kind) {
+			case "image":
+				return await Asc.Library.GetSelectedImage();
+			case "textOrWord":
+				return (await Asc.Library.GetSelectedText()) || (await Asc.Library.GetCurrentWord());
+			default:
+				return await Asc.Library.GetSelectedText();
+		}
 	}
 
-	// Submenu Text Analysis
-	{
-		let button1 = new Asc.ButtonContextMenu(buttonMain);
-		button1.text = "Text analysis";
-		button1.icons = getContextMenuButtonIcons("text-analysis-ai");
-		button1.editors = ["word"];
-		button1.addCheckers("Target", "Selection");
-
-		let button2 = new Asc.ButtonContextMenu(button1);
-		button2.text = "Rewrite differently";
-		button2.editors = ["word"];
-		button2.addCheckers("Selection");
-		button2.attachOnClick(async function(){
-			let requestEngine = AI.Request.create(AI.ActionType.TextAnalyze);
-			if (!requestEngine)
-				return;
-
-			let content = await Asc.Library.GetSelectedText();
-			let prompt = Asc.Prompts.getTextRewritePrompt(content);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.PasteText(result, provMeta("rewrite", requestEngine));
-		});
-
-		let button3 = new Asc.ButtonContextMenu(button1);
-		button3.text = "Make longer";
-		button3.editors = ["word"];
-		button3.addCheckers("Selection");
-		button3.attachOnClick(async function(data){
-			let requestEngine = AI.Request.create(AI.ActionType.TextAnalyze);
-			if (!requestEngine)
-				return;
-
-			let content = await Asc.Library.GetSelectedText();
-			let prompt = Asc.Prompts.getTextLongerPrompt(content);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.PasteText(result, provMeta("makeLonger", requestEngine));
-		});
-
-		let button4 = new Asc.ButtonContextMenu(button1);
-		button4.text = "Make shorter";
-		button4.editors = ["word"];
-		button4.addCheckers("Selection");
-		button4.attachOnClick(async function(data){
-			let requestEngine = AI.Request.create(AI.ActionType.TextAnalyze);
-			if (!requestEngine)
-				return;
-
-			let content = await Asc.Library.GetSelectedText();
-			let prompt = Asc.Prompts.getTextShorterPrompt(content);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.PasteText(result, provMeta("makeShorter", requestEngine));
-		});
-
-		let button5 = new Asc.ButtonContextMenu(button1);
-		button5.text = "Explain text in comment";
-		button5.separator = true;
-		button5.editors = ["word"];
-		button5.addCheckers("Target", "Selection");
-		button5.attachOnClick(async function(){
-			let requestEngine = AI.Request.create(AI.ActionType.TextAnalyze);
-			if (!requestEngine)
-				return;
-
-			let content = await Asc.Library.GetSelectedText();
-			if (!content)
-				content = await Asc.Library.GetCurrentWord();
-
-			if (!content)
-				return;
-
-			let prompt = Asc.Prompts.getExplainPrompt(content);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.InsertAsComment(result, provMeta("explainComment", requestEngine));
-		});
-
-		let button6 = new Asc.ButtonContextMenu(button1);
-		button6.text = "Explain text in hyperlink";
-		button6.separator = true;
-		button6.editors = ["word"];
-		button6.addCheckers("Selection");
-		button6.attachOnClick(async function(){
-			let requestEngine = AI.Request.create(AI.ActionType.TextAnalyze);
-			if (!requestEngine)
-				return;
-
-			let content = await Asc.Library.GetSelectedText();
-			let prompt = Asc.Prompts.getExplainAsLinkPrompt(content);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			result = result.replace(/\n\n/g, '\n');
-			await Asc.Library.InsertAsHyperlink(result, undefined, provMeta("explainHyperlink", requestEngine));
-		});
-
-		let button7 = new Asc.ButtonContextMenu(button1);
-		button7.text = "Fix spelling & grammar";
-		button7.separator = true;
-		button7.editors = ["word"];
-		button7.addCheckers("Selection");
-		button7.attachOnClick(async function(){
-			let requestEngine = AI.Request.create(AI.ActionType.TextAnalyze);
-			if (!requestEngine)
-				return;
-
-			let content = await Asc.Library.GetSelectedText();
-			let prompt = Asc.Prompts.getFixAndSpellPrompt(content);
-
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			// "fixSpellingGrammar" is an assistive edit: AIProvenance.EXEMPT_ACTIONS
-			// keeps it unmarked (Art. 50(2) standard-editing exception).
-			if (result !== 'The text is correct, there are no errors in it.')
-			   await Asc.Library.ReplaceTextSmart([result], provMeta("fixSpellingGrammar", requestEngine));
-			else
-				console.log('The text is correct, there are no errors in it.');
-		});
-
-		let button8 = new Asc.ButtonContextMenu(button1);
-		button8.text = "Keywords";
-		button8.editors = ["word"];
-		button8.addCheckers("Selection");
-		button8.attachOnClick(async function(){
-			let requestEngine = AI.Request.create(AI.ActionType.TextAnalyze);
-			if (!requestEngine)
-				return;
-
-			let content = await Asc.Library.GetSelectedText();
-			let prompt = Asc.Prompts.getTextKeywordsPrompt(content);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			await Asc.Library.InsertAsText(result, provMeta("keywords", requestEngine));
-		});
-	}
-
-	// Submenu Translate
-	{
-		let button1 = new Asc.ButtonContextMenu(buttonMain);
-		button1.text = "Translate";
-		button1.icons = getContextMenuButtonIcons("translation");
-		button1.editors = ["word", "slide", "cell"];
-		button1.addCheckers("Selection");
-
-		let button2 = new Asc.ButtonContextMenu(button1);
-		button2.text = "English";
-		button2.editors = ["word", "slide", "cell"];
-		button2.addCheckers("Selection");
-		button2.data = "English";
-		button2.attachOnClick(async function(data){
-			let requestEngine = AI.Request.create(AI.ActionType.Translation);
-			if (!requestEngine)
-				return;
-
-			let lang = data;
-			let content = await Asc.Library.GetSelectedText();
-			if (!content)
-				return;
-
-			let prompt = Asc.Prompts.getTranslatePrompt(content, lang);
-			let result = await requestEngine.chatRequest(prompt);
-			if (!result) return;
-
-			result = Asc.Library.getTranslateResult(result, content);
-
-			await Asc.Library.PasteText(result, provMeta("translate", requestEngine));
-		});
-
-		let button3 = button2.copy();
-		button3.text = "French";
-		button3.data = "French";
-
-		let button4 = button2.copy();
-		button4.text = "German";
-		button4.data = "German";
-
-		let button5 = button2.copy();
-		button5.text = "Chinese";
-		button5.data = "Chinese";
-
-		let button6 = button2.copy();
-		button6.text = "Japanese";
-		button6.data = "Japanese";
-
-		let button7 = button2.copy();
-		button7.text = "Russian";
-		button7.data = "Russian";
-
-		let button8 = button2.copy();
-		button8.text = "Korean";
-		button8.data = "Korean";
-
-		let button9 = button2.copy();
-		button9.text = "Spanish";
-		button9.data = "Spanish";
-
-		let button10 = button2.copy();
-		button10.text = "Italian";
-		button10.data = "Italian";
-	}
-
-	// Hyperlink preview
-	{
-		let button1 = new Asc.ButtonContextMenu(buttonMain);
-		button1.text = "Show hyperlink content";
-		button1.addCheckers("Hyperlink");
-
-		button1.onContextMenuShowExtendItem = function(options, item)
-		{
-			item.data = options.value;
-		};
-
-		button1.attachOnClick(function(data){
-			let variation = {
-				url : "hyperlink.html",
-				description : window.Asc.plugin.tr("Hyperlink"),
-				isVisual : true,
-				buttons : [],
-				isModal : false,
-				EditorsSupport : ["word", "slide", "cell", "pdf"],
-				size : [ 1000, 1000 ]
-			};
-
-			var linkWindow = new window.Asc.PluginWindow();
-			linkWindow.attachEvent("onGetLink", async function(){
-				let link = data;
-				if (!link)
-					link = await Asc.Library.GetSelectedText();
-				link = link.replace(/\n/g, '');
-				link = link.replace(/\r/g, '');
-				linkWindow.command("onSetLink", link);
-			});
-			linkWindow.show(variation);
-		});
-	}
-
-	const on_click_ocr = async function () {
-		let requestEngine = AI.Request.create(AI.ActionType.OCR);
+	async function runOneShotAction(action, data) {
+		let requestEngine = AI.Request.create(action.actionType);
 		if (!requestEngine)
 			return;
 
-		let content = await Asc.Library.GetSelectedImage();
-		if (!content) {
-			console.log("you need to select an image to use ocr")
+		let input = await readOneShotInput(action.input);
+		if (action.required && !input) {
+			if (action.emptyMessage)
+				console.log(action.emptyMessage);
 			return;
 		}
 
-		let result = await requestEngine.imageOCRRequest(content);
-		if (!result) return;
+		let prompt = action.prompt ? action.prompt(input, data) : undefined;
+		let result = await ONE_SHOT_REQUESTS[action.request || "chat"](requestEngine, prompt, input);
+		if (!result)
+			return;
 
-		await Asc.Library.InsertAsMD(result, [Asc.PluginsMD.latex, Asc.PluginsMD.hr], provMeta("ocr", requestEngine));
+		if (action.transform)
+			result = action.transform(result, input);
+		if (action.accept && !action.accept(result))
+			return;
+
+		await ONE_SHOT_INSERTS[action.insert](result, provMeta(action.id, requestEngine), input);
 	}
 
-	// Submenu Image
-	{
-		let buttonImages = new Asc.ButtonContextMenu(buttonMain);
-		buttonImages.text = "Image";
-		buttonImages.icons = getContextMenuButtonIcons("image-ai");
-		buttonImages.addCheckers("Selection", "Image", "OleObject");
+	const TRANSLATE_ACTION = {
+		id         : "translate",
+		actionType : AI.ActionType.Translation,
+		required   : true,
+		prompt     : function(text, lang) { return Asc.Prompts.getTranslatePrompt(text, lang); },
+		transform  : function(result, text) { return Asc.Library.getTranslateResult(result, text); },
+		insert     : "paste"
+	};
 
-		let buttonGen = new Asc.ButtonContextMenu(buttonImages);
-		buttonGen.text = "Text to Image";
-		buttonGen.addCheckers("Selection");
-		buttonGen.attachOnClick(async function(){
-			let requestEngine = AI.Request.create(AI.ActionType.ImageGeneration);
-			if (!requestEngine)
-				return;
+	const TEXT_IS_CORRECT = 'The text is correct, there are no errors in it.';
 
-			let content = await Asc.Library.GetSelectedText();
-			if (!content)
-				return;
+	// ── Context menu ───────────────────────────────────────────────────────
+	// Built in this order. An entry with `submenu` is a submenu that later
+	// entries name as `parent`. An entry with `actionType` runs as a one-shot
+	// action; other entries have their own `onClick`. `when` skips an entry
+	// (and so its items). Without `editors` a button keeps the SDK default
+	// (word, cell, slide).
+	const isNotPdf = function() { return editorType !== "pdf"; };
 
-			let result = await requestEngine.imageGenerationRequest(content);
-			if (!result) return;
+	const CONTEXT_MENU = [
+		{ submenu: "grammar", text: "Grammar & Spelling", icon: "grammar", editors: ["word"], checkers: ["Target", "Selection"],
+			when: function() { return editorVersion >= 9002000 && isNotPdf(); } },
+		{ parent: "grammar", text: "Check all", editors: ["word"], checkers: ["Target", "Selection"],
+			onClick: function() { onCheckGrammarSpelling(false); } },
+		{ parent: "grammar", text: "Check current text", editors: ["word"], checkers: ["Target", "Selection"],
+			onClick: function() { onCheckGrammarSpelling(true); } },
 
-			let meta = provMeta("textToImage", requestEngine);
-			if (Asc.plugin.info.editorSubType === "pdf")
-				return await Asc.Library.AddGeneratedImage(result, meta);
-			await Asc.Library.AddOleObject(result, content, meta);
-		});
+		{ id: "summarization", text: "Summarization", icon: "summarization", editors: ["word"], checkers: ["Selection"], when: isNotPdf,
+			actionType: AI.ActionType.Summarization,
+			prompt: function(text) { return Asc.Prompts.getSummarizationPrompt(text); },
+			transform: function(result) { return "Summary:\n\n" + result; },
+			insert: "text" },
 
-		let buttonOCR = new Asc.ButtonContextMenu(buttonImages);
-		buttonOCR.text = "OCR";
-		buttonOCR.addCheckers("Image", "OleObject");
-		buttonOCR.attachOnClick(on_click_ocr);
+		{ submenu: "textAnalysis", text: "Text analysis", icon: "text-analysis-ai", editors: ["word"], checkers: ["Target", "Selection"] },
+		{ parent: "textAnalysis", id: "rewrite", text: "Rewrite differently", editors: ["word"], checkers: ["Selection"],
+			actionType: AI.ActionType.TextAnalyze,
+			prompt: function(text) { return Asc.Prompts.getTextRewritePrompt(text); },
+			transform: singleNewlines, insert: "paste" },
+		{ parent: "textAnalysis", id: "makeLonger", text: "Make longer", editors: ["word"], checkers: ["Selection"],
+			actionType: AI.ActionType.TextAnalyze,
+			prompt: function(text) { return Asc.Prompts.getTextLongerPrompt(text); },
+			transform: singleNewlines, insert: "paste" },
+		{ parent: "textAnalysis", id: "makeShorter", text: "Make shorter", editors: ["word"], checkers: ["Selection"],
+			actionType: AI.ActionType.TextAnalyze,
+			prompt: function(text) { return Asc.Prompts.getTextShorterPrompt(text); },
+			transform: singleNewlines, insert: "paste" },
+		{ parent: "textAnalysis", id: "explainComment", text: "Explain text in comment", separator: true, editors: ["word"], checkers: ["Target", "Selection"],
+			actionType: AI.ActionType.TextAnalyze, input: "textOrWord", required: true,
+			prompt: function(text) { return Asc.Prompts.getExplainPrompt(text); },
+			transform: singleNewlines, insert: "comment" },
+		{ parent: "textAnalysis", id: "explainHyperlink", text: "Explain text in hyperlink", separator: true, editors: ["word"], checkers: ["Selection"],
+			actionType: AI.ActionType.TextAnalyze,
+			prompt: function(text) { return Asc.Prompts.getExplainAsLinkPrompt(text); },
+			transform: singleNewlines, insert: "hyperlink" },
+		// "fixSpellingGrammar" is an assistive edit: AIProvenance.EXEMPT_ACTIONS
+		// keeps it unmarked (Art. 50(2) standard-editing exception).
+		{ parent: "textAnalysis", id: "fixSpellingGrammar", text: "Fix spelling & grammar", separator: true, editors: ["word"], checkers: ["Selection"],
+			actionType: AI.ActionType.TextAnalyze,
+			prompt: function(text) { return Asc.Prompts.getFixAndSpellPrompt(text); },
+			accept: function(result) {
+				if (result !== TEXT_IS_CORRECT)
+					return true;
+				console.log(TEXT_IS_CORRECT);
+				return false;
+			},
+			insert: "replaceSmart" },
+		{ parent: "textAnalysis", id: "keywords", text: "Keywords", editors: ["word"], checkers: ["Selection"],
+			actionType: AI.ActionType.TextAnalyze,
+			prompt: function(text) { return Asc.Prompts.getTextKeywordsPrompt(text); },
+			insert: "text" },
 
-		let buttonExplainImage = new Asc.ButtonContextMenu(buttonImages);
-		buttonExplainImage.text = "Image to Text";
-		buttonExplainImage.addCheckers("Image", "OleObject");
-		buttonExplainImage.attachOnClick(async function(){
-			let requestEngine = AI.Request.create(AI.ActionType.Vision);
-			if (!requestEngine)
-				return;
+		{ submenu: "translate", text: "Translate", icon: "translation", editors: ["word", "slide", "cell"], checkers: ["Selection"] }
+	].concat(["English", "French", "German", "Chinese", "Japanese", "Russian", "Korean", "Spanish", "Italian"].map(function(lang) {
+		return Object.assign({ parent: "translate", text: lang, data: lang, editors: ["word", "slide", "cell"], checkers: ["Selection"] }, TRANSLATE_ACTION);
+	}), [
+		{ text: "Show hyperlink content", checkers: ["Hyperlink"],
+			onShowExtend: function(options, item) { item.data = options.value; },
+			onClick: showHyperlinkContent },
 
-			let content = await Asc.Library.GetSelectedImage();
-			if (!content)
-				return;
-
-			let result = await requestEngine.imageVisionRequest({
-				prompt : Asc.Prompts.getImageDescription(),
-				image : content
-			});
-			if (!result) return;
-
-			await Asc.Library.InsertAsMD(result, undefined, provMeta("imageToText", requestEngine));
-		});
-	}
+		{ submenu: "image", text: "Image", icon: "image-ai", checkers: ["Selection", "Image", "OleObject"] },
+		{ parent: "image", id: "textToImage", text: "Text to Image", checkers: ["Selection"],
+			actionType: AI.ActionType.ImageGeneration, required: true, request: "image", insert: "image" },
+		{ parent: "image", id: "ocr", text: "OCR", checkers: ["Image", "OleObject"],
+			actionType: AI.ActionType.OCR, input: "image", required: true, emptyMessage: "you need to select an image to use ocr",
+			request: "ocr", insert: "mdMath" },
+		{ parent: "image", id: "imageToText", text: "Image to Text", checkers: ["Image", "OleObject"],
+			actionType: AI.ActionType.Vision, input: "image", required: true,
+			prompt: function() { return Asc.Prompts.getImageDescription(); },
+			request: "vision", insert: "md" }
+	], smartActionsMenu(), [
+		{ text: "Chatbot", separator: true, icon: "ask-ai", checkers: ["All"],
+			onClick: async function() {
+				let selectedText = await Asc.Library.GetSelectedText();
+				chatWindowShow(selectedText);
+			} }
+	]);
 
 	// Smart actions: context-aware agent tasks for the current selection.
-	// Each action hands a prompt to the chat agent, which sees the selection
+	// Each one hands a prompt to the chat agent, which sees the selection
 	// (see DocumentContext) and can read/modify the document through tools.
-	if (Asc.Editor.getType() !== "pdf")
-	{
-		let editorType = Asc.Editor.getType();
-		// Action table: scripts/helpers/smartActions.js (shared with the chat chips).
-		let actions = window.SmartActions ? window.SmartActions.all(editorType) : [];
-		if (actions.length) {
-			let buttonSmart = new Asc.ButtonContextMenu(buttonMain);
-			buttonSmart.text = "Smart actions";
-			buttonSmart.icons = getContextMenuButtonIcons("ask-ai");
-			buttonSmart.editors = [editorType];
-			buttonSmart.addCheckers("Selection");
-
-			for (let i = 0; i < actions.length; i++) {
-				let action = actions[i];
-				let button = new Asc.ButtonContextMenu(buttonSmart);
-				button.text = action.text;
-				button.editors = [editorType];
-				button.addCheckers("Selection");
-				button.attachOnClick(function() {
-					chatWindowShow(action.prompt + window.SmartActions.LANG_HINT, true);
-				});
-			}
-
-			let buttonAsk = new Asc.ButtonContextMenu(buttonSmart);
-			buttonAsk.text = "Ask about selection...";
-			buttonAsk.separator = true;
-			buttonAsk.editors = [editorType];
-			buttonAsk.addCheckers("Selection");
-			buttonAsk.attachOnClick(function() {
-				chatWindowShow(Asc.plugin.tr("About the selection:") + " ", false);
-			});
-		}
+	// Their table is scripts/helpers/smartActions.js (shared with the chat
+	// chips); only the menu items are built here.
+	function smartActionsMenu() {
+		let actions = (isNotPdf() && window.SmartActions) ? window.SmartActions.all(editorType) : [];
+		if (!actions.length)
+			return [];
+		let entries = [{ submenu: "smart", text: "Smart actions", icon: "ask-ai", editors: [editorType], checkers: ["Selection"] }];
+		actions.forEach(function(action) {
+			entries.push({ parent: "smart", text: action.text, editors: [editorType], checkers: ["Selection"],
+				onClick: function() { chatWindowShow(action.prompt + window.SmartActions.LANG_HINT, true); } });
+		});
+		entries.push({ parent: "smart", text: "Ask about selection...", separator: true, editors: [editorType], checkers: ["Selection"],
+			onClick: function() { chatWindowShow(Asc.plugin.tr("About the selection:") + " ", false); } });
+		return entries;
 	}
 
-	let buttonChat = new Asc.ButtonContextMenu(buttonMain);
-	buttonChat.text = "Chatbot";
-	buttonChat.separator = true;
-	buttonChat.icons = getContextMenuButtonIcons("ask-ai");
-	buttonChat.addCheckers("All");
-	buttonChat.attachOnClick(async function(){
-		let selectedText = await Asc.Library.GetSelectedText();
-		chatWindowShow(selectedText);
-	});
+	function showHyperlinkContent(data) {
+		let variation = {
+			url : "hyperlink.html",
+			description : window.Asc.plugin.tr("Hyperlink"),
+			isVisual : true,
+			buttons : [],
+			isModal : false,
+			EditorsSupport : ["word", "slide", "cell", "pdf"],
+			size : [ 1000, 1000 ]
+		};
+
+		var linkWindow = new window.Asc.PluginWindow();
+		linkWindow.attachEvent("onGetLink", async function(){
+			let link = data;
+			if (!link)
+				link = await Asc.Library.GetSelectedText();
+			link = link.replace(/\n/g, '');
+			link = link.replace(/\r/g, '');
+			linkWindow.command("onSetLink", link);
+		});
+		linkWindow.show(variation);
+	}
+
+	function buildContextMenu(root, entries) {
+		let submenus = { "": root };
+		entries.forEach(function(entry) {
+			let parent = submenus[entry.parent || ""];
+			if (!parent || (entry.when && !entry.when()))
+				return;
+			let button = new Asc.ButtonContextMenu(parent);
+			button.text = entry.text;
+			if (entry.icon)
+				button.icons = getContextMenuButtonIcons(entry.icon);
+			if (entry.editors)
+				button.editors = entry.editors;
+			if (entry.separator)
+				button.separator = true;
+			if (entry.data)
+				button.data = entry.data;
+			button.addCheckers.apply(button, entry.checkers);
+			if (entry.onShowExtend)
+				button.onContextMenuShowExtendItem = entry.onShowExtend;
+			if (entry.actionType)
+				button.attachOnClick(function(data) { return runOneShotAction(entry, data); });
+			else if (entry.onClick)
+				button.attachOnClick(entry.onClick);
+			if (entry.submenu)
+				submenus[entry.submenu] = button;
+		});
+	}
+
+	buildContextMenu(buttonMain, CONTEXT_MENU);
 
 	// register toolbar buttons
 	let buttonMainToolbar = new Asc.ButtonToolbar();
@@ -1105,25 +1070,9 @@ async function registerButtons(window, undefined)
 				onTranslateSettingsModal();
 			}}];
 	buttonTranslateToolbar.split = true;
-	buttonTranslateToolbar.attachOnClick(async function(){
-		let requestEngine = AI.Request.create(AI.ActionType.Translation);
-		if (!requestEngine)
-			return;
-
-		const ls_lang_key = "onlyoffice_ai_plugin_translate_lang";
-		const currLang = window.localStorage.getItem(ls_lang_key);
-
-		let lang = !!currLang ? currLang : "english";
-		let content = await Asc.Library.GetSelectedText();
-		if (!content)
-			return;
-
-		let prompt = Asc.Prompts.getTranslatePrompt(content, lang);
-		let result = await requestEngine.chatRequest(prompt);
-		if (!result) return;
-
-		result = Asc.Library.getTranslateResult(result, content);
-		await Asc.Library.PasteText(result, provMeta("translate", requestEngine));
+	buttonTranslateToolbar.attachOnClick(function(){
+		let lang = window.localStorage.getItem("onlyoffice_ai_plugin_translate_lang");
+		return runOneShotAction(TRANSLATE_ACTION, lang ? lang : "english");
 	});
 
 	let lastButton = null;
@@ -1207,135 +1156,4 @@ async function registerButtons(window, undefined)
 			});
 		});
 	}
-
-	// register actions
-
-	AI.ActionType = {
-		Chat             : "Chat",
-		Summarization    : "Summarization",
-		Translation      : "Translation",
-		TextAnalyze      : "TextAnalyze",
-		ImageGeneration  : "ImageGeneration",
-		OCR              : "OCR",
-		Vision           : "Vision"
-	};
-
-	AI.Actions = Object.create(null);
-
-	function ActionUI(name, icon, modelId, capabilities) {
-		this.name = name || "";
-		this.icon = icon || "";
-		this.model = modelId || "";
-		this.capabilities = (capabilities === undefined) ? AI.CapabilitiesUI.Chat : capabilities;
-	}
-
-	AI.Actions[AI.ActionType.Chat]            = new ActionUI("Chatbot", "ask-ai");
-	AI.Actions[AI.ActionType.Summarization]   = new ActionUI("Summarization", "summarization");
-	AI.Actions[AI.ActionType.Translation]     = new ActionUI("Translation", "translation");
-	AI.Actions[AI.ActionType.TextAnalyze]     = new ActionUI("Text analysis", "text-analysis-ai");
-	AI.Actions[AI.ActionType.ImageGeneration] = new ActionUI("Image generation", "image-ai", "", AI.CapabilitiesUI.Image);
-	AI.Actions[AI.ActionType.OCR]             = new ActionUI("OCR", "ocr", "", AI.CapabilitiesUI.Vision);
-	AI.Actions[AI.ActionType.Vision]          = new ActionUI("Vision", "vision-ai", "", AI.CapabilitiesUI.Vision);
-
-	AI.ActionsGetKeys = function()
-	{
-		return [
-			AI.ActionType.Chat,
-			AI.ActionType.Summarization,
-			AI.ActionType.Translation,
-			AI.ActionType.TextAnalyze,
-			AI.ActionType.ImageGeneration,
-			AI.ActionType.OCR,
-			AI.ActionType.Vision
-		];
-	};
-
-	AI.ActionsGetSorted = function()
-	{
-		let keys = AI.ActionsGetKeys();
-		let count = keys.length;
-		let actions = new Array(count);
-		for (let i = 0; i < count; i++)
-		{
-			let src = AI.Actions[keys[i]];
-			actions[i] = {
-				id : keys[i],
-				name : Asc.plugin.tr(src.name),
-				icon : src.icon,
-				model : src.model,
-				capabilities : src.capabilities
-			}
-		}
-		return actions;
-	};
-
-	var actions_key = "onlyoffice_ai_actions_key";
-	AI.ActionsSave = function()
-	{
-		try
-		{
-			// exclude external models
-			let excludeMap = Object.create(null);
-			for (let key in AI.Actions) {
-				if (AI.Actions[key].model.startsWith(AI.externalModelPrefix)) {
-					excludeMap[key] = AI.Actions[key].model;
-					AI.Actions[key].model = "";
-				}
-			}
-
-			window.localStorage.setItem(actions_key, JSON.stringify(AI.Actions));
-			
-			// restore excluded
-			for (let key in excludeMap) {
-				AI.Actions[key].model = excludeMap[key];
-			}
-			return true;
-		}
-		catch (e)
-		{
-		}		
-		return false;
-	};
-
-	AI.ActionsLoad = function()
-	{
-		let obj = null;
-		try
-		{
-			if (AI.serverSettings) {
-				obj = AI.serverSettings.actions;
-			} else {
-				obj = JSON.parse(window.localStorage.getItem(actions_key));
-			}
-		}
-		catch (e)
-		{
-			obj = (AI.DEFAULT_SERVER_SETTINGS && AI.DEFAULT_SERVER_SETTINGS.actions) ? AI.DEFAULT_SERVER_SETTINGS.actions : null;
-		}
-		
-		if (obj)
-		{
-			for (let i in obj)
-			{
-				if (AI.Actions[i] && obj[i].model)
-					AI.Actions[i].model = obj[i].model;
-			}
-			return true;
-		}
-		return false;
-	};
-
-	AI.ActionsChange = function(id, model)
-	{
-		if (AI.Actions[id])
-		{
-			AI.Actions[id].model = model;
-			AI.ActionsSave();
-		}
-
-		if (Asc.plugin.sendEvent)
-			Asc.plugin.sendEvent("ai_onActionsChange", window.getActionsInfo());
-	};
-
-	AI.ActionsLoad();
 }

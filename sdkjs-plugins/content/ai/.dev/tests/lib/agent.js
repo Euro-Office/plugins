@@ -27,20 +27,54 @@ const SCRIPTS = [
 ];
 
 // Asc.ButtonContextMenu / Asc.ButtonToolbar stand-ins: any property can be
-// set and any method (addCheckers, attachOnClick, copy, ...) can be called.
+// set and any other method can be called. Like plugins.dev.js (sdkjs-plugins
+// v1), a button registers itself with its parent (`childs`), addCheckers()
+// stores the option types and copy() makes a sibling with the same id,
+// editors, separator and checkers. Every button is recorded in `created`.
 class StubButton {
-	constructor(parent) {
-		this.parent = parent;
+	constructor(parent, id) {
+		// Defaults of plugins.dev.js Button: no "pdf" unless editors is set.
+		this.editors = ["word", "cell", "slide"];
+		this.text = "";
+		this.icons = null;
+		this.data = "";
+		this.separator = false;
+		this.enableToggle = false;
+		this.split = false;
+		this.menu = null;
+		this.parent = parent || null;
+		this.id = id === undefined ? "btn-" + (StubButton.seq = (StubButton.seq || 0) + 1) : id;
 		this.clicks = [];
-		return new Proxy(this, {
+		this.checkers = [];
+		this.childs = null;
+		if (this.parent) {
+			if (!this.parent.childs) this.parent.childs = [];
+			this.parent.childs.push(this);
+		}
+		const proxy = new Proxy(this, {
 			get(target, prop, receiver) {
 				if (prop in target || typeof prop === "symbol")
 					return Reflect.get(target, prop, receiver);
-				return (...args) => (prop === "attachOnClick" ? target.clicks.push(args[0]) : receiver);
+				return () => receiver;
 			}
 		});
+		StubButton.created.push(proxy);
+		return proxy;
+	}
+	addCheckers(...types) { this.checkers = types; }
+	attachOnClick(handler) { this.clicks.push(handler); }
+	copy() {
+		const ret = new this.constructor(this.parent, this.id);
+		ret.editors = this.editors;
+		ret.separator = this.separator;
+		ret.checkers = this.checkers.slice();
+		ret.clicks = this.clicks;   // the click handler is registered per id
+		return ret;
 	}
 }
+StubButton.created = [];
+class StubContextMenuButton extends StubButton {}
+class StubToolbarButton extends StubButton {}
 
 // Asc.PluginWindow stand-in that records commands sent to chat.html.
 export class FakePluginWindow {
@@ -108,8 +142,8 @@ export async function createAgent({ editorType = "word", fake = {}, supportsTool
 		Asc: {
 			plugin: host.plugin,
 			scope: host.scope,
-			ButtonContextMenu: StubButton,
-			ButtonToolbar: StubButton,
+			ButtonContextMenu: StubContextMenuButton,
+			ButtonToolbar: StubToolbarButton,
 			PluginWindow: FakePluginWindow
 		},
 		AI: {
@@ -121,7 +155,9 @@ export async function createAgent({ editorType = "word", fake = {}, supportsTool
 	if (localStorage)
 		for (const [k, v] of Object.entries(localStorage)) sandbox.ctx.localStorage.setItem(k, v);
 	sandbox.load(...SCRIPTS);
+	StubButton.created = [];
 	await sandbox.ctx.registerButtons(sandbox.ctx);
+	const buttons = StubButton.created.slice();
 
 	sandbox.ctx.chatWindowShow();
 	const win = FakePluginWindow.last;
@@ -132,6 +168,9 @@ export async function createAgent({ editorType = "word", fake = {}, supportsTool
 	// function (request) => decision | undefined (undefined leaves it pending).
 	const agent = {
 		sandbox, ctx: sandbox.ctx, host, engine, win, fake,
+		// Context menu and toolbar buttons created by registerButtons(), in order.
+		contextMenu: buttons.filter((b) => b instanceof StubContextMenuButton),
+		toolbar: buttons.filter((b) => b instanceof StubToolbarButton),
 		approvals: [],
 		decide: "allow",
 		// Sends a chat turn in chat.js's format { messages, usedTools, turnId }.
