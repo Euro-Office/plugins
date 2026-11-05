@@ -482,9 +482,13 @@
 		rerenderToolCallAt(approval.listIndex);
 	}
 
-	function clearToolApprovals(toolCallId) {
+	// keepEditorRequests: approvals for editor-initiated calls ("ai_onCallTool")
+	// do not belong to the chat turn and stay until they are answered.
+	function clearToolApprovals(toolCallId, keepEditorRequests) {
 		let touched = {};
 		for (let id in toolApprovals) {
+			if (keepEditorRequests && toolApprovals[id].data && toolApprovals[id].data.source === 'editor')
+				continue;
 			if (toolCallId === undefined || toolApprovals[id].toolCallId === toolCallId) {
 				touched[toolApprovals[id].listIndex] = true;
 				delete toolApprovals[id];
@@ -1185,7 +1189,7 @@
 			}
 		}
 
-		clearToolApprovals();
+		clearToolApprovals(undefined, true);
 		removeTyping();
 		finishAgentExecution();
 		document.getElementById('input_message').focus();

@@ -339,34 +339,26 @@ constructor() {\n\
 		
 	});
 
+	// Tool calls from an external host. Not emitted by sdkjs itself: a host
+	// page (e.g. the DocSpace AI agent) registers a DocsAPI connector
+	// (docEditor.createConnector()) and calls
+	// connector.sendEvent("ai_onCallTool", { name, arguments }); sdkjs relays it
+	// (common/editorscommon.js -> g_asc_plugins.externalConnectorMessage ->
+	// "SendEvent" plugin method -> onPluginEvent, common/plugins.js) to plugins
+	// that attached the event, and relays our "ai_onCallToolResult" back to the
+	// connector the same way. The host is not trusted to have asked the user,
+	// so the call goes through the same argument parsing and approval as the
+	// chat agent (scripts/engine/toolApproval.js): read-only tools run
+	// directly, all others need approval in the chat window (opened if
+	// needed), unknown tools and bad arguments give an error result.
 	_this.attachEditorEvent("ai_onCallTool", async function(toolCall) {
-		let funcName = toolCall.name;
-		let funcArgs = toolCall.arguments;
-		let argsObj = null;
-
+		let toolResult;
 		try {
-			argsObj = typeof funcArgs === 'string' ? JSON.parse(funcArgs) : funcArgs;
-		} catch(e) {
-			argsObj = {};
-		}
-
-		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
-
-		let toolResult = {};
-		try {
-			toolResult = await window.EditorHelper.names2funcs[funcName].call(argsObj);
-			if (!toolResult)
-				toolResult = {};
-			toolResult.message = "System function '" + funcName + "' executed successfully";
+			toolResult = await window.ToolApproval.handleEditorToolCall(toolCall);
 		} catch (e) {
-			let errorMsg = "Error calling function: " + funcName;
-			console.error(errorMsg);
-			toolResult = {
-				error: errorMsg
-			};
+			console.error("ai_onCallTool failed:", e);
+			toolResult = { error: "Error calling function: " + (toolCall && toolCall.name ? toolCall.name : "") };
 		}
-
-		await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
 		window.Asc.plugin.sendEvent("ai_onCallToolResult", toolResult);
 	});
 
@@ -735,6 +727,8 @@ window.Asc.plugin.button = async function(id, windowId) {
 			if (window.AgentState.denyPendingApprovals)
 				window.AgentState.denyPendingApprovals();
 		}
+		if (window.ToolApproval)
+			window.ToolApproval.unbindWindow(window.chatWindow);
 		clearChatState();
 		delete window.chatWindow;
 	}

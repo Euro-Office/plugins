@@ -104,7 +104,9 @@ async function registerButtons(window, undefined)
 		let hasOpenedOnce = false;
 
 		var chatWindow = new window.Asc.PluginWindow();
+		window.ToolApproval.bindWindow(chatWindow);
 		chatWindow.attachEvent("onWindowReady", function() {
+			window.ToolApproval.setWindowReady(chatWindow);
 			Asc.Editor.callMethod("ResizeWindow", [chatWindow.id, [400, 400], [400, 400], [0, 0]]);
 			if(!hasOpenedOnce && attachedText && attachedText.trim()) {
 				chatWindow.command("onAttachedText", isForceSend
@@ -150,102 +152,33 @@ async function registerButtons(window, undefined)
 
 		// ── Tool approval ──────────────────────────────────────────────────
 		// Every tool that is not marked readOnly needs the user's consent in
-		// the chat window before it runs. "Always allow" is remembered per tool
-		// in localStorage, except for writeMacro (arbitrary code), where it only
-		// lasts as long as this chat window.
-		const ALWAYS_ALLOW_KEY = "onlyoffice_ai_tool_always_allow";
-		const SESSION_ONLY_TOOLS = { "writeMacro": true };
-		let sessionAllowedTools = {};
-		let pendingApprovals = {};
-		let approvalCounter = 0;
-
-		function getPersistedAllowedTools() {
-			try {
-				let value = JSON.parse(window.localStorage.getItem(ALWAYS_ALLOW_KEY) || "{}");
-				return (value && typeof value === "object" && !Array.isArray(value)) ? value : {};
-			} catch (e) {
-				return {};
-			}
-		}
-
-		function rememberAllowedTool(funcName) {
-			if (SESSION_ONLY_TOOLS[funcName]) {
-				sessionAllowedTools[funcName] = true;
-				return;
-			}
-			let allowed = getPersistedAllowedTools();
-			allowed[funcName] = true;
-			try {
-				window.localStorage.setItem(ALWAYS_ALLOW_KEY, JSON.stringify(allowed));
-			} catch (e) {
-				sessionAllowedTools[funcName] = true;
-			}
-		}
-
-		function isToolPreapproved(funcName) {
-			if (window.EditorHelper.isReadOnly(funcName))
-				return true;
-			if (sessionAllowedTools[funcName])
-				return true;
-			if (SESSION_ONLY_TOOLS[funcName])
-				return false;
-			return getPersistedAllowedTools()[funcName] === true;
-		}
+		// the chat window before it runs (scripts/engine/toolApproval.js, shared
+		// with editor-initiated calls from "ai_onCallTool" in code.js).
 
 		// Resolves true if the tool may run, false if the user declined, the
 		// agent was stopped or the chat window went away.
-		function requestToolApproval(toolCallId, funcName, argsObj) {
-			if (isToolPreapproved(funcName))
-				return Promise.resolve(true);
+		async function requestToolApproval(toolCallId, funcName, argsObj) {
+			if (window.ToolApproval.isPreapproved(funcName))
+				return true;
 			if (AgentState.isStopped)
-				return Promise.resolve(false);
-
-			let id = "approval_" + (++approvalCounter) + "_" + (toolCallId || "");
-			return new Promise(function(resolve) {
-				pendingApprovals[id] = { resolve: resolve, functionName: funcName };
-				let request = {
-					id: id,
-					toolCallId: toolCallId,
-					functionName: funcName,
-					humanName: window.EditorHelper.getHumanName(funcName),
-					arguments: JSON.stringify(argsObj || {}, null, 2)
-				};
-				if (funcName === "writeMacro" && argsObj && typeof argsObj.code === "string")
-					request.code = argsObj.code;
-				try {
-					chatWindow.command("onToolApprovalRequest", request);
-				} catch (e) {
-					console.error("Failed to request tool approval:", e);
-					delete pendingApprovals[id];
-					resolve(false);
-				}
+				return false;
+			return await window.ToolApproval.request({
+				toolCallId: toolCallId,
+				functionName: funcName,
+				args: argsObj,
+				source: "chat"
 			});
 		}
 
-		function denyPendingApprovals() {
-			let ids = Object.keys(pendingApprovals);
-			for (let i = 0; i < ids.length; i++) {
-				let pending = pendingApprovals[ids[i]];
-				delete pendingApprovals[ids[i]];
-				pending.resolve(false);
-			}
-		}
-		AgentState.denyPendingApprovals = denyPendingApprovals;
+		AgentState.denyPendingApprovals = window.ToolApproval.denyAll;
 
 		chatWindow.attachEvent("onToolApprovalResponse", function(data) {
-			if (!data || !data.id || !pendingApprovals[data.id])
-				return;
-			let pending = pendingApprovals[data.id];
-			delete pendingApprovals[data.id];
-
-			if (data.decision === "always")
-				rememberAllowedTool(pending.functionName);
-			pending.resolve(!AgentState.isStopped && (data.decision === "allow" || data.decision === "always"));
+			window.ToolApproval.respond(data, AgentState.isStopped);
 		});
 
 		chatWindow.attachEvent("onStopAgent", function() {
 			AgentState.isStopped = true;
-			denyPendingApprovals();
+			window.ToolApproval.denyAll();
 		});
 
 		// ── Citations ──────────────────────────────────────────────────────
