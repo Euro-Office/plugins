@@ -1,0 +1,134 @@
+(function(){
+	let func = new RegisteredFunction({
+		"name": "editParagraph",
+		"text": "Edit Paragraph",
+		"description": "Edits the document by top-level element index (as returned by readDocument). Actions: 'replace' replaces the text of a paragraph (keeps its style), 'insertBefore'/'insertAfter' add a new paragraph next to the element (optionally with a style such as 'Heading 1'), 'delete' removes the element. Indexes are 1-based; after inserting or deleting, later indexes shift, so re-read the document if you need further edits.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"index": {
+					"type": "number",
+					"description": "1-based index of the target element."
+				},
+				"action": {
+					"type": "string",
+					"enum": ["replace", "insertBefore", "insertAfter", "delete"],
+					"description": "What to do with the element."
+				},
+				"text": {
+					"type": "string",
+					"description": "New paragraph text (required for replace/insert)."
+				},
+				"style": {
+					"type": "string",
+					"description": "Optional paragraph style name for inserted or replaced paragraphs, e.g. 'Heading 1', 'Normal', 'List Paragraph'."
+				}
+			},
+			"required": ["index", "action"]
+		},
+		"examples": [
+			{
+				"prompt": "Add a heading 'Summary' after paragraph 3",
+				"arguments": { "index": 3, "action": "insertAfter", "text": "Summary", "style": "Heading 1" }
+			},
+			{
+				"prompt": "Delete the second paragraph",
+				"arguments": { "index": 2, "action": "delete" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const actions = ["replace", "insertBefore", "insertAfter", "delete"];
+		if (typeof params.index !== 'number' || params.index < 1)
+			throw new window.AgentState.ToolError('Parameter "index" must be a number >= 1. Got: ' + JSON.stringify(params.index));
+		if (!actions.includes(params.action))
+			throw new window.AgentState.ToolError('Parameter "action" must be one of ' + JSON.stringify(actions) + '. Got: ' + JSON.stringify(params.action));
+		if (params.action !== "delete" && typeof params.text !== 'string')
+			throw new window.AgentState.ToolError('Parameter "text" is required for action "' + params.action + '".');
+		if (params.style !== undefined && params.style !== null && typeof params.style !== 'string')
+			throw new window.AgentState.ToolError('Parameter "style" must be a string.');
+
+		Asc.scope.editParams = {
+			pos: Math.floor(params.index) - 1,
+			action: params.action,
+			text: params.text || "",
+			style: params.style || null
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.editParams;
+			let doc = Api.GetDocument();
+			let total = doc.GetElementsCount();
+			if (p.pos >= total)
+				return { error: "Index " + (p.pos + 1) + " is out of range. The document has " + total + " elements." };
+			let el = doc.GetElement(p.pos);
+
+			function applyStyle(par) {
+				if (!p.style)
+					return null;
+				let style = doc.GetStyle(p.style);
+				if (!style)
+					return "Style \"" + p.style + "\" not found; paragraph kept its current style.";
+				par.SetStyle(style);
+				return null;
+			}
+
+			let warning = null;
+			switch (p.action) {
+				case "delete": {
+					doc.RemoveElement(p.pos);
+					return { totalElements: doc.GetElementsCount() };
+				}
+				case "replace": {
+					if (el.GetClassType() !== "paragraph")
+						return { error: "Element " + (p.pos + 1) + " is a " + el.GetClassType() + ", not a paragraph. Use writeMacro to edit it." };
+					let lines = p.text.split("\n");
+					let firstRun = el.GetElementsCount() > 0 ? el.GetElement(0) : null;
+					let textPr = (firstRun && firstRun.GetClassType() === "run") ? firstRun.GetTextPr() : null;
+					el.RemoveAllElements();
+					let run = Api.CreateRun();
+					if (textPr)
+						run.SetTextPr(textPr);
+					run.AddText(lines[0]);
+					el.AddElement(run);
+					warning = applyStyle(el);
+					let insertAt = p.pos + 1;
+					for (let i = 1; i < lines.length; i++) {
+						let par = Api.CreateParagraph();
+						let st = el.GetStyle();
+						if (st)
+							par.SetStyle(st);
+						par.AddText(lines[i]);
+						doc.AddElement(insertAt++, par);
+					}
+					break;
+				}
+				case "insertBefore":
+				case "insertAfter": {
+					let insertAt = p.action === "insertBefore" ? p.pos : p.pos + 1;
+					let lines = p.text.split("\n");
+					for (let i = 0; i < lines.length; i++) {
+						let par = Api.CreateParagraph();
+						par.AddText(lines[i]);
+						let w = applyStyle(par);
+						if (w)
+							warning = w;
+						doc.AddElement(insertAt + i, par);
+					}
+					break;
+				}
+			}
+			let res = { totalElements: doc.GetElementsCount() };
+			if (warning)
+				res.warning = warning;
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})();

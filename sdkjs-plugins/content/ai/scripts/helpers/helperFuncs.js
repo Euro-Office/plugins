@@ -101,24 +101,27 @@ EditorHelperImpl.prototype._getEditorContext = function() {
 			type: "word",
 			name: "text document",
 			apiName: "Document API",
-			macroExample: "Api.GetDocument().GetElement(0).GetText()"
+			macroExample: "Api.GetDocument().GetElement(0).GetText()",
+			readTools: "readDocument, getSelection"
 		};
 	} else if (editorType === "cell") {
 		return {
 			type: "cell",
 			name: "spreadsheet",
 			apiName: "Spreadsheet API",
-			macroExample: "Api.GetActiveSheet().GetRange(\"A1\").GetValue()"
+			macroExample: "Api.GetActiveSheet().GetRange(\"A1\").GetValue()",
+			readTools: "getWorkbookInfo, readRange"
 		};
 	} else if (editorType === "slide") {
 		return {
 			type: "slide",
 			name: "presentation",
 			apiName: "Presentation API",
-			macroExample: "Api.GetPresentation().GetSlidesCount()"
+			macroExample: "Api.GetPresentation().GetSlidesCount()",
+			readTools: "readPresentation"
 		};
 	}
-	return { type: editorType, name: editorType, apiName: "API", macroExample: "" };
+	return { type: editorType, name: editorType, apiName: "API", macroExample: "", readTools: "writeMacro" };
 };
 
 EditorHelperImpl.prototype.getToolsSystemPrompt = function() {
@@ -134,6 +137,7 @@ You have access to tools that can interact with the " + ctx.name + " content.\n\
 IMPORTANT RULES FOR DOCUMENT OPERATIONS:\n\
 \n\
 1. When the user asks about the " + ctx.name + " content or wants to perform an action on it, you MUST use the available tools.\n\
+   Before editing, read what you need with the reading tools (" + ctx.readTools + ") instead of guessing. A snapshot of the user's current selection is included below; use it first.\n\
 2. First, check if there is a specialized tool that matches the request (e.g., textStyle, addChart, rewriteText, etc.).\n\
 3. If no specialized tool fits, use the \"writeMacro\" tool. It can execute any JavaScript code using the OnlyOffice " + ctx.apiName + ".\n\
 4. The \"writeMacro\" tool can also READ/GET data from the " + ctx.name + ". Make the last expression in the code be the value you want to retrieve — it will be returned as the tool result. Example: " + ctx.macroExample + "\n\

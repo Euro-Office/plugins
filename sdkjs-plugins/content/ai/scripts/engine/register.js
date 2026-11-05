@@ -54,7 +54,7 @@ async function registerButtons(window, undefined)
 		if (window.chatWindow) {
 			window.chatWindow.activate();
 			if (attachedText && attachedText.trim()) {
-				window.chatWindow.command("onAttachedText", { text: attachedText, forceSend: true });
+				window.chatWindow.command("onAttachedText", { text: attachedText, forceSend: !!isForceSend });
 			}
 			return;
 		}
@@ -111,7 +111,7 @@ async function registerButtons(window, undefined)
 		});
 		
 		var AgentState = {
-			MAX_LOOP_ITERATIONS : 10,
+			MAX_LOOP_ITERATIONS : 20,
 			isStopped : false,
 			tools : null,
 			systemToolsPrompt : "",
@@ -178,6 +178,22 @@ async function registerButtons(window, undefined)
 				}
 			}
 
+			// Live snapshot of the open file and the user's selection. Rebuilt on
+			// every user turn and appended to the system prompt (not persisted).
+			if (window.DocumentContext) {
+				let ctxPrompt = window.DocumentContext.toPrompt(await window.DocumentContext.get());
+				if (ctxPrompt) {
+					if (requestData.messages.length > 0 && requestData.messages[0].role === "system") {
+						requestData.messages[0] = {
+							role: "system",
+							content: requestData.messages[0].content + "\n\n" + ctxPrompt
+						};
+					} else {
+						requestData.messages.unshift({ role: "system", content: ctxPrompt });
+					}
+				}
+			}
+
 			// LOOP
 			let iteration = 0;
 			while (iteration < AgentState.MAX_LOOP_ITERATIONS && !AgentState.isStopped) {
@@ -223,75 +239,77 @@ async function registerButtons(window, undefined)
 
 				// CHECK TOOLS
 				if (toolCalls && toolCalls.length > 0) {
+					// One assistant message carrying all tool calls, followed by one
+					// tool message per call (required by OpenAI-compatible APIs).
+					requestData.messages.push({
+						role: 'assistant',
+						content: result || null,
+						tool_calls: toolCalls
+					});
+
+					let failed = false;
 					for (let toolCall of toolCalls) {
-						if (AgentState.isStopped)
-							break;
+						let funcName = toolCall.function ? toolCall.function.name : "";
 
-						try {
-							let funcName = toolCall.function.name;
-							let funcArgs = toolCall.function.arguments;
-
-							let argsObj = null;
-							try {
-								argsObj = typeof funcArgs === 'string' ? JSON.parse(funcArgs) : funcArgs;
-							} catch(e) {
-								argsObj = {};
-							}
-
-							chatWindow.command("onToolCallStart", {
-								type: 'native',
-								id: toolCall.id,
-								functionName: funcName,
-								humanName: window.EditorHelper.getHumanName(funcName),
-								arguments: JSON.stringify(argsObj, null, 2)
-							});
-
-							let toolResult = {};
-							try {
-								let toolResultMessage = await window.EditorHelper.names2funcs[funcName].call(argsObj);
-								if (toolResultMessage)
-									toolResultMessage = Asc.plugin.tr("Function executed successfully") + "\n" + JSON.stringify(toolResultMessage);
-								else
-									toolResultMessage = Asc.plugin.tr("Function executed successfully");
-								toolResult.message = toolResultMessage;
-							} catch (e) {
-								let errorMsg = Asc.plugin.tr("Error:") + "\n";
-								if (e.name === "ToolError") {
-									errorMsg += ("\n" + e.message);
-								}
-								toolResult = {
-									error: errorMsg
-								};
-							}
-
-							chatWindow.command("onToolCallEnd", {
-								type: 'native',
-								id: toolCall.id,
-								functionName: funcName,
-								arguments: JSON.stringify(argsObj, null, 2),
-								result: toolResult
-							});
-
+						if (AgentState.isStopped || failed) {
 							requestData.messages.push({
-								role: 'assistant',
-								content: result || null,
-								tool_calls: [toolCall]
-							});
-
-							let toolMessage = {
 								role: 'tool',
 								tool_call_id: toolCall.id,
-								content: toolResult.message || toolResult.error || 'Success'
-							};
-							requestData.messages.push(toolMessage);
+								content: AgentState.isStopped ? "Cancelled by the user." : "Skipped because a previous tool call failed."
+							});
+							continue;
+						}
 
-							if (toolResult.error) {
-								break;
-							}
+						let funcArgs = toolCall.function ? toolCall.function.arguments : null;
+						let argsObj = {};
+						let argsError = null;
+						try {
+							argsObj = (typeof funcArgs === 'string') ? (funcArgs.trim() ? JSON.parse(funcArgs) : {}) : (funcArgs || {});
+						} catch (e) {
+							argsError = "Arguments are not valid JSON: " + e.message;
+						}
+
+						chatWindow.command("onToolCallStart", {
+							type: 'native',
+							id: toolCall.id,
+							functionName: funcName,
+							humanName: window.EditorHelper.getHumanName(funcName),
+							arguments: JSON.stringify(argsObj, null, 2)
+						});
+
+						let toolResult = {};
+						try {
+							if (argsError)
+								throw new AgentState.ToolError(argsError);
+							let func = window.EditorHelper.names2funcs[funcName];
+							if (!func)
+								throw new AgentState.ToolError("Unknown tool \"" + funcName + "\". Available tools: " + Object.keys(window.EditorHelper.names2funcs).join(", "));
+
+							let toolResultMessage = await func.call(argsObj);
+							if (toolResultMessage)
+								toolResultMessage = Asc.plugin.tr("Function executed successfully") + "\n" + JSON.stringify(toolResultMessage);
+							else
+								toolResultMessage = Asc.plugin.tr("Function executed successfully");
+							toolResult.message = toolResultMessage;
 						} catch (e) {
 							console.error("Tool execution error:", e);
-							break;
+							toolResult.error = Asc.plugin.tr("Error:") + "\n" + (e && e.message ? e.message : String(e));
+							failed = true;
 						}
+
+						chatWindow.command("onToolCallEnd", {
+							type: 'native',
+							id: toolCall.id,
+							functionName: funcName,
+							arguments: JSON.stringify(argsObj, null, 2),
+							result: toolResult
+						});
+
+						requestData.messages.push({
+							role: 'tool',
+							tool_call_id: toolCall.id,
+							content: toolResult.message || toolResult.error || 'Success'
+						});
 					}
 					continue;
 				}
@@ -796,6 +814,69 @@ async function registerButtons(window, undefined)
 
 			await Asc.Library.InsertAsMD(result);
 		});
+	}
+
+	// Smart actions: context-aware agent tasks for the current selection.
+	// Each action hands a prompt to the chat agent, which sees the selection
+	// (see DocumentContext) and can read/modify the document through tools.
+	if (Asc.Editor.getType() !== "pdf")
+	{
+		const LANG_HINT = " Reply in the language of the selected content.";
+		const SMART_ACTIONS = {
+			word: [
+				{ text: "Improve writing", prompt: "Improve the clarity, grammar and style of the selected text while keeping its meaning, tone and language. Apply the result to the document with replaceSelection and trackChanges set to true, then briefly say what you changed." },
+				{ text: "Make shorter", prompt: "Shorten the selected text by roughly half without losing key information. Apply it with replaceSelection (trackChanges true)." },
+				{ text: "Summarize in chat", prompt: "Summarize the selected text in 3-5 bullet points. Answer in the chat only; do not modify the document." },
+				{ text: "Extract action items", prompt: "List all action items, decisions and deadlines found in the selected text as a checklist. Answer in the chat only; do not modify the document." },
+				{ text: "Convert to table", prompt: "Convert the selected text into a well-structured table in the document, replacing the selection. Use writeMacro if needed." },
+				{ text: "Continue writing", prompt: "Continue writing one paragraph after the selected text, matching its style and language. Insert it as a new paragraph directly after the last selected paragraph (use getSelection to find its index and editParagraph with insertAfter)." }
+			],
+			cell: [
+				{ text: "Explain this data", prompt: "Explain the selected data: what it represents, its structure, and the key patterns, trends or outliers. Use readRange if the preview is truncated. Answer in the chat only; do not modify the sheet." },
+				{ text: "Summarize & insights", prompt: "Analyse the selected data and give a short summary with the 3-5 most important insights, including relevant totals, averages or changes. Answer in the chat only; do not modify the sheet." },
+				{ text: "Clean up data", prompt: "Clean the selected data: trim extra spaces, make capitalization consistent, convert numbers and dates stored as text, and normalize obvious inconsistencies. Do not change formulas. Read it with readRange, write the cleaned values back to the same range with writeRange, then list what you changed." },
+				{ text: "Fill missing values", prompt: "Fill the empty cells in the selected data with sensible values inferred from the surrounding data, then explain what you filled." },
+				{ text: "Add calculated column", prompt: "Look at the selected table and add one useful calculated column directly to its right (e.g. total, difference, growth or ratio) with a header and real spreadsheet formulas, using writeRange. Explain the formula." },
+				{ text: "Create chart", prompt: "Create the most suitable chart for the selected data and briefly explain why you chose that chart type." },
+				{ text: "Highlight anomalies", prompt: "Find and highlight anomalies or outliers in the selected data, then explain what you found." },
+				{ text: "Explain formula", prompt: "Explain the formulas in the selected cells in plain language (read them with readRange and includeFormulas true) and point out possible errors. Answer in the chat only." }
+			],
+			slide: [
+				{ text: "Improve text", prompt: "Improve the selected slide text: clearer, more concise and more engaging, keeping the meaning and language. Replace the selection with the result using replaceSelection." },
+				{ text: "Make concise", prompt: "Rewrite the selected slide text as short, punchy bullet points suitable for a slide and replace the selection with replaceSelection." },
+				{ text: "Summarize this slide", prompt: "Summarize the current slide (use readPresentation with currentSlideOnly) in 2-3 sentences that could be used as speaker notes. Answer in the chat only." }
+			]
+		};
+
+		let editorType = Asc.Editor.getType();
+		let actions = SMART_ACTIONS[editorType] || [];
+		if (actions.length) {
+			let buttonSmart = new Asc.ButtonContextMenu(buttonMain);
+			buttonSmart.text = "Smart actions";
+			buttonSmart.icons = getContextMenuButtonIcons("ask-ai");
+			buttonSmart.editors = [editorType];
+			buttonSmart.addCheckers("Selection");
+
+			for (let i = 0; i < actions.length; i++) {
+				let action = actions[i];
+				let button = new Asc.ButtonContextMenu(buttonSmart);
+				button.text = action.text;
+				button.editors = [editorType];
+				button.addCheckers("Selection");
+				button.attachOnClick(function() {
+					chatWindowShow(action.prompt + LANG_HINT, true);
+				});
+			}
+
+			let buttonAsk = new Asc.ButtonContextMenu(buttonSmart);
+			buttonAsk.text = "Ask about selection...";
+			buttonAsk.separator = true;
+			buttonAsk.editors = [editorType];
+			buttonAsk.addCheckers("Selection");
+			buttonAsk.attachOnClick(function() {
+				chatWindowShow(Asc.plugin.tr("About the selection:") + " ", false);
+			});
+		}
 	}
 
 	if (true)

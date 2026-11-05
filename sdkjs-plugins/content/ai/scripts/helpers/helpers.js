@@ -411,6 +411,139 @@ HELPERS.word.push((function(){
 })());
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
+		"name": "editParagraph",
+		"description": "Edits the document by top-level element index (as returned by readDocument). Actions: 'replace' replaces the text of a paragraph (keeps its style), 'insertBefore'/'insertAfter' add a new paragraph next to the element (optionally with a style such as 'Heading 1'), 'delete' removes the element. Indexes are 1-based; after inserting or deleting, later indexes shift, so re-read the document if you need further edits.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"index": {
+					"type": "number",
+					"description": "1-based index of the target element."
+				},
+				"action": {
+					"type": "string",
+					"enum": ["replace", "insertBefore", "insertAfter", "delete"],
+					"description": "What to do with the element."
+				},
+				"text": {
+					"type": "string",
+					"description": "New paragraph text (required for replace/insert)."
+				},
+				"style": {
+					"type": "string",
+					"description": "Optional paragraph style name for inserted or replaced paragraphs, e.g. 'Heading 1', 'Normal', 'List Paragraph'."
+				}
+			},
+			"required": ["index", "action"]
+		},
+		"examples": [
+			{
+				"prompt": "Add a heading 'Summary' after paragraph 3",
+				"arguments": { "index": 3, "action": "insertAfter", "text": "Summary", "style": "Heading 1" }
+			},
+			{
+				"prompt": "Delete the second paragraph",
+				"arguments": { "index": 2, "action": "delete" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const actions = ["replace", "insertBefore", "insertAfter", "delete"];
+		if (typeof params.index !== 'number' || params.index < 1)
+			throw new window.AgentState.ToolError('Parameter "index" must be a number >= 1. Got: ' + JSON.stringify(params.index));
+		if (!actions.includes(params.action))
+			throw new window.AgentState.ToolError('Parameter "action" must be one of ' + JSON.stringify(actions) + '. Got: ' + JSON.stringify(params.action));
+		if (params.action !== "delete" && typeof params.text !== 'string')
+			throw new window.AgentState.ToolError('Parameter "text" is required for action "' + params.action + '".');
+		if (params.style !== undefined && params.style !== null && typeof params.style !== 'string')
+			throw new window.AgentState.ToolError('Parameter "style" must be a string.');
+
+		Asc.scope.editParams = {
+			pos: Math.floor(params.index) - 1,
+			action: params.action,
+			text: params.text || "",
+			style: params.style || null
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.editParams;
+			let doc = Api.GetDocument();
+			let total = doc.GetElementsCount();
+			if (p.pos >= total)
+				return { error: "Index " + (p.pos + 1) + " is out of range. The document has " + total + " elements." };
+			let el = doc.GetElement(p.pos);
+
+			function applyStyle(par) {
+				if (!p.style)
+					return null;
+				let style = doc.GetStyle(p.style);
+				if (!style)
+					return "Style \"" + p.style + "\" not found; paragraph kept its current style.";
+				par.SetStyle(style);
+				return null;
+			}
+
+			let warning = null;
+			switch (p.action) {
+				case "delete": {
+					doc.RemoveElement(p.pos);
+					return { totalElements: doc.GetElementsCount() };
+				}
+				case "replace": {
+					if (el.GetClassType() !== "paragraph")
+						return { error: "Element " + (p.pos + 1) + " is a " + el.GetClassType() + ", not a paragraph. Use writeMacro to edit it." };
+					let lines = p.text.split("\n");
+					let firstRun = el.GetElementsCount() > 0 ? el.GetElement(0) : null;
+					let textPr = (firstRun && firstRun.GetClassType() === "run") ? firstRun.GetTextPr() : null;
+					el.RemoveAllElements();
+					let run = Api.CreateRun();
+					if (textPr)
+						run.SetTextPr(textPr);
+					run.AddText(lines[0]);
+					el.AddElement(run);
+					warning = applyStyle(el);
+					let insertAt = p.pos + 1;
+					for (let i = 1; i < lines.length; i++) {
+						let par = Api.CreateParagraph();
+						let st = el.GetStyle();
+						if (st)
+							par.SetStyle(st);
+						par.AddText(lines[i]);
+						doc.AddElement(insertAt++, par);
+					}
+					break;
+				}
+				case "insertBefore":
+				case "insertAfter": {
+					let insertAt = p.action === "insertBefore" ? p.pos : p.pos + 1;
+					let lines = p.text.split("\n");
+					for (let i = 0; i < lines.length; i++) {
+						let par = Api.CreateParagraph();
+						par.AddText(lines[i]);
+						let w = applyStyle(par);
+						if (w)
+							warning = w;
+						doc.AddElement(insertAt + i, par);
+					}
+					break;
+				}
+			}
+			let res = { totalElements: doc.GetElementsCount() };
+			if (warning)
+				res.warning = warning;
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
 		"name": "generateDocx",
 		"description": "Use this function if you are asked to generate a textual document (report, article, letter, etc.) based on a description. Input: Short description of what needs to be generated.",
 		"parameters": {
@@ -684,6 +817,66 @@ For radio buttons, always use the same \`groupKey\` for all options of the same 
 })());
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
+		"name": "getSelection",
+		"description": "Returns the text currently selected by the user in the document, together with the 1-based indexes of the paragraphs the selection covers. If nothing is selected, returns the paragraph at the cursor. Use this whenever the user refers to 'this', 'the selection', 'the selected text' or 'here'.",
+		"parameters": {
+			"type": "object",
+			"properties": {},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Translate the selected text",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function() {
+		return await Asc.Editor.callCommand(function(){
+			let doc = Api.GetDocument();
+			let range = doc.GetRangeBySelect();
+			let result = { hasSelection: false, text: "" };
+			let paragraphs = [];
+			if (range) {
+				result.text = range.GetText() || "";
+				result.hasSelection = result.text.length > 0;
+				try {
+					paragraphs = range.GetAllParagraphs ? range.GetAllParagraphs() : [];
+				} catch (e) {}
+			}
+			if (!result.hasSelection) {
+				let par = doc.GetCurrentParagraph();
+				if (par) {
+					paragraphs = [par];
+					result.currentParagraphText = par.GetText();
+				}
+			}
+			let indexes = [];
+			let total = doc.GetElementsCount();
+			for (let j = 0; j < paragraphs.length; j++) {
+				let pos = -1;
+				try {
+					pos = paragraphs[j].GetPosInParent ? paragraphs[j].GetPosInParent() : -1;
+					let parent = paragraphs[j].GetParent ? paragraphs[j].GetParent() : null;
+					if (parent && parent.GetClassType && parent.GetClassType() !== "document")
+						pos = -1;
+				} catch (e) {
+					pos = -1;
+				}
+				if (pos >= 0 && pos < total)
+					indexes.push(pos + 1);
+			}
+			if (indexes.length)
+				result.paragraphIndexes = indexes;
+			return result;
+		});
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
 		"name": "insertPage",
 		"description": "Inserts a blank page at the specified location in the document.",
 		"parameters": {
@@ -812,6 +1005,170 @@ HELPERS.word.push((function(){
 		if (Array.isArray(callResult)) {
 			throw new window.AgentState.ToolError("The style \"" + params.style + "\" does not exist! Here is a list of available styles:" + JSON.stringify(callResult));
 		}
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "readDocument",
+		"description": "Reads the content of the open text document. Returns the total number of top-level elements and, for the requested window, each element's 1-based index, type (paragraph/table/blockLvlSdt), style name and text. Use it to understand the document before editing it, to locate paragraphs by content, or to answer questions about the document. Call it again with a different startIndex to page through long documents.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"startIndex": {
+					"type": "number",
+					"description": "1-based index of the first element to return.",
+					"default": 1
+				},
+				"count": {
+					"type": "number",
+					"description": "Maximum number of elements to return (1-200).",
+					"default": 50
+				},
+				"maxCharsPerElement": {
+					"type": "number",
+					"description": "Truncate the text of each element to this many characters (50-5000).",
+					"default": 1000
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What is this document about?",
+				"arguments": {}
+			},
+			{
+				"prompt": "Read paragraphs 51 to 100",
+				"arguments": { "startIndex": 51, "count": 50 }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let start = params.startIndex === undefined ? 1 : params.startIndex;
+		let count = params.count === undefined ? 50 : params.count;
+		let maxChars = params.maxCharsPerElement === undefined ? 1000 : params.maxCharsPerElement;
+		if (typeof start !== 'number' || start < 1)
+			throw new window.AgentState.ToolError('Parameter "startIndex" must be a number >= 1. Got: ' + JSON.stringify(params.startIndex));
+		if (typeof count !== 'number' || count < 1)
+			throw new window.AgentState.ToolError('Parameter "count" must be a positive number. Got: ' + JSON.stringify(params.count));
+		if (typeof maxChars !== 'number' || maxChars < 1)
+			throw new window.AgentState.ToolError('Parameter "maxCharsPerElement" must be a positive number. Got: ' + JSON.stringify(params.maxCharsPerElement));
+
+		Asc.scope.readParams = {
+			start: Math.floor(start),
+			count: Math.min(200, Math.floor(count)),
+			maxChars: Math.max(50, Math.min(5000, Math.floor(maxChars)))
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.readParams;
+			let doc = Api.GetDocument();
+			let total = doc.GetElementsCount();
+			let elements = [];
+			let end = Math.min(total, p.start - 1 + p.count);
+			for (let i = p.start - 1; i < end; i++) {
+				let el = doc.GetElement(i);
+				if (!el)
+					continue;
+				let type = el.GetClassType();
+				let item = { index: i + 1, type: type };
+				try {
+					if (type === "paragraph") {
+						let style = el.GetStyle();
+						if (style)
+							item.style = style.GetName();
+						let numbering = el.GetNumbering ? el.GetNumbering() : null;
+						if (numbering)
+							item.list = true;
+					} else if (type === "table") {
+						item.rows = el.GetRowsCount();
+					}
+				} catch (e) {}
+				let text = "";
+				try {
+					text = el.GetText ? el.GetText() : "";
+				} catch (e) {}
+				text = (text || "").replace(/\r/g, "");
+				if (text.length > p.maxChars) {
+					item.truncated = true;
+					text = text.substring(0, p.maxChars) + "…";
+				}
+				item.text = text;
+				elements.push(item);
+			}
+			return {
+				totalElements: total,
+				returned: elements.length,
+				hasMore: end < total,
+				elements: elements
+			};
+		});
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "replaceSelection",
+		"description": "Replaces the text the user has selected with new text, keeping the surrounding formatting as far as possible. Use it to apply rewritten, translated, corrected or summarized text back to the selection. Requires a non-empty selection; call getSelection first if unsure. Set 'trackChanges' to true to make the change visible as a tracked revision.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"text": {
+					"type": "string",
+					"description": "The replacement text. Use \\n to separate paragraphs."
+				},
+				"trackChanges": {
+					"type": "boolean",
+					"description": "Record the replacement as a tracked change so the user can review it.",
+					"default": false
+				}
+			},
+			"required": ["text"]
+		},
+		"examples": [
+			{
+				"prompt": "Make the selected sentence more formal",
+				"arguments": { "text": "We would be pleased to assist you with this request." }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.text !== 'string')
+			throw new window.AgentState.ToolError('Parameter "text" is required and must be a string.');
+
+		let selected = await Asc.Library.GetSelectedText();
+		if (!selected || !selected.trim())
+			throw new window.AgentState.ToolError('Nothing is selected. Ask the user to select text, or use writeMacro/editParagraph to edit by paragraph index.');
+
+		let turnOffTrackChanges = false;
+		if (params.trackChanges) {
+			let isTrack = await Asc.Editor.callCommand(function(){
+				return Api.GetDocument().IsTrackRevisions();
+			});
+			if (!isTrack) {
+				await Asc.Editor.callCommand(function(){
+					Api.GetDocument().SetTrackRevisions(true);
+				});
+				turnOffTrackChanges = true;
+			}
+		}
+
+		try {
+			await Asc.Library.ReplaceTextSmart(params.text.split("\n"));
+		} finally {
+			if (turnOffTrackChanges) {
+				await Asc.Editor.callCommand(function(){
+					Api.GetDocument().SetTrackRevisions(false);
+				});
+			}
+		}
+
+		return { replacedCharacters: selected.length };
 	};
 
 	return func;
@@ -4084,6 +4441,155 @@ ${fontsContract}
 })());
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
+		"name": "readPresentation",
+		"description": "Reads the open presentation: total slide count, the current slide number, and for each requested slide the text of every shape (with shape index, type and placeholder type when available). Use it to understand or summarise the deck, find a slide by content, or decide where to make changes. Slide numbers are 1-based.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"slideNumber": {
+					"type": "number",
+					"description": "Read only this slide (1-based). Omit to read all slides (up to 'maxSlides')."
+				},
+				"currentSlideOnly": {
+					"type": "boolean",
+					"description": "Read only the slide currently shown in the editor.",
+					"default": false
+				},
+				"maxSlides": {
+					"type": "number",
+					"description": "Maximum number of slides to return when reading all slides (1-100).",
+					"default": 30
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Summarize this presentation",
+				"arguments": {}
+			},
+			{
+				"prompt": "What is on this slide?",
+				"arguments": { "currentSlideOnly": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.slideNumber !== undefined && params.slideNumber !== null && (typeof params.slideNumber !== 'number' || params.slideNumber < 1))
+			throw new window.AgentState.ToolError('Parameter "slideNumber" must be a number >= 1. Got: ' + JSON.stringify(params.slideNumber));
+
+		Asc.scope.readParams = {
+			slideNumber: params.slideNumber ? Math.floor(params.slideNumber) : null,
+			current: !!params.currentSlideOnly,
+			maxSlides: Math.max(1, Math.min(100, Math.floor(params.maxSlides || 30)))
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.readParams;
+			let pres = Api.GetPresentation();
+			let total = pres.GetSlidesCount();
+			let current = pres.GetCurrentSlide();
+			let currentNumber = null;
+			if (current && current.GetSlideIndex)
+				currentNumber = current.GetSlideIndex() + 1;
+
+			function readSlide(slide, number) {
+				let shapes = [];
+				let drawings = slide.GetAllDrawings ? slide.GetAllDrawings() : slide.GetAllShapes();
+				for (let i = 0; i < drawings.length; i++) {
+					let d = drawings[i];
+					let item = { index: i + 1, type: d.GetClassType ? d.GetClassType() : "drawing" };
+					try {
+						let ph = d.GetPlaceholder ? d.GetPlaceholder() : null;
+						if (ph && ph.GetType)
+							item.placeholder = ph.GetType();
+					} catch (e) {}
+					try {
+						let content = d.GetDocContent ? d.GetDocContent() : null;
+						if (content) {
+							let lines = [];
+							for (let j = 0; j < content.GetElementsCount(); j++) {
+								let el = content.GetElement(j);
+								if (el && el.GetText)
+									lines.push(el.GetText());
+							}
+							item.text = lines.join("\n");
+						}
+					} catch (e) {}
+					shapes.push(item);
+				}
+				return { slideNumber: number, shapes: shapes };
+			}
+
+			let slides = [];
+			if (p.current) {
+				if (current)
+					slides.push(readSlide(current, currentNumber));
+			} else if (p.slideNumber) {
+				let s = pres.GetSlideByIndex(p.slideNumber - 1);
+				if (!s)
+					return { error: "Slide " + p.slideNumber + " not found. The presentation has " + total + " slides." };
+				slides.push(readSlide(s, p.slideNumber));
+			} else {
+				let n = Math.min(total, p.maxSlides);
+				for (let i = 0; i < n; i++)
+					slides.push(readSlide(pres.GetSlideByIndex(i), i + 1));
+			}
+
+			return {
+				totalSlides: total,
+				currentSlide: currentNumber,
+				hasMore: !p.current && !p.slideNumber && total > p.maxSlides,
+				slides: slides
+			};
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
+		"name": "replaceSelection",
+		"description": "Replaces the text the user has selected on the slide (inside a text box, placeholder or table cell) with new text. Use it to apply rewritten, shortened, translated or corrected text back to the selection. Requires a non-empty text selection.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"text": {
+					"type": "string",
+					"description": "The replacement text. Use \\n to separate paragraphs/bullets."
+				}
+			},
+			"required": ["text"]
+		},
+		"examples": [
+			{
+				"prompt": "Make the selected bullet shorter",
+				"arguments": { "text": "Revenue up 12% year over year" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.text !== 'string')
+			throw new window.AgentState.ToolError('Parameter "text" is required and must be a string.');
+
+		let selected = await Asc.Library.GetSelectedText();
+		if (!selected || !selected.trim())
+			throw new window.AgentState.ToolError('No text is selected on the slide. Ask the user to select the text to replace, or use writeMacro.');
+
+		await Asc.Library.PasteText(params.text);
+		return { replacedCharacters: selected.length };
+	};
+
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
 		"name": "writeMacro",
 		"description": `Executes a JavaScript macro using the OnlyOffice Presentation API.
 Use this tool to perform any presentation operation when no other specialized tool is available.
@@ -6156,6 +6662,52 @@ HELPERS.cell.push((function(){
 	return func;
 })());
 HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "getWorkbookInfo",
+		"description": "Returns an overview of the open spreadsheet: all sheet names with their used ranges, the active sheet, and the address of the user's current selection. Call this first when you need to know where data lives before reading or changing cells.",
+		"parameters": {
+			"type": "object",
+			"properties": {},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What sheets are in this workbook?",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function() {
+		return await Asc.Editor.callCommand(function(){
+			let active = Api.GetActiveSheet();
+			let sheets = [];
+			let all = Api.GetSheets();
+			for (let i = 0; i < all.length; i++) {
+				let ws = all[i];
+				let item = { name: ws.GetName() };
+				try {
+					let used = ws.GetUsedRange();
+					if (used) {
+						item.usedRange = used.GetAddress(false, false);
+						item.rows = used.GetRowsCount ? used.GetRowsCount() : undefined;
+						item.columns = used.GetColumnsCount ? used.GetColumnsCount() : undefined;
+					}
+				} catch (e) {}
+				sheets.push(item);
+			}
+			let selection = Api.GetSelection();
+			return {
+				activeSheet: active ? active.GetName() : null,
+				selection: selection ? selection.GetAddress(false, false) : null,
+				sheets: sheets
+			};
+		});
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "highlightAnomalies",
@@ -7040,6 +7592,153 @@ HELPERS.cell.push((function(){
 		if (callResult && callResult.error) {
 			throw new window.AgentState.ToolError(callResult.error);
 		}
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "readRange",
+		"description": "Reads cell values (and optionally formulas) from the spreadsheet as a 2D array of rows. If 'range' is omitted the user's current selection is read; if the selection is a single cell, the sheet's used range is returned instead when 'expandToUsedRange' is true. Large ranges are truncated to 'maxRows' x 'maxColumns'; the response tells you the full size. Use this to analyse, explain, summarise or transform data before writing results back with writeRange.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"range": {
+					"type": "string",
+					"description": "A1-style address, e.g. 'A1:D20' or 'B:B'. Defaults to the current selection."
+				},
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"includeFormulas": {
+					"type": "boolean",
+					"description": "Also return formulas for cells that contain them.",
+					"default": false
+				},
+				"expandToUsedRange": {
+					"type": "boolean",
+					"description": "When no range is given and only one cell is selected, read the whole used range of the sheet.",
+					"default": false
+				},
+				"maxRows": {
+					"type": "number",
+					"description": "Maximum number of rows to return (1-1000).",
+					"default": 200
+				},
+				"maxColumns": {
+					"type": "number",
+					"description": "Maximum number of columns to return (1-100).",
+					"default": 50
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Explain the selected data",
+				"arguments": {}
+			},
+			{
+				"prompt": "What is in A1:C10 on Sheet2?",
+				"arguments": { "range": "A1:C10", "sheet": "Sheet2" }
+			},
+			{
+				"prompt": "Check my formulas",
+				"arguments": { "includeFormulas": true, "expandToUsedRange": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.range !== undefined && params.range !== null && typeof params.range !== 'string')
+			throw new window.AgentState.ToolError('Parameter "range" must be an A1-style string. Got: ' + JSON.stringify(params.range));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+
+		Asc.scope.readParams = {
+			range: params.range || null,
+			sheet: params.sheet || null,
+			includeFormulas: !!params.includeFormulas,
+			expand: !!params.expandToUsedRange,
+			maxRows: Math.max(1, Math.min(1000, Math.floor(params.maxRows || 200))),
+			maxCols: Math.max(1, Math.min(100, Math.floor(params.maxColumns || 50)))
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.readParams;
+			let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+			if (!ws)
+				return { error: "Sheet \"" + p.sheet + "\" not found." };
+
+			let range = null;
+			if (p.range) {
+				range = ws.GetRange(p.range);
+				if (!range)
+					return { error: "Invalid range \"" + p.range + "\"." };
+			} else {
+				range = Api.GetSelection();
+				if (range && p.expand && range.GetRowsCount() === 1 && range.GetColumnsCount() === 1) {
+					let used = ws.GetUsedRange();
+					if (used)
+						range = used;
+				}
+			}
+			if (!range)
+				return { error: "No range selected." };
+
+			let totalRows = range.GetRowsCount();
+			let totalCols = range.GetColumnsCount();
+
+			// Clip whole-column / whole-row references to the used range
+			let used = ws.GetUsedRange();
+			let firstRow = range.GetRow();
+			let firstCol = range.GetCol();
+			if (used) {
+				let lastUsedRow = used.GetRow() + used.GetRowsCount() - 1;
+				let lastUsedCol = used.GetCol() + used.GetColumnsCount() - 1;
+				totalRows = Math.max(0, Math.min(totalRows, lastUsedRow - firstRow + 1));
+				totalCols = Math.max(0, Math.min(totalCols, lastUsedCol - firstCol + 1));
+			}
+
+			let rows = Math.min(totalRows, p.maxRows);
+			let cols = Math.min(totalCols, p.maxCols);
+			let values = [];
+			let formulas = {};
+			for (let r = 0; r < rows; r++) {
+				let row = [];
+				for (let c = 0; c < cols; c++) {
+					let cell = ws.GetRangeByNumber(firstRow - 1 + r, firstCol - 1 + c);
+					let v = cell.GetValue();
+					row.push(v === undefined || v === null ? "" : v);
+					if (p.includeFormulas) {
+						let f = cell.GetFormula();
+						if (f && String(f).charAt(0) === "=")
+							formulas[cell.GetAddress(false, false)] = f;
+					}
+				}
+				values.push(row);
+			}
+
+			let address = range.GetAddress(false, false);
+			let res = {
+				sheet: ws.GetName(),
+				address: address,
+				topLeft: ws.GetRangeByNumber(firstRow - 1, firstCol - 1).GetAddress(false, false),
+				totalRows: totalRows,
+				totalColumns: totalCols,
+				values: values
+			};
+			if (rows < totalRows || cols < totalCols)
+				res.truncated = true;
+			if (p.includeFormulas)
+				res.formulas = formulas;
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
 	};
 
 	return func;
@@ -8134,6 +8833,108 @@ values;`
 
 	return func;
 })());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "writeRange",
+		"description": "Writes a 2D array of values into the spreadsheet starting at a top-left cell. Strings that start with '=' are entered as formulas (use English function names and commas as separators). Use null to leave a cell unchanged and an empty string to clear it. Use it to fill in computed results, cleaned data, new columns, totals or formulas. The whole write is a single undo step.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"startCell": {
+					"type": "string",
+					"description": "Top-left cell address, e.g. 'E2'. Defaults to the top-left cell of the current selection."
+				},
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"values": {
+					"type": "array",
+					"description": "Rows of cell values. Each row is an array of strings, numbers, booleans or null.",
+					"items": {
+						"type": "array",
+						"items": {}
+					}
+				}
+			},
+			"required": ["values"]
+		},
+		"examples": [
+			{
+				"prompt": "Add a Total column with sums for rows 2-4",
+				"arguments": { "startCell": "E1", "values": [["Total"], ["=SUM(B2:D2)"], ["=SUM(B3:D3)"], ["=SUM(B4:D4)"]] }
+			},
+			{
+				"prompt": "Put the cleaned names back into the selection",
+				"arguments": { "values": [["Anna Smith"], ["John Doe"]] }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (!Array.isArray(params.values) || params.values.length === 0)
+			throw new window.AgentState.ToolError('Parameter "values" must be a non-empty 2D array (array of rows).');
+		for (let i = 0; i < params.values.length; i++) {
+			if (!Array.isArray(params.values[i]))
+				throw new window.AgentState.ToolError('Row ' + i + ' of "values" is not an array. "values" must be an array of rows, e.g. [["a", 1], ["b", 2]].');
+		}
+		if (params.startCell !== undefined && params.startCell !== null && typeof params.startCell !== 'string')
+			throw new window.AgentState.ToolError('Parameter "startCell" must be an A1-style string.');
+
+		Asc.scope.writeParams = {
+			startCell: params.startCell || null,
+			sheet: params.sheet || null,
+			values: params.values
+		};
+
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		let result;
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.writeParams;
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found." };
+
+				let start = p.startCell ? ws.GetRange(p.startCell) : Api.GetSelection();
+				if (!start)
+					return { error: "Invalid start cell \"" + p.startCell + "\"." };
+
+				let row0 = start.GetRow() - 1;
+				let col0 = start.GetCol() - 1;
+				let written = 0;
+				let maxCols = 0;
+				for (let r = 0; r < p.values.length; r++) {
+					let row = p.values[r];
+					maxCols = Math.max(maxCols, row.length);
+					for (let c = 0; c < row.length; c++) {
+						let v = row[c];
+						if (v === null || v === undefined)
+							continue;
+						// SetValue enters strings starting with "=" as formulas
+						ws.GetRangeByNumber(row0 + r, col0 + c).SetValue(v);
+						written++;
+					}
+				}
+				let first = ws.GetRangeByNumber(row0, col0).GetAddress(false, false);
+				let last = ws.GetRangeByNumber(row0 + p.values.length - 1, col0 + Math.max(0, maxCols - 1)).GetAddress(false, false);
+				return {
+					sheet: ws.GetName(),
+					range: first === last ? first : first + ":" + last,
+					cellsWritten: written
+				};
+			});
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
 
 
 HELPERS.names = {};
@@ -8141,10 +8942,14 @@ HELPERS.names.word = {
 	"addImage": "Insert Image from Description",
 	"checkSpelling": "Check and Fix Spelling",
 	"commentText": "Add Comment to Text",
+	"editParagraph": "Edit Paragraph",
 	"generateDocx": "Generate Document",
 	"generateForm": "Generate Form Template",
+	"getSelection": "Read Selection",
 	"insertPage": "Insert Blank Page",
 	"changeParagraphStyle": "Change Paragraph Style",
+	"readDocument": "Read Document",
+	"replaceSelection": "Replace Selection",
 	"rewriteText": "Rewrite Text",
 	"changeTextStyle": "Format Text",
 	"writeMacro": "Run Macro"
@@ -8160,6 +8965,8 @@ HELPERS.names.slide = {
 	"deleteSlide": "Delete Slide",
 	"duplicateSlide": "Duplicate Slide",
 	"generatePresentationWithTheme": "Generate Presentation",
+	"readPresentation": "Read Presentation",
+	"replaceSelection": "Replace Selection",
 	"writeMacro": "Run Macro"
 };
 HELPERS.names.cell = {
@@ -8178,13 +8985,16 @@ HELPERS.names.cell = {
 	"fillMissingData": "Fill Missing Data",
 	"fixFormula": "Fix Formula Errors",
 	"formatTable": "Format as Table",
+	"getWorkbookInfo": "Inspect Workbook",
 	"highlightAnomalies": "Highlight Data Anomalies",
 	"highlightDuplicates": "Highlight Duplicate Values",
 	"insertPivotTable": "Create Pivot Table",
+	"readRange": "Read Cells",
 	"setAutoFilter": "Apply Data Filter",
 	"setMultiSort": "Sort by Multiple Columns",
 	"setSort": "Sort Data",
 	"summarizeData": "Summarize Data",
 	"changeTextStyle": "Format Cell Text",
-	"writeMacro": "Run Macro"
+	"writeMacro": "Run Macro",
+	"writeRange": "Write Cells"
 };

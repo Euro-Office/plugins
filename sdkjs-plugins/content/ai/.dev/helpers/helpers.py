@@ -17,7 +17,7 @@ names_map = {
 }
 
 for editor in editors:
-    files = glob.glob("./" + editor + "/**/*.js", recursive=True)
+    files = sorted(glob.glob("./" + editor + "/**/*.js", recursive=True))
     for file in files:
         with open(file, 'r', encoding='utf-8') as f:
             file_content = f.read()
@@ -25,7 +25,8 @@ for editor in editors:
                 end_license = file_content.find("*/") + 2
                 if content_license == "":
                     content_license = file_content[:end_license]
-                file_content = file_content[end_license:].strip()
+                file_content = file_content[end_license:]
+            file_content = file_content.strip()
 
             # Extract "name" and "text" fields from RegisteredFunction
             name_match = re.search(r'"name"\s*:\s*"([^"]+)"', file_content)
