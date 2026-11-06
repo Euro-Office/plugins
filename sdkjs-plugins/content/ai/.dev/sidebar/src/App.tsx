@@ -113,6 +113,13 @@ function MessageList({ chat }: { chat: Chat }) {
 			el.scrollTop = el.scrollHeight;
 	});
 
+	// The panel is resized (docking, theme, editor layout): keep the bottom in view.
+	useEffect(() => {
+		let onResize = () => { if (stick.current && ref.current) ref.current.scrollTop = ref.current.scrollHeight; };
+		window.addEventListener("resize", onResize);
+		return () => window.removeEventListener("resize", onResize);
+	}, []);
+
 	function onScroll() {
 		let el = ref.current!;
 		stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;

@@ -352,7 +352,7 @@ describe("prompt-based tool calling (models without native tools)", () => {
 });
 
 describe("tool call events and messages (exact format)", () => {
-	// The chat UI (chat.js onToolCallStart/End) and the model see these
+	// The chat UI (onToolCallStart/End) and the model see these
 	// payloads; both tool calling paths must keep them as they are.
 	const stripIds = (agent, name) => agent.win.sent(name).map((d) => ({ ...d, id: d.id.replace(/^system_\d+_[a-z0-9]+$/, "system_ID") }));
 

@@ -21,7 +21,7 @@
 // or providers that can not take tool messages (prompt-based function
 // calling, providers without tool message support).
 //
-// Pure logic (no DOM, no editor API), loaded in chat.html and index.html and
+// Pure logic (no DOM, no editor API), loaded in sidebar/index.html and index.html and
 // testable in Node.
 (function(root) {
 
@@ -227,7 +227,7 @@
 		return turns;
 	}
 
-	// items: chat items as stored by chat.js (user: content string;
+	// items: chat items as stored by the chat sidebar (user: content string;
 	// assistant: content array + activeContentIndex; tool UI items with
 	// isToolCall; errors with item.error; user items may carry agentTranscript).
 	// Returns the request history (without system prompt).

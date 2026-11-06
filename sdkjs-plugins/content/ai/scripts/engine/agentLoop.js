@@ -37,7 +37,7 @@
 // recorded as an AI edit and marked for provenance), sends the results
 // back and repeats until the model answers in text, the user stops it or
 // AgentState.MAX_LOOP_ITERATIONS is reached. Progress, tool cards and the
-// final reply go to the chat window (chat.js); the tool exchange of the
+// final reply go to the chat sidebar (.dev/sidebar); the tool exchange of the
 // turn is sent back as a transcript for the next request.
 (function(window, undefined)
 {
@@ -166,8 +166,8 @@
 		return toolResult;
 	}
 
-	// chatWindow: the Asc.PluginWindow of chat.html; AgentState: the state of
-	// that window (chatWindow.js); messageHistory: what chat.js sends,
+	// chatWindow: the Asc.PluginWindow of the chat sidebar; AgentState: the
+	// state of that window (chatWindow.js); messageHistory: what the chat sends,
 	// { messages, usedTools, turnId } or a plain message array.
 	async function runTurn(chatWindow, AgentState, messageHistory) {
 		AgentState.isStopped = false;
@@ -182,7 +182,7 @@
 		let provider = AI.Storage.getProvider(requestEngine.modelUI.provider);
 		let isSupportTools = provider && provider.isSupportTools(requestEngine.model, requestEngine.modelUI);
 
-		// The chat sends { messages, usedTools, turnId } (chat.js sendMessage);
+		// The chat sends { messages, usedTools, turnId } (.dev/sidebar/src/chat.ts sendMessage);
 		// a plain array is the older format.
 		let payload = Array.isArray(messageHistory) ? { messages: messageHistory } : (messageHistory || {});
 		let history = Array.isArray(payload.messages) ? payload.messages : [];
@@ -255,7 +255,7 @@
 
 		// Messages added during this turn (tool calls, results, prompt-based
 		// exchanges). Sent to the chat at the end of the turn so the next
-		// request keeps the tool context (onAgentTranscript in chat.js).
+		// request keeps the tool context (onAgentTranscript in the chat sidebar).
 		let turnMessages = [];
 		let hasFinalReply = false;
 		function pushTurnMessage(msg) {

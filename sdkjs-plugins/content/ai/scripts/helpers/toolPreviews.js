@@ -10,7 +10,7 @@
 // `preview`, which wins. Like `readOnly`, it is never sent to the model
 // (EditorHelperImpl.getTools only serializes the schema fields).
 //
-// Preview (plain data, rendered by chat.js with text nodes only):
+// Preview (plain data, rendered by the chat sidebar as text only):
 //   {
 //     items?: [{ label, value }],               // key facts
 //     table?: { columns: [..], rows: [{ label, cells: [{ before, after }] }],

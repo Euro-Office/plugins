@@ -45,14 +45,21 @@ describe("JSON", () => {
 			expect(fs.existsSync(path.join(PLUGIN_DIR, v.url)), v.url).toBe(true);
 	});
 
-	test("index.html and chat.html only load scripts that exist", () => {
-		for (const page of ["index.html", "chat.html"]) {
+	test("index.html and the chat sidebar only load files that exist", () => {
+		for (const page of ["index.html", "sidebar/index.html"]) {
 			const html = fs.readFileSync(path.join(PLUGIN_DIR, page), "utf8");
-			for (const [, src] of html.matchAll(/<script[^>]+src="([^"]+)"/g)) {
+			for (const [, src] of html.matchAll(/<(?:script|link)[^>]+(?:src|href)="([^"]+)"/g)) {
 				if (/^https?:/.test(src)) continue;
-				expect(fs.existsSync(path.join(PLUGIN_DIR, src)), page + " -> " + src).toBe(true);
+				expect(fs.existsSync(path.join(PLUGIN_DIR, path.dirname(page), src)), page + " -> " + src).toBe(true);
 			}
 		}
+	});
+
+	test("the chat sidebar opens as a docked right panel", () => {
+		const js = fs.readFileSync(path.join(PLUGIN_DIR, "scripts/engine/chatWindow.js"), "utf8");
+		expect(js).toMatch(/url\s*:\s*"sidebar\/index\.html"/);
+		expect(js).toMatch(/type\s*:\s*"panelRight"/);
+		expect(js).not.toMatch(/localStorage\.(getItem|setItem)\("onlyoffice_ai_chat_placement"/);
 	});
 
 	test("every internal provider listed in providers/config.json exists", () => {

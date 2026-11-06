@@ -27,7 +27,7 @@ CI runs the same suite in `.github/workflows/ai-plugin-tests.yml` on every PR an
 | `fakes/word.js`, `cell.js`, `slide.js` | Small in-memory Document, Spreadsheet and Presentation Builder APIs (paragraphs/runs/tables/styles/comments/tracked changes/content controls; sheets/cells/formulas/comments/validation/freeze panes; slides/shapes/notes). |
 | `fakes/aiedits/` | Minimal mocks used by the ported `aiEdits` / `toolApproval` / `toolPreviews` tests. |
 | `lib/plugin.js` | `createToolEnv(editor, fake)`: loads library, provenance, helpers and the tool registry. `call(name, args)` runs a tool. `expectToolError()` checks for a `ToolError`. |
-| `lib/agent.js` | `createAgent()`: runs the real `registerButtons()` (`scripts/engine/register.js` and the files it wires up: `actions.js`, `chatWindow.js`, `agentLoop.js`, `promptTools.js`, `contextMenu.js`, `toolbar.js`) with stub UI classes that follow the SDK `Button` classes, opens the chat window and fires `onChatMessage` like `chat.js` does. A scripted fake provider stands in for the model. |
+| `lib/agent.js` | `createAgent()`: runs the real `registerButtons()` (`scripts/engine/register.js` and the files it wires up: `actions.js`, `chatWindow.js`, `agentLoop.js`, `promptTools.js`, `contextMenu.js`, `toolbar.js`) with stub UI classes that follow the SDK `Button` classes, opens the chat window and fires `onChatMessage` like the chat sidebar does. A scripted fake provider stands in for the model. |
 | `tests/` | The test files (see below). |
 | `e2e/` | Opt-in end-to-end test against a real Document Server. |
 
@@ -54,10 +54,11 @@ CI runs the same suite in `.github/workflows/ai-plugin-tests.yml` on every PR an
 | `actions-menu.test.js` | Context menu and toolbar built by `registerButtons()`: the full menu outline per editor (snapshot), and for every one-shot action the request type, prompt, `Asc.Library` insert call and provenance meta. |
 | `document-context.test.js`, `smart-actions.test.js` | `DocumentContext` snapshots and prompts, SmartActions ranking, and the selection-suggestion chips (debounce and fingerprint, with fake timers). |
 | `providers.test.js` | OpenAI and Anthropic adapters (tool mapping, `tool_use`/`tool_result`, merging consecutive roles) and `engine.js` `_chatRequestAgent` with a stubbed `fetch` (streamed tool-call deltas, errors, stop). |
-| `chat-ui.test.js` | `chat.html`, `chat.js` and `chatChips.js` in jsdom:<ul><li>approval cards (macro code is shown as text);</li><li>chips;</li><li>request format and transcripts;</li><li>`eo://` location links.</li></ul> |
 | `provenance.test.js` | AI-content marking:<ul><li>PNG/JPEG XMP round trips, using test images generated in Node;</li><li>document properties, written through the faithful `callCommand`;</li><li>content-control marking;</li><li>Library integration, `findAIContent` and the agent loop.</li></ul> |
 | `tool-categories.test.js`, `agent-history.test.js`, `citations.test.js`, `tool-approval.test.js`, `ai-edits.test.js`, `tool-previews.test.js` | Feature tests that came with those features, ported to vitest. |
-| `static.test.js` | Every script parses, every JSON file is valid, and the pages and providers reference files that exist. |
+| `static.test.js` | Every script parses, every JSON file is valid, the pages (including `sidebar/index.html`) and providers reference files that exist, and the chat opens as a docked panel. |
+
+The chat UI itself (`sidebar/`) is tested in `.dev/sidebar` with vitest and Testing Library; see `.dev/sidebar/README.md`.
 
 ## Adding a test for a new tool
 
@@ -85,7 +86,7 @@ test("myTool does X", async () => {
 `npm run test:coverage` reports v8 coverage for `scripts/**`. The vm scripts are given `file://` URLs so that v8 can attribute their lines to the plugin files. Three things are not counted:
 
 - code inside `callCommand(function(){...})`, because it is re-evaluated from source in the editor context, as in the real editor;
-- `chat.js` and `chatChips.js`, which run in a separate jsdom realm;
+- the chat sidebar, which has its own tests in `.dev/sidebar` (`npm test` there);
 - settings and other UI pages, which are not tested.
 
 ## End-to-end (opt-in)

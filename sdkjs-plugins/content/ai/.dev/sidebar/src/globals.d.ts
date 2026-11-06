@@ -14,6 +14,7 @@ export interface PluginApi {
 	tr(text: string): string;
 	attachEvent(name: string, handler: (data: any) => void): void;
 	sendToPlugin(name: string, data?: unknown): void;
+	guid?: string;
 	info?: { editorType?: string; userName?: string; lang?: string };
 	init?: () => void;
 	onTranslate?: () => void;

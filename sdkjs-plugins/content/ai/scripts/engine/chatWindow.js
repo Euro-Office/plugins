@@ -30,7 +30,8 @@
  *
  */
 
-// The chat window (chat.html): chatWindowShow() opens it, or activates it
+// The chat sidebar (sidebar/index.html, built from .dev/sidebar), docked
+// on the right: chatWindowShow() opens it, or activates it
 // and attaches text when it is already open. Creates the per-window
 // AgentState and handles the window's events: chat messages (handed to the
 // agent loop, agentLoop.js), tool approval answers, stop, citation links
@@ -52,15 +53,11 @@
 		if (!requestEngine)
 			return;
 
-		let panelPlace = window.localStorage.getItem("onlyoffice_ai_chat_placement") || "window";
-		if (panelPlace === "panel")
-			panelPlace = "panelRight";
-
-		if (attachedText && attachedText.trim())
-			panelPlace = "panelRight";
+		// The chat is always a docked panel; the window/panel choice is gone.
+		window.localStorage.removeItem("onlyoffice_ai_chat_placement");
 
 		let variation = {
-			url : "chat.html",
+			url : "sidebar/index.html",
 			description : window.Asc.plugin.tr("Chatbot"),
 			isVisual : true,
 			buttons : [],
@@ -68,7 +65,7 @@
 			isModal : false,
 			isCanDocked: true,
 			dockedPlace: "panelRight",
-			type: panelPlace,
+			type: "panelRight",
 			EditorsSupport : ["word", "slide", "cell", "pdf"],
 			size : [ 400, 400 ]
 		};
@@ -245,9 +242,8 @@
 				}
 			}
 		});	
-		chatWindow.attachEvent("onDockedChanged", async function(type) {
-			window.localStorage.setItem("onlyoffice_ai_chat_placement", type);
-
+		// Docking changes reload the page: save the chat first.
+		chatWindow.attachEvent("onDockedChanged", async function() {
 			async function waitSaveSettings()
 			{
 				return new Promise(resolve => (function(){

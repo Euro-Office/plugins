@@ -14,7 +14,7 @@
 // clickable chip) and again by the plugin before navigating, so a crafted
 // link can never do more than select a place in the open file.
 //
-// Pure logic, loaded in chat.html and index.html and testable in Node.
+// Pure logic, loaded in sidebar/index.html and index.html and testable in Node.
 (function(root) {
 
 	const MAX_HREF_LENGTH = 1000;

@@ -68,7 +68,7 @@ body.theme-type-dark ::selection {
 	flex-direction: column;
 }
 
-.chat > :first-child {
+.chat:not(.empty) > :first-child {
 	margin-top: auto;
 }
 

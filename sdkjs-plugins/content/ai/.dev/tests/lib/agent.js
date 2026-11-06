@@ -2,7 +2,7 @@
 //
 // Drives the real chat agent loop (scripts/engine/agentLoop.js): loads the
 // background-plugin scripts, calls registerButtons(window) with stub UI
-// classes, opens the chat window and fires "onChatMessage" like chat.js does.
+// classes, opens the chat window and fires "onChatMessage" like the chat sidebar does.
 // The request engine is replaced by a scripted fake provider.
 
 import { createSandbox } from "./sandbox.js";
@@ -82,7 +82,7 @@ StubButton.created = [];
 class StubContextMenuButton extends StubButton {}
 class StubToolbarButton extends StubButton {}
 
-// Asc.PluginWindow stand-in that records commands sent to chat.html.
+// Asc.PluginWindow stand-in that records commands sent to the chat sidebar.
 export class FakePluginWindow {
 	constructor() {
 		this.id = "chat-window-" + (FakePluginWindow.count = (FakePluginWindow.count || 0) + 1);
@@ -167,7 +167,7 @@ export async function createAgent({ editorType = "word", fake = {}, supportsTool
 
 	sandbox.ctx.chatWindowShow();
 	const win = FakePluginWindow.last;
-	// chat.html reports that it has loaded; approvals need a ready window.
+	// The sidebar reports that it has loaded; approvals need a ready window.
 	await win.fire("onWindowReady", {});
 
 	// Approval policy for onToolApprovalRequest: a decision string, or a
@@ -179,7 +179,7 @@ export async function createAgent({ editorType = "word", fake = {}, supportsTool
 		toolbar: buttons.filter((b) => b instanceof StubToolbarButton),
 		approvals: [],
 		decide: "allow",
-		// Sends a chat turn in chat.js's format { messages, usedTools, turnId }.
+		// Sends a chat turn in the sidebar's format { messages, usedTools, turnId }.
 		// `text` may be a string or a message list; opts.legacy sends a bare array.
 		async send(text, opts = {}) {
 			const messages = Array.isArray(text) ? text : [{ role: "user", content: text }];

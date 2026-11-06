@@ -35,7 +35,14 @@ export async function loadTranslations(lang: string | undefined): Promise<Record
 	return file ? getJSON("../translations/" + file + ".json") : null;
 }
 
+// The SDK reads the plugin GUID from "./config.json" next to the page, which
+// does not exist in sidebar/. Without it the editor ignores the page, so it
+// is set here (checked against config.json by the tests).
+export const PLUGIN_GUID = "asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}";
+
 export function start(plugin: PluginApi, root: HTMLElement, storage?: Storage) {
+	if (!plugin.guid || plugin.guid === "undefined")
+		plugin.guid = PLUGIN_GUID;
 	let chat = createChat(plugin, storage);
 	chat.attach();
 	plugin.onThemeChanged = (theme) => {
