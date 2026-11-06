@@ -19,8 +19,8 @@ const EDITORS = ["word", "cell", "slide"];
 // Adding a tool here is a security decision: it must not change the document
 // (moving the selection/view is fine).
 const READ_ONLY = {
-	word: ["findText", "getSelection", "loadTools", "readDocument", "readOutline", "selectText"],
-	cell: ["findFormulaErrors", "findInSheet", "getWorkbookInfo", "loadTools", "readRange", "selectRange"],
+	word: ["findText", "getComments", "getSelection", "getTrackedChanges", "loadTools", "readDocument", "readOutline", "selectText"],
+	cell: ["findFormulaErrors", "findInSheet", "getComments", "getWorkbookInfo", "loadTools", "readRange", "selectRange"],
 	slide: ["findInPresentation", "goToSlide", "loadTools", "readPresentation"]
 };
 
