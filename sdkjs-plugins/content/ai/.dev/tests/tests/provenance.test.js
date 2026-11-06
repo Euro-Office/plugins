@@ -348,6 +348,14 @@ describe("text marking (captureAnchor / markInsertion)", () => {
 		expect(marks(doc).includes("Intro") || marks(doc).includes("End")).toBe(false);
 	});
 
+	test("an HTML insertion at the cursor skips the unchanged cursor paragraph and empty lines", async () => {
+		const { P, doc, call } = env("word", createWordDocument({ body: ["Title", "Existing"], cursor: 2 }));
+		// insertMarkdown pastes after the cursor paragraph (PasteHtml in the fake)
+		await call("insertMarkdown", { markdown: "Heading\n\nBody text" });
+		expect(doc.texts()).toEqual(["Title", "Existing", "Heading", "Body text"]);
+		expect(marks(doc)).toEqual(["Heading", "Body text"]);
+	});
+
 	test("ambiguous matches are left unmarked and reported", async () => {
 		const { P, doc } = env("word", createWordDocument({ body: ["the cat and the dog"], selection: { paragraph: 1, start: 16, end: 19 } }));
 		const anchor = await P.captureAnchor(M);
@@ -405,6 +413,26 @@ describe("Library insert methods with provenance metadata", () => {
 	});
 });
 
+describe("findAIContent tool", () => {
+	test("lists marked parts with model, date and element index plus file-level properties", async () => {
+		const e = env("word", createWordDocument({ body: ["Keep", "Old one", "Old two"] }));
+		const chat = { modelUI: { provider: "OpenAI", id: "gpt-4o", name: "GPT-4o" }, model: { id: "gpt-4o" } };
+		await e.P.runTool("editParagraph", false, chat, () => e.call("editParagraph", { index: 3, action: "replace", text: "New two" }));
+		const r = await e.call("findAIContent");
+		expect(r.fileLevel).toMatchObject({ AIGenerated: true, AIGeneratedModels: "OpenAI/gpt-4o" });
+		expect(r).toMatchObject({ markedParts: 1, markedCharacters: 7, returned: 1 });
+		expect(r.parts[0]).toMatchObject({ number: 1, kind: "inline", model: "gpt-4o", index: 3, snippet: "New two", characters: 7 });
+		expect(r.parts[0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		expect(r.note).toBeUndefined();
+	});
+
+	test("explains when nothing is marked", async () => {
+		const r = await env("word", createWordDocument({ body: ["x"] })).call("findAIContent");
+		expect(r).toMatchObject({ markedParts: 0, parts: [], fileLevel: { AIGenerated: null } });
+		expect(r.note).toMatch(/No marked AI-generated text found/);
+	});
+});
+
 describe("agent loop records AI edits", () => {
 	let agent;
 	beforeEach(async () => {
@@ -412,13 +440,13 @@ describe("agent loop records AI edits", () => {
 	});
 
 	test("read-only tools leave the file unmarked", async () => {
-		agent.engine.queue.push({ tool_calls: [toolCall("c1", "readDocument", {}), toolCall("c2", "getSelection", {})] });
+		agent.engine.queue.push({ tool_calls: [toolCall("c1", "readDocument", {}), toolCall("c2", "findAIContent", {})] });
 		await agent.send("Read");
 		expect(agent.fake.doc.customProperties).toEqual({});
 	});
 
 	test("editing tools mark the text and record the agent's model", async () => {
-		agent.engine.queue.push({ tool_calls: [toolCall("c1", "replaceSelection", { text: "Howdy" })] });
+		agent.engine.queue.push({ tool_calls: [toolCall("c1", "replaceSelection", { text: "Howdy" }), toolCall("c2", "replyToComment", { commentId: "x", text: "y" })] });
 		await agent.send("Change");
 		const doc = agent.fake.doc;
 		expect(doc.texts()[0]).toBe("Howdy world");
