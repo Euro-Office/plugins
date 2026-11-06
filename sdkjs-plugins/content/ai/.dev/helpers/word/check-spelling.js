@@ -82,12 +82,12 @@
 
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}

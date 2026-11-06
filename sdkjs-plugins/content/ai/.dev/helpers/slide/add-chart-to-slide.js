@@ -111,13 +111,13 @@
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
 					let actionName = "AI" + (requestEngine.modelUI && requestEngine.modelUI.name ? " (" + requestEngine.modelUI.name + ")" : " (Chart Generation)");
-					await Asc.Editor.callMethod("EndAction", ["Block", actionName]);
+					await Asc.Editor.callMethod("EndAction", ["Information", actionName]);
 					isSendedEndLongAction = true;
 				}
 			}
 
 			let actionName = "AI" + (requestEngine.modelUI && requestEngine.modelUI.name ? " (" + requestEngine.modelUI.name + ")" : " (Chart Generation)");
-			await Asc.Editor.callMethod("StartAction", ["Block", actionName]);
+			await Asc.Editor.callMethod("StartAction", ["Information", actionName]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			try {

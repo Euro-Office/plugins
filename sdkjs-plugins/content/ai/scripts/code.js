@@ -503,7 +503,7 @@ async function initWithTranslate(counter) {
 
 				if (isFromMethod) {
 					await Asc.Editor.callMethod("SendEventInternal", ["ai_onStartAction", {
-						type : "Block",
+						type : "Information",
 						description : "AI (" + requestEngine.modelUI.name + ")"
 					}]);
 				}
@@ -555,7 +555,7 @@ async function initWithTranslate(counter) {
 
 				if (isFromMethod) {
 					await Asc.Editor.callMethod("SendEventInternal", ["ai_onEndAction", {
-						type : "Block",
+						type : "Information",
 						description : "AI (" + requestEngine.modelUI.name + ")"
 					}]);
 				}
@@ -1182,7 +1182,7 @@ async function customAssistantOnClickToolbarIcon(assistantId, buttonAssistant)
 		return result;
 	});
 
-	await Asc.Editor.callMethod("StartAction", ["Block", preloaderMessage]);
+	await Asc.Editor.callMethod("StartAction", ["Information", preloaderMessage]);
 
 	const status = await customAssistantManager.run(assistantId, paraIds);
 	switch (status) {
@@ -1208,7 +1208,7 @@ async function customAssistantOnClickToolbarIcon(assistantId, buttonAssistant)
 			break;		
 	}
 
-	await Asc.Editor.callMethod("EndAction", ["Block", preloaderMessage]);
+	await Asc.Editor.callMethod("EndAction", ["Information", preloaderMessage]);
 }
 
 /**
@@ -1249,7 +1249,7 @@ async function detectFunctionCallingSupport(model) {
 	if ((model.capabilities & AI.CapabilitiesUI.Chat) === 0) return;
 	if ((model.capabilities & AI.CapabilitiesUI.Tools) !== 0) return;
 
-	await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + model.name + ")"]);
+	await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + model.name + ")"]);
 
 	try {
 		var provider = AI.createProviderInstance(
@@ -1320,9 +1320,9 @@ async function detectFunctionCallingSupport(model) {
 		}
 	} catch (error) {
 		console.log("[AI tools detection]:" + model.name + ": false");
+	} finally {
+		await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + model.name + ")"]);
 	}
-
-	await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + model.name + ")"]);
 }
 
 /**

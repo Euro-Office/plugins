@@ -472,14 +472,14 @@ function fetchExternal(url, options, isStreaming) {
 			window.AIProvenance.noteRequest(this);
 		let isActionRestriction = (block && (undefined !== streamFunc)) ? true : undefined;
 		if (block)
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + this.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + this.modelUI.name + ")"]);
 		let result = undefined;
 		try {
 			result = await func.call(this, data, streamFunc);
 		} catch (err) {
 			if (err.error) {
 				if (block)
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + this.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.modelUI.name + ")"]);
 				if (this.errorHandler)
 					this.errorHandler(err);
 				else {
@@ -492,7 +492,7 @@ function fetchExternal(url, options, isStreaming) {
 			}
 		}
 		if (block)
-			await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + this.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.modelUI.name + ")"]);
 		return result;
 	};
 

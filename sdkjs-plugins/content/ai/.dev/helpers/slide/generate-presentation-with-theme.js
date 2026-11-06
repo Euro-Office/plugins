@@ -68,7 +68,7 @@
 
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
@@ -332,7 +332,7 @@
 			}
 			if (!this.s._started) {
 				this.s._started = true;
-				await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + this.requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + this.requestEngine.modelUI.name + ")"]);
 				await Asc.Editor.callMethod("StartAction", ["GroupActions", "AI: Build presentation"]);
 				//this.log.info("StartAction");
 			}
@@ -340,7 +340,7 @@
 		Executor.prototype.endAction = async function () {
 			if (!this.s._ended && this.s._started) {
 				await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.requestEngine.modelUI.name + ")"]);
 				this.s._ended = true;
 				//this.log.info("EndAction");
 			}
@@ -1699,7 +1699,7 @@ ${fontsContract}
 					}
 					if (t === "theme.end") {
 						await exec.themeEnd();
-						await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+						await checkEndAction();
 						continue;
 					}
 
@@ -1816,13 +1816,14 @@ ${fontsContract}
 			}
 
 			await Asc.Editor.callMethod("StartAction", ["GroupActions", "AI: Build presentation"]);
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await requestEngine.chatRequest(prompt, false, handler);
+			await checkEndAction();
 			if (!exec.s.presentationEnd) {
 				await Asc.Editor.callMethod("EndAction", ["GroupActions", "AI: Build presentation"]);
 			}
 		} catch (e) {
-			
+			await checkEndAction();
 			await Asc.Editor.callMethod("EndAction", ["GroupActions", "AI: Build presentation"]);
 		}
 	};

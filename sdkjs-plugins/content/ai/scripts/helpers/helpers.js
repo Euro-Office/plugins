@@ -123,12 +123,12 @@ HELPERS.word.push((function(){
 		
 		try {
 			let actionName = "AI (" + requestEngine.modelUI.name + ")";
-			await Asc.Editor.callMethod("StartAction", ["Block", actionName]);
+			await Asc.Editor.callMethod("StartAction", ["Information", actionName]);
 			let imageUrl;
 			imageUrl = await requestEngine.imageGenerationRequest(fullPrompt);
 			
 			
-			await Asc.Editor.callMethod("EndAction", ["Block", actionName]);
+			await Asc.Editor.callMethod("EndAction", ["Information", actionName]);
 			if (imageUrl) {
 				
 				const img = new Image();
@@ -217,12 +217,12 @@ HELPERS.word.push((function(){
 
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
@@ -352,12 +352,12 @@ HELPERS.word.push((function(){
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		if (isFootnote)
@@ -2148,12 +2148,12 @@ HELPERS.word.push((function(){
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
@@ -2616,13 +2616,13 @@ HELPERS.slide.push((function(){
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
 					let actionName = "AI" + (requestEngine.modelUI && requestEngine.modelUI.name ? " (" + requestEngine.modelUI.name + ")" : " (Chart Generation)");
-					await Asc.Editor.callMethod("EndAction", ["Block", actionName]);
+					await Asc.Editor.callMethod("EndAction", ["Information", actionName]);
 					isSendedEndLongAction = true;
 				}
 			}
 
 			let actionName = "AI" + (requestEngine.modelUI && requestEngine.modelUI.name ? " (" + requestEngine.modelUI.name + ")" : " (Chart Generation)");
-			await Asc.Editor.callMethod("StartAction", ["Block", actionName]);
+			await Asc.Editor.callMethod("StartAction", ["Information", actionName]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			try {
@@ -3340,13 +3340,13 @@ HELPERS.slide.push((function(){
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
 				let actionName = "AI (" + requestEngine.modelUI.name + ")";
-				await Asc.Editor.callMethod("EndAction", ["Block", actionName]);
+				await Asc.Editor.callMethod("EndAction", ["Information", actionName]);
 				isSendedEndLongAction = true;
 			}
 		}
 
 		let actionName = "AI (" + requestEngine.modelUI.name + ")";
-		await Asc.Editor.callMethod("StartAction", ["Block", actionName]);
+		await Asc.Editor.callMethod("StartAction", ["Information", actionName]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		try {
@@ -3783,7 +3783,7 @@ HELPERS.slide.push((function(){
 
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
@@ -4047,7 +4047,7 @@ HELPERS.slide.push((function(){
 			}
 			if (!this.s._started) {
 				this.s._started = true;
-				await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + this.requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + this.requestEngine.modelUI.name + ")"]);
 				await Asc.Editor.callMethod("StartAction", ["GroupActions", "AI: Build presentation"]);
 				//this.log.info("StartAction");
 			}
@@ -4055,7 +4055,7 @@ HELPERS.slide.push((function(){
 		Executor.prototype.endAction = async function () {
 			if (!this.s._ended && this.s._started) {
 				await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.requestEngine.modelUI.name + ")"]);
 				this.s._ended = true;
 				//this.log.info("EndAction");
 			}
@@ -5414,7 +5414,7 @@ ${fontsContract}
 					}
 					if (t === "theme.end") {
 						await exec.themeEnd();
-						await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+						await checkEndAction();
 						continue;
 					}
 
@@ -5531,13 +5531,14 @@ ${fontsContract}
 			}
 
 			await Asc.Editor.callMethod("StartAction", ["GroupActions", "AI: Build presentation"]);
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await requestEngine.chatRequest(prompt, false, handler);
+			await checkEndAction();
 			if (!exec.s.presentationEnd) {
 				await Asc.Editor.callMethod("EndAction", ["GroupActions", "AI: Build presentation"]);
 			}
 		} catch (e) {
-			
+			await checkEndAction();
 			await Asc.Editor.callMethod("EndAction", ["GroupActions", "AI: Build presentation"]);
 		}
 	};
@@ -6932,12 +6933,12 @@ HELPERS.cell.push((function(){
 	
 		try {
 			let actionName = "AI (" + requestEngine.modelUI.name + ")";
-			await Asc.Editor.callMethod("StartAction", ["Block", actionName]);
+			await Asc.Editor.callMethod("StartAction", ["Information", actionName]);
 			let imageUrl;
 			imageUrl = await requestEngine.imageGenerationRequest(fullPrompt);
 			
 			
-			await Asc.Editor.callMethod("EndAction", ["Block", actionName]);
+			await Asc.Editor.callMethod("EndAction", ["Information", actionName]);
 			if (imageUrl) {
 				
 				const img = new Image();
@@ -7477,12 +7478,12 @@ HELPERS.cell.push((function(){
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let explanation = await requestEngine.chatRequest(argPrompt, false, async function(data) {
@@ -7631,12 +7632,12 @@ HELPERS.cell.push((function(){
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let aiResult = await requestEngine.chatRequest(argPrompt, false, async function(data) {
@@ -8092,12 +8093,12 @@ HELPERS.cell.push((function(){
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let aiResult = await requestEngine.chatRequest(argPrompt, false, async function(data) {
@@ -8924,12 +8925,12 @@ HELPERS.cell.push((function(){
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let aiResult = await requestEngine.chatRequest(argPrompt, false, async function(data) {
@@ -9136,12 +9137,12 @@ HELPERS.cell.push((function(){
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let aiResult = await requestEngine.chatRequest(argPrompt, false, async function(data) {
@@ -9457,12 +9458,12 @@ HELPERS.cell.push((function(){
 			let isSendedEndLongAction = false;
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 					isSendedEndLongAction = true;
 				}
 			}
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			try {
@@ -10328,12 +10329,12 @@ HELPERS.cell.push((function(){
 			let isSendedEndLongAction = false;
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 					isSendedEndLongAction = true
 				}
 			}
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			let result = await requestEngine.chatRequest(argPromt, false, async function(data) {
@@ -10739,12 +10740,12 @@ HELPERS.cell.push((function(){
 			let isSendedEndLongAction = false;
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 					isSendedEndLongAction = true
 				}
 			}
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			let result = await requestEngine.chatRequest(argPromt, false, async function(data) {
@@ -11024,12 +11025,12 @@ HELPERS.cell.push((function(){
 			let isSendedEndLongAction = false;
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 					isSendedEndLongAction = true
 				}
 			}
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			let result = await requestEngine.chatRequest(argPromt, false, async function(data) {
@@ -11206,12 +11207,12 @@ HELPERS.cell.push((function(){
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let aiResult = await requestEngine.chatRequest(argPrompt, false, async function(data) {
