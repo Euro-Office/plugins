@@ -49,8 +49,13 @@
 	"Read Cells": "Read Cells",
 	"Write Cells": "Write Cells",
 	"Read Presentation": "Read Presentation",
+	"Find Text": "Find Text",
 	"Select Text": "Select Text",
+	"Read Outline": "Read Outline",
+	"Find in Sheet": "Find in Sheet",
 	"Select Cells": "Select Cells",
+	"Find Formula Errors": "Find Formula Errors",
+	"Find in Presentation": "Find in Presentation",
 	"Go to Slide": "Go to Slide",
 	"Load Tools": "Load Tools"
 }

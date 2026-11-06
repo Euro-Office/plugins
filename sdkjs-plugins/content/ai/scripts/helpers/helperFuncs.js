@@ -289,7 +289,7 @@ EditorHelperImpl.prototype._getEditorContext = function() {
 			name: "text document",
 			apiName: "Document API",
 			macroExample: "Api.GetDocument().GetElement(0).GetText()",
-			readTools: "readDocument, getSelection"
+			readTools: "readDocument, readOutline, findText, getSelection"
 		};
 	} else if (editorType === "cell") {
 		return {
@@ -297,7 +297,7 @@ EditorHelperImpl.prototype._getEditorContext = function() {
 			name: "spreadsheet",
 			apiName: "Spreadsheet API",
 			macroExample: "Api.GetActiveSheet().GetRange(\"A1\").GetValue()",
-			readTools: "getWorkbookInfo, readRange"
+			readTools: "getWorkbookInfo, readRange, findInSheet"
 		};
 	} else if (editorType === "slide") {
 		return {
@@ -305,7 +305,7 @@ EditorHelperImpl.prototype._getEditorContext = function() {
 			name: "presentation",
 			apiName: "Presentation API",
 			macroExample: "Api.GetPresentation().GetSlidesCount()",
-			readTools: "readPresentation"
+			readTools: "readPresentation, findInPresentation"
 		};
 	}
 	return { type: editorType, name: editorType, apiName: "API", macroExample: "", readTools: "writeMacro" };
@@ -318,7 +318,7 @@ EditorHelperImpl.prototype.getCitationPrompt = function() {
 	let formats = "";
 	if (type === "word") {
 		formats = "\
-- A paragraph or other top-level element by its 1-based index (as returned by readDocument and selectText): [paragraph 12](eo://word/paragraph/12)\n\
+- A paragraph or other top-level element by its 1-based index (as returned by readDocument, readOutline, findText, selectText): [paragraph 12](eo://word/paragraph/12)\n\
 - A short verbatim passage when you have no index (URL-encode it, max 100 characters): [“net 30 days”](eo://word/find?text=net%2030%20days)\n";
 	} else if (type === "cell") {
 		formats = "\
