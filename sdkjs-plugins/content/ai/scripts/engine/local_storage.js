@@ -132,7 +132,10 @@
 			}
 		}
 
-		if (obj && obj.version !== AI.Storage.Version)
+		// The version only invalidates settings this plugin stored itself. Server
+		// settings are authoritative: the Document Server reports its own format
+		// version (3 in Euro-Office), which differs from the local storage version.
+		if (obj && obj !== AI.serverSettings && obj.version !== AI.Storage.Version)
 			obj = null;
 
 		if (obj) {
