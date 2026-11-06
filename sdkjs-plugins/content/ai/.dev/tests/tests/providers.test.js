@@ -226,6 +226,16 @@ describe("engine: agent requests", () => {
 		expect(res.tool_calls).toEqual([{ index: 1, id: "toolu_1", type: "function", function: { name: "replaceSelection", arguments: "{\"text\": \"Hi}\"}" } }]);
 	});
 
+	test("the agent's message history is not modified by the provider (system prompt survives the loop)", async () => {
+		const p = loadProvider("anthropic");
+		responder = () => streamResponse([sse([{ data: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "ok" } } }])]);
+		const content = { messages: [{ role: "system", content: "SYS + document context" }, { role: "user", content: "hi" }], tools: TOOLS };
+		await agentRequest(p, "claude-sonnet-4-5", content, async () => {});
+		expect(content.messages.map((m) => m.role)).toEqual(["system", "user"]);
+		await agentRequest(p, "claude-sonnet-4-5", content, async () => {});
+		expect(fetches[1].body.system).toBe("SYS + document context");
+	});
+
 	test("with server settings, streaming requests go through the Document Server proxy", async () => {
 		const p = loadProvider("openai");
 		sb.ctx.AI.serverSettings = { proxy: "http://ds/ai-proxy" };
