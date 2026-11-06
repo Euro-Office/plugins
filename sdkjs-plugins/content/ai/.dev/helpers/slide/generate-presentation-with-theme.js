@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "generatePresentationWithTheme",
+		"category": "generate",
 		"text": "Generate Presentation",
 		"description": "Generates a complete presentation with custom theme, fonts, and streaming content",
 		"parameters": {
@@ -67,7 +68,7 @@
 
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
@@ -331,7 +332,7 @@
 			}
 			if (!this.s._started) {
 				this.s._started = true;
-				await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + this.requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + this.requestEngine.modelUI.name + ")"]);
 				await Asc.Editor.callMethod("StartAction", ["GroupActions", "AI: Build presentation"]);
 				//this.log.info("StartAction");
 			}
@@ -339,7 +340,7 @@
 		Executor.prototype.endAction = async function () {
 			if (!this.s._ended && this.s._started) {
 				await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.requestEngine.modelUI.name + ")"]);
 				this.s._ended = true;
 				//this.log.info("EndAction");
 			}
@@ -901,6 +902,8 @@
 					let img = await this.loadImage(url);
 					Asc.scope._url = url;
 					Asc.scope._drawId = job.drawingId;
+					// Provenance: alt text (XMP is embedded by imageGenerationRequest).
+					Asc.scope._aiAlt = window.AIProvenance ? window.AIProvenance.altText(window.AIProvenance.meta("generatePresentationWithTheme", imageEngine)) : null;
 					let scaleW = img.naturalWidth / job.width;
 					let scaleH = img.naturalHeight / job.height;
 					if (scaleW > scaleH) {
@@ -916,6 +919,8 @@
 					await checkEndAction();
 					await Asc.Editor.callCommand(function () {
 						const img = Api.CreateImage(Asc.scope._url, Asc.scope.phW, Asc.scope.phH);
+						if (Asc.scope._aiAlt && typeof img.SetDescription === "function")
+							img.SetDescription(Asc.scope._aiAlt);
 						const d = Api.GetByInternalId(Asc.scope._drawId);
 						if (d) {
 							if (d.ReplacePlaceholder(img)) {
@@ -1694,7 +1699,7 @@ ${fontsContract}
 					}
 					if (t === "theme.end") {
 						await exec.themeEnd();
-						await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+						await checkEndAction();
 						continue;
 					}
 
@@ -1811,13 +1816,14 @@ ${fontsContract}
 			}
 
 			await Asc.Editor.callMethod("StartAction", ["GroupActions", "AI: Build presentation"]);
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await requestEngine.chatRequest(prompt, false, handler);
+			await checkEndAction();
 			if (!exec.s.presentationEnd) {
 				await Asc.Editor.callMethod("EndAction", ["GroupActions", "AI: Build presentation"]);
 			}
 		} catch (e) {
-			
+			await checkEndAction();
 			await Asc.Editor.callMethod("EndAction", ["GroupActions", "AI: Build presentation"]);
 		}
 	};

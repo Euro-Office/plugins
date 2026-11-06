@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "insertPivotTable",
+		"category": "analysis",
 		"text": "Create Pivot Table",
 		"description": "Creates pivot tables for data analysis and summarization. Automatically detects suitable grouping columns and numeric columns for aggregation. Supports custom column selection via parameters. Creates a new worksheet with the pivot table. Intelligently matches column names using fuzzy substring matching when column names are specified.",
 		"parameters": {
@@ -275,12 +276,12 @@
 			let isSendedEndLongAction = false;
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 					isSendedEndLongAction = true;
 				}
 			}
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			try {

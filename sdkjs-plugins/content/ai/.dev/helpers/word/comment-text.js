@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "commentText",
+		"category": "comments-review",
 		"text": "Add Comment to Text",
 		"description": "Adds a comment or footnote to explain or annotate the selected text. If no text is selected, works with the current paragraph.",
 		"parameters": {
@@ -90,15 +91,20 @@
 		if (!requestEngine)
 			return;
 
+		// Comments are not body content: no content control, but the author
+		// says that the AI wrote it. Footnote text is pasted in streamed chunks
+		// and is not range-marked (the action is still recorded).
+		Asc.scope.commentAuthor = window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.meta("commentText", requestEngine)) : requestEngine.modelUI.name;
+
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		if (isFootnote)
@@ -144,7 +150,7 @@
 						if (!range)
 							return null;
 
-						let comment = range.AddComment(Asc.scope.data, Asc.scope.model, "uid" + Asc.scope.model);
+						let comment = range.AddComment(Asc.scope.data, Asc.scope.commentAuthor, "uid" + Asc.scope.model);
 						if (!comment)
 							return null;
 						doc.ShowComment([comment.GetId()]);
@@ -163,6 +169,10 @@
 
 		await checkEndAction();
 		await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+	};
+
+	func.describe = function() {
+		return { start: toolText("Add a comment"), done: toolText("Added a comment"), phrase: toolText("added a comment") };
 	};
 
 	return func;

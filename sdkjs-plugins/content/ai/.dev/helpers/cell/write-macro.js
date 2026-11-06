@@ -32,6 +32,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "writeMacro",
+		"category": "macro",
 		"text": "Run Macro",
 		"description": `Executes a JavaScript macro using the OnlyOffice Spreadsheet API.
 Use this tool to perform any spreadsheet operation when no other specialized tool is available.
@@ -149,6 +150,11 @@ values;`
 		if (returnValue && returnValue.onlyoffice_id_result !== undefined) {
 			return returnValue.onlyoffice_id_result;
 		}
+	};
+
+	// The code itself is only shown under "Details" in the chat.
+	func.describe = function() {
+		return { start: toolText("Run a macro"), done: toolText("Ran a macro"), phrase: toolText("ran a macro") };
 	};
 
 	return func;

@@ -15,6 +15,22 @@ import { PLUGIN_DIR, readPluginFile } from "../lib/sandbox.js";
 
 const EDITORS = ["word", "cell", "slide"];
 
+// Tools that run WITHOUT asking the user. Everything else must ask first.
+// Adding a tool here is a security decision: it must not change the document
+// (moving the selection/view is fine).
+const READ_ONLY = {
+	word: ["getSelection", "loadTools", "readDocument", "selectText"],
+	cell: ["getWorkbookInfo", "loadTools", "readRange", "selectRange"],
+	slide: ["goToSlide", "loadTools", "readPresentation"]
+};
+
+// Tools that every editor must provide (the agent prompt relies on them).
+const REQUIRED = {
+	word: ["writeMacro", "loadTools", "readDocument", "getSelection", "replaceSelection", "editParagraph"],
+	cell: ["writeMacro", "loadTools", "getWorkbookInfo", "readRange", "writeRange"],
+	slide: ["writeMacro", "loadTools", "readPresentation", "replaceSelection"]
+};
+
 const enTr = JSON.parse(readPluginFile("translations/helpers/en.json"));
 const deTr = JSON.parse(readPluginFile("translations/helpers/de-DE.json"));
 
@@ -27,6 +43,11 @@ describe.each(EDITORS)("tool registry: %s", (editor) => {
 	const { helper, HELPERS } = loadRegistry(editor);
 	const funcs = helper.funcs;
 	const names = funcs.map((f) => f.name);
+
+	test("has the required tools", () => {
+		for (const name of REQUIRED[editor])
+			expect(names).toContain(name);
+	});
 
 	test("tool names are unique and valid function names", () => {
 		expect(new Set(names).size).toBe(names.length);
@@ -67,8 +88,12 @@ describe.each(EDITORS)("tool registry: %s", (editor) => {
 	});
 
 	test("getTools() returns clean provider tool definitions", () => {
+		// without categories: every tool except the loadTools meta tool
 		const tools = helper.getTools();
-		expect(tools.map((t) => t.name)).toEqual(names);
+		expect(tools.map((t) => t.name)).toEqual(names.filter((n) => n !== "loadTools"));
+		const selected = helper.getTools(helper.selectCategories({ text: "hi" }));
+		expect(selected.map((t) => t.name)).toContain("loadTools");
+		expect(selected.length).toBeLessThan(tools.length + 1);
 		for (const t of tools) {
 			expect(Object.keys(t).sort()).toEqual(["description", "examples", "name", "parameters", "returns"]);
 			expect(t).not.toHaveProperty("readOnly");
@@ -80,11 +105,36 @@ describe.each(EDITORS)("tool registry: %s", (editor) => {
 		expect(funcs[0].parameters.injected).toBeUndefined();
 	});
 
+	test("every tool has a category the selector knows", () => {
+		const available = helper.getAvailableCategories();
+		for (const f of funcs) {
+			if (f.name === "loadTools") continue;
+			expect(available, f.name + " has category " + JSON.stringify(f.category)).toContain(f.category);
+		}
+	});
+
 	test("every tool has an implementation", () => {
 		for (const f of funcs)
 			expect(typeof f.call, f.name).toBe("function");
 	});
 
+	test("read-only classification matches the allowlist", () => {
+		const readOnly = funcs.filter((f) => f.readOnly).map((f) => f.name).sort();
+		expect(readOnly).toEqual([...READ_ONLY[editor]].sort());
+		expect(helper.isReadOnly("writeMacro")).toBe(false);
+		expect(helper.isReadOnly("doesNotExist")).toBe(false);
+	});
+
+	test("system prompts mention the reading tools that exist", () => {
+		const prompt = helper.getToolsSystemPrompt();
+		const readTools = /reading tools \(([^)]+)\)/.exec(prompt)[1].split(/,\s*/);
+		for (const t of readTools)
+			expect(names, "prompt names unknown tool " + t).toContain(t);
+		const fallbackPrompt = helper.getSystemPrompt();
+		for (const name of names.filter((n) => n !== "loadTools"))
+			expect(fallbackPrompt).toContain("- " + name + "\n");
+		expect(helper.getSystemPrompt(helper.selectCategories({ text: "hi" }))).toContain("- loadTools\n");
+	});
 });
 
 describe("tool registry: other editors", () => {

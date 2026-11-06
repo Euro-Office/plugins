@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "duplicateSlide",
+		"category": "structure",
 		"text": "Duplicate Slide",
 		"description": "Duplicates slide with the specific index or current",
 		"parameters": {
