@@ -1,3 +1,4 @@
 # Generated files: collapsed in GitHub diffs, excluded from language stats
 sdkjs-plugins/content/ai/scripts/helpers/helpers.js linguist-generated=true
 **/package-lock.json linguist-generated=true
+sdkjs-plugins/content/ai/sidebar/** linguist-generated=true
