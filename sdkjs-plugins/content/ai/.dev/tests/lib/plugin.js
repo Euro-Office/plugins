@@ -17,6 +17,7 @@ export const TOOL_SCRIPTS = [
 	"scripts/helpers/helperFuncs.js",
 	"scripts/helpers/helpers.js",
 	"scripts/helpers/toolCategories.js",
+	"scripts/helpers/agentHistory.js",
 	"scripts/helpers/toolPreviews.js"
 ];
 
