@@ -93,10 +93,11 @@ test("myTool does X", async () => {
 
 `e2e/` contains a Playwright test. It opens a new `.docx` in a real Document Server through the server's example app, with this plugin mounted, and points the plugin at `e2e/stub-llm.js`, an OpenAI-compatible stub that streams scripted responses. The test then:
 
-1. sends a chat message;
+1. opens the chat sidebar and checks that it is docked, then sends a chat message;
 2. checks that the approval card for `editParagraph` appears, and clicks **Allow**;
 3. lets the stub request `readDocument`;
-4. asserts that the document, as read back through the real Document API, contains the new text.
+4. asserts that the document, as read back through the real Document API, contains the new text;
+5. clicks **Undo AI changes** on the answer and waits for "AI changes undone.".
 
 To run it locally (Docker and Chrome/Chromium required):
 

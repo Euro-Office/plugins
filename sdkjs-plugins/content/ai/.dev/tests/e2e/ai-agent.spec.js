@@ -4,6 +4,8 @@
 // agent talking to a scripted OpenAI-compatible stub. The stub asks for
 // editParagraph (needs approval) and then readDocument, so the last request
 // carries the document content as read back through the real Document API.
+// The chat is the docked sidebar (sidebar/index.html, built from
+// .dev/sidebar); the test also checks the "Undo AI changes" bar.
 
 import { test, expect } from "@playwright/test";
 import { startStubLLM } from "./stub-llm.js";
@@ -50,9 +52,11 @@ test("the agent edits a document through tool calls after approval", async ({ pa
 		await editor.locator(".btn-slot, button", { hasText: "Chatbot" }).first().click();
 
 		let chat;
-		await expect.poll(() => (chat = page.frames().find((f) => f.url().includes("chat.html"))) ? 1 : 0, { timeout: 30000 }).toBe(1);
-		await chat.locator("#input_message").fill("Replace the first paragraph with a greeting");
-		await chat.locator("#input_message_submit").click();
+		await expect.poll(() => (chat = page.frames().find((f) => f.url().includes("sidebar/index.html"))) ? 1 : 0, { timeout: 30000 }).toBe(1);
+		// docked in the right panel, not a floating window
+		expect(await editor.locator("iframe[src*='sidebar/index.html']").evaluate((f) => !f.closest(".asc-window"))).toBe(true);
+		await chat.getByRole("textbox").fill("Replace the first paragraph with a greeting");
+		await chat.getByRole("button", { name: "Send" }).click();
 
 		// editParagraph is not read-only: the chat asks first.
 		const approval = chat.locator(".tool_call_approval");
@@ -61,7 +65,13 @@ test("the agent edits a document through tool calls after approval", async ({ pa
 		await approval.getByRole("button", { name: "Allow", exact: true }).click();
 
 		await expect.poll(() => stub.requests.length, { timeout: 60000 }).toBe(3);
-		await expect(chat.locator("#chat")).toContainText("Done.", { timeout: 30000 });
+		await expect(chat.locator(".assistant_message").last()).toContainText("Done.", { timeout: 30000 });
+
+		// The turn changed the document: the answer offers to undo it.
+		const edits = chat.getByRole("group", { name: "AI changes" });
+		await expect(edits).toBeVisible({ timeout: 30000 });
+		await edits.getByRole("button", { name: "Undo AI changes" }).click();
+		await expect(edits.locator(".ai_edits_status")).toHaveText("AI changes undone.", { timeout: 30000 });
 
 		const [first, second, third] = stub.requests;
 		expect(first.tools.map((t) => t.function.name)).toContain("editParagraph");

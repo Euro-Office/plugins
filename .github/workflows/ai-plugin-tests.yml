@@ -50,7 +50,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: sdkjs-plugins/content/ai/.dev/tests/package-lock.json
+          cache-dependency-path: |
+            sdkjs-plugins/content/ai/.dev/tests/package-lock.json
+            sdkjs-plugins/content/ai/.dev/sidebar/package-lock.json
 
       - name: Syntax check (node --check) of all plugin scripts
         run: |
@@ -70,6 +72,22 @@ jobs:
           (cd .dev/helpers && python3 helpers.py)
           git diff --exit-code -- scripts/helpers/helpers.js \
             || { echo "::error file=sdkjs-plugins/content/ai/scripts/helpers/helpers.js::helpers.js is out of date. Run: cd sdkjs-plugins/content/ai/.dev/helpers && python3 helpers.py"; exit 1; }
+
+      # sidebar/ is built from .dev/sidebar but stays committed for the same
+      # reason. See .dev/sidebar/README.md.
+      - name: Install chat sidebar dependencies
+        working-directory: sdkjs-plugins/content/ai/.dev/sidebar
+        run: npm ci
+
+      - name: Built chat sidebar is in sync with .dev/sidebar
+        working-directory: sdkjs-plugins/content/ai/.dev/sidebar
+        run: |
+          npm run check \
+            || { echo "::error file=sdkjs-plugins/content/ai/sidebar/sidebar.js::sidebar/ is out of date. Run: cd sdkjs-plugins/content/ai/.dev/sidebar && npm ci && npm run build"; exit 1; }
+
+      - name: Chat sidebar tests
+        working-directory: sdkjs-plugins/content/ai/.dev/sidebar
+        run: npm test
 
       - name: Install test dependencies
         working-directory: sdkjs-plugins/content/ai/.dev/tests
