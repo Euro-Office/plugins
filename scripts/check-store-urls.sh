@@ -10,3 +10,7 @@ if grep -rnE 'onlyoffice\.github\.io|plugins-services\.onlyoffice\.com|github\.c
 	echo 'store/ references ONLYOFFICE services, see above' >&2
 	exit 1
 fi
+if grep -rn 'Euro-Office/plugins/tree/master' store sdkjs-plugins; then
+	echo 'links point at the old master branch, use main' >&2
+	exit 1
+fi
