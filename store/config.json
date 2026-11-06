@@ -1,6 +1,5 @@
 [
 	{ "name": "apertium", "discussion": "221" },
-	{ "name": "deepl", "discussion": "222" },
 	{ "name": "doc2md", "discussion": "223" },
 	{ "name": "rainbow", "discussion": "224" },
 	{ "name": "photoeditor", "discussion": "225" },
@@ -14,8 +13,6 @@
 	{ "name": "mendeley", "discussion": "236" },
 	{ "name": "grammalecte", "discussion": "237" },
 	{ "name": "ocr", "discussion": "238" },
-	{ "name": "thesaurus", "discussion": "239" },
-	{ "name": "translator", "discussion": "240" },
 	{ "name": "youtube", "discussion": "241" },
 	{ "name": "wordscounter", "discussion": "242" },
 	{ "name": "typograf", "discussion": "243" },
