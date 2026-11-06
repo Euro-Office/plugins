@@ -267,5 +267,14 @@
 	"New sheet": "Neues Tabellenblatt",
 	"New name": "Neuer Name",
 	"Used range": "Belegter Bereich",
-	"Empty": "Leer"
+	"Empty": "Leer",
+	"Brainstorm": "Brainstorming",
+	"Remove attached text": "Angehängten Text entfernen",
+	"Send": "Senden",
+	"Stop": "Stopp",
+	"Voice input": "Spracheingabe",
+	"Stop voice input": "Spracheingabe beenden",
+	"Voice input error:": "Fehler bei der Spracheingabe:",
+	"Voice input is not supported in your browser": "Spracheingabe wird von Ihrem Browser nicht unterstützt",
+	"Failed to start voice input": "Spracheingabe konnte nicht gestartet werden"
 }
