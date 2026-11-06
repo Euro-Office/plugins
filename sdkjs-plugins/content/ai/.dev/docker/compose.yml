@@ -7,14 +7,20 @@ services:
   documentserver:
     image: ghcr.io/euro-office/documentserver:${EO_TAG:-latest}
     ports:
-      - "${EO_PORT:-8080}:80"
+      # Must be 80 on both sides: the example app builds document URLs from the
+      # browser's host and port, and the server fetches them from inside the container.
+      - "80:80"
     environment:
       JWT_ENABLED: "true"
       JWT_SECRET: "${EO_JWT_SECRET:-local-dev-secret-at-least-32-chars-long}"
       EXAMPLE_ENABLED: "true"
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
     volumes:
-      # Replace the bundled AI plugin with this working copy (same GUID folder).
       - "../..:/var/www/euro-office/documentserver/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}:ro"
+    configs:
+      # Register the mounted plugin with the example app (loaded after its local.json).
+      - source: example-plugins
+        target: /etc/euro-office/documentserver-example/local-production-linux.json
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost/healthcheck"]
       interval: 10s
@@ -31,6 +37,11 @@ services:
       OLLAMA_ORIGINS: "*"
     volumes:
       - ollama:/root/.ollama
+
+configs:
+  example-plugins:
+    content: |
+      { "plugins": { "pluginsData": ["http://localhost/sdkjs-plugins/{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}/config.json"] } }
 
 volumes:
   ollama:

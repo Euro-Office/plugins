@@ -18,10 +18,12 @@ docker compose -f .dev/docker/compose.yml exec ollama ollama pull qwen2.5:7b
 First start takes a minute or two (fonts are generated). It is ready when this prints `true`:
 
 ```sh
-curl http://localhost:8080/healthcheck
+curl http://localhost/healthcheck
 ```
 
-Open <http://localhost:8080/example/>, create or upload a document, then use the **AI** tab.
+Open <http://localhost/example/>, create or upload a document, then use the **AI** tab.
+
+The server uses port 80 on purpose: the example app builds document URLs from the browser's host and port, and the server fetches them from inside the container, so both sides must match.
 
 ## Use an OpenAI-compatible endpoint
 
@@ -69,11 +71,10 @@ After changing a tool in `.dev/helpers`, regenerate `scripts/helpers/helpers.js`
 | Variable | Default | Purpose |
 |---|---|---|
 | `EO_TAG` | `latest` | Document Server image tag, e.g. `nightly` |
-| `EO_PORT` | `8080` | Port for the editor and example app |
 | `EO_JWT_SECRET` | dev value | JWT secret (32+ chars) |
 | `OLLAMA_PORT` | `11434` | Port for Ollama |
 
-Example: `EO_TAG=nightly EO_PORT=9000 docker compose -f .dev/docker/compose.yml up -d`
+Example: `EO_TAG=nightly docker compose -f .dev/docker/compose.yml up -d`
 
 ## Stop
 
@@ -85,6 +86,6 @@ docker compose -f .dev/docker/compose.yml --profile ollama down -v   # also dele
 ## Troubleshooting
 
 - **Pull denied:** run `docker login ghcr.io` with a GitHub token that has `read:packages`.
-- **Plugin missing or stale:** check that `http://localhost:8080/plugins.json` lists `{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}`. The list is cached briefly, so wait a minute or restart the container.
+- **Plugin missing or stale:** check that `http://localhost/plugins.json` lists `{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}`. The list is cached briefly, so wait a minute or restart the container.
 - **Ollama requests blocked (CORS):** `OLLAMA_ORIGINS` must allow the editor origin; the compose file sets `*`.
 - The example app has no access control. Use this setup only locally.
