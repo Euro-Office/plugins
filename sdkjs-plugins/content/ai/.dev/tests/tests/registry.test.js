@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import Ajv from "ajv";
 import { createToolEnv } from "../lib/plugin.js";
 import { PLUGIN_DIR, readPluginFile } from "../lib/sandbox.js";
 
@@ -43,6 +44,26 @@ describe.each(EDITORS)("tool registry: %s", (editor) => {
 		expect(helper.getHumanName(name)).toBe(label);
 		expect(enTr[label], "translations/helpers/en.json is missing \"" + label + "\"").toBe(label);
 		expect(deTr[label], "translations/helpers/de-DE.json is missing \"" + label + "\"").toBeTruthy();
+	});
+
+	test.each(funcs.map((f) => [f.name, f]))("%s has a valid JSON Schema and valid examples", (name, func) => {
+		const ajv = new Ajv({ strict: true, allowUnionTypes: true, allErrors: true });
+		const schema = func.parameters;
+		expect(schema.type).toBe("object");
+		expect(ajv.validateSchema(schema), ajv.errorsText(ajv.errors)).toBe(true);
+		const validate = ajv.compile(schema);
+		const props = schema.properties || {};
+		for (const req of schema.required || [])
+			expect(Object.keys(props), "required \"" + req + "\" is not a property").toContain(req);
+		for (const [prop, def] of Object.entries(props)) {
+			expect(def.description, name + "." + prop + " has no description").toBeTruthy();
+			expect(def.type || def.enum || def.anyOf || def.oneOf, name + "." + prop + " has no type").toBeTruthy();
+		}
+		expect(Array.isArray(func.examples)).toBe(true);
+		for (const ex of func.examples) {
+			expect(typeof ex.prompt).toBe("string");
+			expect(validate(ex.arguments), name + " example " + JSON.stringify(ex.arguments) + ": " + ajv.errorsText(validate.errors)).toBe(true);
+		}
 	});
 
 	test("getTools() returns clean provider tool definitions", () => {
