@@ -187,6 +187,34 @@ describe("selectRange", () => {
 
 });
 
+describe("comments", () => {
+	const spec = {
+		...SALES,
+		comments: [
+			{ sheet: "Sales", id: "1", cell: "B3", author: "Ann", text: "Too high?", replies: [{ author: "Ben", text: "No" }] },
+			{ sheet: "Notes", id: "2", cell: "A1", text: "Old", solved: true }
+		]
+	};
+
+	test("getComments maps comments to cells on every sheet", async () => {
+		const r = await cell(spec).call("getComments");
+		expect(r).toMatchObject({ totalComments: 2, returned: 2 });
+		expect(r.comments[0]).toEqual({ id: "1", sheet: "Sales", address: "B3", author: "Ann", text: "Too high?", resolved: false, cellValue: "120", replies: [{ author: "Ben", text: "No" }] });
+		const open = await cell(spec).call("getComments", { includeResolved: false });
+		expect(open.comments.map((c) => c.id)).toEqual(["1"]);
+		const notes = await cell(spec).call("getComments", { sheet: "Notes" });
+		expect(notes.comments.map((c) => c.address)).toEqual(["A1"]);
+	});
+
+	test("replyToComment replies and/or resolves", async () => {
+		const env = cell(spec);
+		expect(await env.call("replyToComment", { commentId: "1", text: "Checked." })).toEqual({ commentId: "1", replies: 2, resolved: false });
+		expect(await env.call("replyToComment", { commentId: 1, resolved: true })).toEqual({ commentId: "1", replies: 2, resolved: true });
+		await expectToolError(env.call("replyToComment", { commentId: "1" }), /Provide a non-empty "text"/);
+		await expectToolError(env.call("replyToComment", { commentId: "9", text: "x" }), /Comment "9" not found/);
+	});
+});
+
 describe("invalid addresses", () => {
 	// ApiWorksheet.GetRange throws in the editor; the command must still
 	// return a clear error instead of an empty "success".

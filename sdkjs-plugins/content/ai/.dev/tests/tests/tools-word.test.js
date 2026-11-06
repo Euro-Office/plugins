@@ -317,12 +317,102 @@ describe("readOutline", () => {
 	});
 });
 
+describe("comments", () => {
+	const spec = {
+		body: ["text"],
+		comments: [
+			{ id: "c1", author: "Alice", text: "Check this", quote: "text", replies: [{ author: "Bob", text: "ok" }] },
+			{ id: "c2", author: "Carol", text: "Done already", solved: true }
+		]
+	};
+
+	test("getComments returns open and resolved comments with replies", async () => {
+		const { call } = word(spec);
+		const r = await call("getComments");
+		expect(r).toMatchObject({ totalComments: 2, openComments: 1, returned: 2 });
+		expect(r.comments[0]).toEqual({
+			id: "c1", author: "Alice", text: "Check this", quotedText: "text", resolved: false,
+			time: new Date(1700000000000).toISOString(), replies: [{ author: "Bob", text: "ok" }]
+		});
+		const open = await call("getComments", { includeResolved: false });
+		expect(open.comments.map((c) => c.id)).toEqual(["c1"]);
+		await expectToolError(call("getComments", { maxResults: 0 }), /"maxResults"/);
+	});
+
+	test("replyToComment adds a reply as AI", async () => {
+		const { call, doc } = word(spec);
+		expect(await call("replyToComment", { commentId: "c1", text: "Fixed." })).toEqual({ commentId: "c1", replies: 2 });
+		expect(doc.comments[0].replies[1]).toEqual({ author: "AI Assistant", text: "Fixed.", userId: "uid-ai" });
+		await expectToolError(call("replyToComment", { commentId: "zz", text: "x" }), /Comment "zz" not found/);
+		await expectToolError(call("replyToComment", { commentId: "c1", text: " " }), /"text" must be a non-empty string/);
+		await expectToolError(call("replyToComment", { text: "x" }), /"commentId" is required/);
+	});
+
+	test("resolveComment resolves and reopens", async () => {
+		const { call, doc } = word(spec);
+		expect(await call("resolveComment", { commentId: "c1" })).toEqual({ commentId: "c1", resolved: true });
+		expect(doc.comments[0].solved).toBe(true);
+		expect(await call("resolveComment", { commentId: "c2", resolved: false })).toEqual({ commentId: "c2", resolved: false });
+		await expectToolError(call("resolveComment", { commentId: "c1", resolved: "no" }), /"resolved" must be a boolean/);
+		await expectToolError(call("resolveComment", { commentId: "nope" }), /not found/);
+	});
+});
+
+describe("tracked changes", () => {
+	const spec = {
+		body: ["first", "second"],
+		revisions: {
+			Alice: [{ Type: "TextAdd", Value: "new words", Date: 1700000000000, paragraph: 1 }, { Type: "ParaAdd", paragraph: 2 }],
+			Bob: [{ Type: "TextRem", Value: "old", paragraph: 2 }]
+		}
+	};
+
+	test("getTrackedChanges summarizes by author", async () => {
+		const { call, doc } = word(spec);
+		doc.trackRevisions = true;
+		const r = await call("getTrackedChanges");
+		expect(r).toMatchObject({ trackChangesOn: true, totalChanges: 3, byAuthor: { Alice: 2, Bob: 1 }, returned: 3 });
+		expect(r.changes[0]).toEqual({ author: "Alice", type: "TextAdd", value: "new words", date: new Date(1700000000000).toISOString(), paragraph: "first" });
+		expect(r.changes[1]).toEqual({ author: "Alice", type: "ParaAdd", paragraph: "second" });
+		const capped = await call("getTrackedChanges", { maxResults: 1 });
+		expect(capped).toMatchObject({ totalChanges: 3, returned: 1 });
+	});
+
+	test("reviewTrackedChanges accepts all / the selection and reports counts", async () => {
+		const sel = word({ ...spec, selection: { paragraph: 2 } });
+		const r1 = await sel.call("reviewTrackedChanges", { action: "accept" });
+		expect(r1).toEqual({ action: "accept", scope: "selection", changesBefore: 3, changesAfter: 1 });
+		expect(sel.host.methodCalls("AcceptReviewChanges")[0].args).toEqual([false]);
+
+		const all = word(spec);
+		const r2 = await all.call("reviewTrackedChanges", { action: "reject", scope: "all" });
+		expect(r2).toEqual({ action: "reject", scope: "all", changesBefore: 3, changesAfter: 0 });
+		expect(all.host.methodCalls("RejectReviewChanges")[0].args).toEqual([true]);
+	});
+
+	test("reviewTrackedChanges explains when nothing happened", async () => {
+		const none = await word({ body: ["x"] }).call("reviewTrackedChanges", { action: "accept" });
+		expect(none.note).toMatch(/no tracked changes/);
+		const outside = await word({ ...spec, selection: { paragraph: 1, start: 0, end: 0 } }).call("reviewTrackedChanges", { action: "accept" });
+		expect(outside.changesAfter).toBe(2); // only the change in paragraph 1
+		const empty = word({ body: ["x"], revisions: { A: [{ Type: "TextAdd", paragraph: 1 }] } });
+		const r = await empty.call("reviewTrackedChanges", { action: "accept" });
+		expect(r.note).toMatch(/No tracked changes were inside the current selection/);
+	});
+
+	test("validates arguments", async () => {
+		const { call } = word(spec);
+		await expectToolError(call("reviewTrackedChanges", { action: "approve" }), /"action" must be "accept" or "reject"/);
+		await expectToolError(call("reviewTrackedChanges", { action: "accept", scope: "page" }), /"scope"/);
+	});
+});
+
 describe("commands run in the editor context", () => {
 	test("no tool command throws inside the editor for a typical document", async () => {
 		const env = word({ ...SAMPLE, selection: { paragraph: 2, start: 0, end: 7 }, comments: [{ id: "1", text: "c" }] });
 		for (const [name, args] of [
 			["readDocument", {}], ["getSelection", {}], ["findText", { query: "e" }], ["readOutline", {}],
-			["selectText", { query: "Revenue" }]
+			["getComments", {}], ["getTrackedChanges", {}], ["selectText", { query: "Revenue" }]
 		])
 			await env.call(name, args);
 		expect(env.host.commandErrors).toEqual([]);
