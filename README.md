@@ -33,5 +33,8 @@ We would like to thank all the contributors and developers who have worked on th
 - copies `sdkjs-plugins/v1/{plugins.js,plugins-ui.js,plugins.css}` to `<dest>/v1`
 - copies each listed plugin to `<dest>/<name>` without dev and build files (`.dev`, `node_modules`, `deploy`, `src` of prebuilt plugins, source maps)
 - rewrites `https://onlyoffice.github.io/sdkjs-plugins/` in HTML files to a relative path pointing at `<dest>/v1`
+- writes `<dest>/plugin-list-default.json`, a JSON array of the listed names for `documentserver-pluginsmanager --update=<file>`
 
-`scripts/check-bundle.sh <dest>` fails if a bundled plugin loads external scripts, stylesheets or fonts on open, or declares a system or background variation. CI runs both on every push and pull request.
+`scripts/check-bundle.sh <dest>` fails if a bundled plugin loads external scripts, stylesheets or fonts on open, or declares a system or background variation, or if `plugin-list-default.json` does not match `bundle.txt`. CI runs both on every push and pull request.
+
+`packer/pack.py` writes one `<name>.plugin` per plugin to `artifacts/` with the same rewrite, for installs into `sdkjs-plugins/<name>`. `scripts/check-packs.py artifacts` fails if a pack has no root `config.json` or its helpers do not resolve to `sdkjs-plugins/v1/`.

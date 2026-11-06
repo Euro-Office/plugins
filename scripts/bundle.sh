@@ -6,12 +6,14 @@ dest=${1:?usage: bundle.sh <dest>}
 root=$(cd "$(dirname "$0")/.." && pwd)
 content=$root/sdkjs-plugins/content
 helper_url='https://onlyoffice.github.io/sdkjs-plugins/'
+names=()
 
 mkdir -p "$dest/v1"
 cp "$root"/sdkjs-plugins/v1/{plugins.js,plugins-ui.js,plugins.css} "$dest/v1/"
 
 while read -r name || [ -n "$name" ]; do
 	case $name in '' | '#'*) continue ;; esac
+	names+=("$name")
 	src=$content/$name
 	if [ ! -f "$src/config.json" ] && [ -f "$src/src/config.json" ]; then
 		src=$src/src
@@ -42,3 +44,7 @@ while read -r name || [ -n "$name" ]; do
 		mv "$out/$html.tmp" "$out/$html"
 	done
 done <"$root/bundle.txt"
+
+# plugin list for documentserver-pluginsmanager --update=<file>
+list=$(printf '"%s", ' "${names[@]}")
+printf '[%s]\n' "${list%, }" >"$dest/plugin-list-default.json"

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 dest=${1:?usage: check-bundle.sh <dest>}
+root=$(cd "$(dirname "$0")/.." && pwd)
 ext='["'"'"']?(https?:)?//'
 status=0
 
@@ -23,5 +24,11 @@ for path in sys.argv[1:]:
             bad = 1
 sys.exit(bad)
 ' {} + || status=1
+
+if ! python3 -c 'import json, sys; sys.exit(json.load(open(sys.argv[1])) != sys.argv[2].split())' \
+	"$dest/plugin-list-default.json" "$(grep -Ev '^(#|$)' "$root/bundle.txt")"; then
+	echo "check-bundle.sh: plugin-list-default.json missing or not matching bundle.txt" >&2
+	status=1
+fi
 
 exit $status
