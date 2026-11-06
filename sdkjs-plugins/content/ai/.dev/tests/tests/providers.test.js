@@ -235,6 +235,21 @@ describe("engine: agent requests", () => {
 		expect(fetches[1].body.system).toBe("SYS + document context");
 	});
 
+	test("with server settings, streaming requests go through the Document Server proxy", async () => {
+		const p = loadProvider("openai");
+		sb.ctx.AI.serverSettings = { proxy: "http://ds/ai-proxy" };
+		sb.ctx.Asc.plugin.info.jwt = "jwt";
+		responder = () => streamResponse([sse([{ data: { choices: [{ delta: { content: "OK" } }] } }])]);
+		const res = await agentRequest(p, "gpt-4o", { messages: [{ role: "user", content: "hi" }], tools: TOOLS }, async () => {});
+
+		expect(fetches[0].url).toBe("http://ds/ai-proxy");
+		expect(fetches[0].init.headers).toEqual({ Authorization: "Bearer jwt" });
+		expect(fetches[0].init.signal).toBeDefined();
+		expect(fetches[0].body.target).toBe("https://api.openai.com/v1/chat/completions");
+		expect(JSON.parse(fetches[0].body.data).stream).toBe(true);
+		expect(res.content).toBe("OK");
+	});
+
 	test("non-streaming responses return content and tool calls", async () => {
 		const p = loadProvider("openai");
 		responder = () => new Response(JSON.stringify({ choices: [{ message: { content: "Hi", tool_calls: [{ id: "a", type: "function", function: { name: "readDocument", arguments: "{}" } }] } }] }));
