@@ -5,6 +5,7 @@ Plugin Packer - Utility for packaging plugins with configurable exclusions
 
 import os
 import shutil
+import sys
 import json
 import time
 from pathlib import Path
@@ -20,6 +21,8 @@ class PluginPacker:
     RETRY_DELAY = 1
     # installed plugins live in sdkjs-plugins/<name>/ next to the v1/ helpers, same rewrite as scripts/bundle.sh
     HELPER_URL = 'https://onlyoffice.github.io/sdkjs-plugins/'
+    # zotero is AGPL with Section 7 terms we do not accept for redistribution
+    SKIP = {'zotero'}
     
     def __init__(self, old_mode=False):
         self.old_mode = old_mode
@@ -212,26 +215,32 @@ class PluginPacker:
         """Main packing method"""
         if not os.path.exists(self.content_dir):
             print(f"Content directory {self.content_dir} does not exist")
-            return
-        
+            return ["<content dir>"]
+
         os.makedirs(self.artifacts_dir, exist_ok=True)
-        
+        failed = []
+
         for plugin_name in os.listdir(self.content_dir):
             plugin_path = os.path.join(self.content_dir, plugin_name)
-            
-            if not os.path.isdir(plugin_path):
+
+            if not os.path.isdir(plugin_path) or plugin_name in self.SKIP:
                 continue
-            
+
             if self.old_mode:
-                self.pack_plugin_old_mode(plugin_path, plugin_name)
+                ok = self.pack_plugin_old_mode(plugin_path, plugin_name)
             else:
-                self.pack_plugin_new_mode(plugin_path, plugin_name)
+                ok = self.pack_plugin_new_mode(plugin_path, plugin_name)
+            if not ok:
+                failed.append(plugin_name)
+        return failed
 
     def run(self):
         """Run the plugin packer"""
         args = self.parse_arguments()
         self.old_mode = args.old_mode
-        self.pack_plugins()
+        failed = self.pack_plugins()
+        if failed:
+            sys.exit(f"Failed to pack: {', '.join(failed)}")
 
 
 def main():

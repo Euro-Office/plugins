@@ -24,7 +24,7 @@ jobs:
     - name: Pack plugins
       run: |
         python packer/pack.py
-        scripts/check-packs.py artifacts
+        scripts/check-packs.py artifacts store/config.json
 
     - name: Bundle plugins
       run: |

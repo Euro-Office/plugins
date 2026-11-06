@@ -21,4 +21,4 @@ jobs:
       - name: Check release packs
         run: |
           python3 packer/pack.py
-          scripts/check-packs.py artifacts
+          scripts/check-packs.py artifacts store/config.json

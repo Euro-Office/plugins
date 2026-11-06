@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Euro-Office contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Fail if a .plugin lacks a root config.json or loads the v1 helpers from anywhere but sdkjs-plugins/v1/."""
+"""Fail if a .plugin lacks a root config.json or loads the v1 helpers from anywhere but sdkjs-plugins/v1/.
+
+With a store config as second argument, also fail if a store plugin has no pack or no sdkjs-plugins/content/<name>/config.json.
+"""
+import json
 import posixpath
 import re
 import sys
@@ -31,5 +35,16 @@ for pack in packs:
                 if not posixpath.normpath(posixpath.join(posixpath.dirname(name), url)).startswith('../v1/'):
                     print(f'{pack.name}:{name}: {url} does not resolve to sdkjs-plugins/v1/')
                     bad = True
+
+if len(sys.argv) > 2:
+    content = Path(__file__).resolve().parent.parent / 'sdkjs-plugins' / 'content'
+    for entry in json.loads(Path(sys.argv[2]).read_text(encoding='utf-8')):
+        name = entry['name']
+        if not (Path(sys.argv[1]) / f'{name}.plugin').is_file():
+            print(f'{sys.argv[2]}: {name} has no {name}.plugin')
+            bad = True
+        if not (content / name / 'config.json').is_file():
+            print(f'{sys.argv[2]}: {name} has no sdkjs-plugins/content/{name}/config.json')
+            bad = True
 
 sys.exit(1 if bad else 0)
