@@ -314,7 +314,7 @@ describe("agent status line", () => {
 		// one Thinking indicator only (no typing bubble in the log)
 		expect(root.textContent!.match(/Thinking/g)).toHaveLength(1);
 		// the phase is announced, the seconds are not
-		expect($(".agent_status_label")!.getAttribute("aria-live")).toBe("polite");
+		expect($(".agent_status")!.closest("[role=status]")!.getAttribute("aria-live")).toBe("polite");
 		expect($(".agent_status_time")!.getAttribute("aria-hidden")).toBe("true");
 		reply("Done");
 		expect(status()).toBeNull();
@@ -352,6 +352,41 @@ describe("agent status line", () => {
 		submit("Q");
 		reply("Error: [provider]");
 		expect(status()).toBeNull();
+	});
+
+	test("the live region exists before the turn, only its text changes", () => {
+		setup();
+		const region = $(".agent_status_region")!;
+		expect(region.getAttribute("role")).toBe("status");
+		expect(region.getAttribute("aria-live")).toBe("polite");
+		expect(region.textContent).toBe("");
+		submit("Go");
+		expect($(".agent_status_region")).toBe(region);
+		expect(region.textContent).toContain("Thinking");
+		reply("Done");
+		expect($(".agent_status_region")).toBe(region);
+		expect(region.textContent).toBe("");
+	});
+
+	test("the seconds unit is translated", () => {
+		setup();
+		plugin.tr = (s: string) => (s === "%1 s" ? "%1 Sek." : s);
+		submit("Go");
+		expect(seconds()).toBe("0 Sek.");
+	});
+
+	test("editor-initiated tool calls during a turn leave the status alone", () => {
+		setup();
+		submit("Go");
+		fire("onToolCallStart", { type: "native", id: "c1", functionName: "readDocument", humanName: "Read Document", arguments: "{}" });
+		fire("onToolCallStart", { type: "native", id: "e1", functionName: "editParagraph", humanName: "Edit Paragraph", arguments: "{}", source: "editor" });
+		expect(label()).toBe("Read Document…");
+		fire("onToolCallEnd", { type: "native", id: "e1", functionName: "editParagraph", arguments: "{}", result: { message: "ok" }, source: "editor" });
+		expect(label()).toBe("Read Document…");
+		fire("onToolCallEnd", { type: "native", id: "x9", functionName: "other", arguments: "{}", result: { message: "ok" } });
+		expect(label()).toBe("Read Document…");
+		fire("onToolCallEnd", { type: "native", id: "c1", functionName: "readDocument", arguments: "{}", result: { message: "ok" } });
+		expect(label()).toBe("Thinking…");
 	});
 
 	test("editor-initiated tool calls outside a turn show no status", () => {
@@ -568,6 +603,8 @@ describe("AI edits bar", () => {
 		expect(bar.querySelector(".ai_edits_status")!.textContent).toBe("The AI changed the document.");
 		const undo = within(bar).getByRole("button", { name: "Undo AI changes" });
 		expect(undo.getAttribute("title")).toContain("2 undo steps");
+		// the document stays editable during a turn: warn that edits made meanwhile may be undone
+		expect(undo.getAttribute("title")).toContain("while the AI was working");
 		fireEvent.click(undo);
 		expect(sentNamed("onAIEditsAction")).toEqual([{ turnId: "t1", action: "undo" }]);
 		expect((within(bar).getByRole("button", { name: "Undo AI changes" }) as HTMLButtonElement).disabled).toBe(true);

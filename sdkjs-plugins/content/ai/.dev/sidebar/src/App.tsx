@@ -83,7 +83,11 @@ export function App({ chat }: { chat: Chat }) {
 					<IconButton class="icon_button" icon="close" label={tr("Remove attached text")} theme={state.themeType} onClick={chat.actions.clearAttachedText} />
 				</div>
 			)}
-			{state.running && !state.stopped && <AgentStatus chat={chat} />}
+			{/* Persistent live region: it exists before a turn starts, so the
+			    first "Thinking…" is announced, not skipped. */}
+			<div class="agent_status_region" role="status" aria-live="polite">
+				{state.running && !state.stopped && <AgentStatus chat={chat} />}
+			</div>
 			<Composer chat={chat} />
 			{state.error && (
 				<div class="div_error" role="alert" onClick={chat.actions.clearError}>
@@ -406,7 +410,7 @@ function AIEditsBar({ chat, item, edits }: { chat: Chat; item: Item; edits: AIEd
 		buttons.push({
 			label: "Undo AI changes", action: "undo", enabled: !!edits.undoAvailable,
 			title: edits.undoAvailable
-				? tr("Undoes the AI changes of this answer (%1 undo steps). If you edited the document since, those edits may be undone too.").replace("%1", String(edits.steps))
+				? tr("Undoes the AI changes of this answer (%1 undo steps). Edits you made while the AI was working or afterwards may be undone too. Reject all is safer when the changes are tracked.").replace("%1", String(edits.steps))
 				: tr("Not available: the document was changed by the AI afterwards. Use Undo in the editor.")
 		});
 	}
@@ -454,8 +458,8 @@ function ChipsRow({ chat }: { chat: Chat }) {
 
 // ── Agent status ─────────────────────────────────────────────────────────
 
-// Only the phase is announced (aria-live); the seconds counter is hidden
-// from screen readers so it is not read out every second.
+// Only the phase is announced (live region in App); the seconds counter is
+// hidden from screen readers so it is not read out every second.
 function AgentStatus({ chat }: { chat: Chat }) {
 	let { state, tr } = chat;
 	let [, tick] = useReducer((n: number) => n + 1, 0);
@@ -469,8 +473,8 @@ function AgentStatus({ chat }: { chat: Chat }) {
 	let seconds = Math.max(0, Math.floor((Date.now() - state.turnStart) / 1000));
 	return (
 		<div class="agent_status">
-			<span class="agent_status_label" aria-live="polite">{label}</span>
-			<span class="agent_status_time" aria-hidden="true">{seconds} s</span>
+			<span class="agent_status_label">{label}</span>
+			<span class="agent_status_time" aria-hidden="true">{tr("%1 s").replace("%1", String(seconds))}</span>
 		</div>
 	);
 }

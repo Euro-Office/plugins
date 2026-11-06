@@ -109,6 +109,8 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 	let listeners: (() => void)[] = [];
 	let nextId = 1;
 	let toolCallIndices: Record<string, ToolIndex> = {};
+	// Tool call shown in the status line (state.activeTool).
+	let statusToolId: string | null = null;
 	let errTimer: ReturnType<typeof setTimeout> | null = null;
 	let translations: Record<string, string> = {};
 
@@ -242,6 +244,7 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 		state.running = true;
 		state.stopped = false;
 		state.activeTool = null;
+		statusToolId = null;
 		state.turnStart = Date.now();
 		setChipsBusy(true);
 
@@ -262,6 +265,7 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 		state.running = false;
 		state.stopped = false;
 		state.activeTool = null;
+		statusToolId = null;
 		setChipsBusy(false);
 		state.focusInput++;
 	}
@@ -493,8 +497,12 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 			if (!data)
 				return;
 			let { name, args } = parseCall(data);
-			if (state.running)
+			// Editor-initiated calls (toolApproval.js, source "editor") are not
+			// part of the agent turn and leave the status line alone.
+			if (state.running && data.source !== "editor") {
 				state.activeTool = data.humanName || name;
+				statusToolId = data.id || null;
+			}
 			let index = addToolCall({ functionName: name, humanName: data.humanName || name, arguments: args, result: null });
 			if (data.id)
 				toolCallIndices[data.id] = index;
@@ -504,7 +512,10 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 			if (!data)
 				return;
 			let result = parseResult(data);
-			state.activeTool = null;
+			if (data.source !== "editor" && (data.id || null) === statusToolId) {
+				state.activeTool = null;
+				statusToolId = null;
+			}
 			if (data.id)
 				clearApprovals(data.id);
 			if (data.id && toolCallIndices[data.id] !== undefined) {

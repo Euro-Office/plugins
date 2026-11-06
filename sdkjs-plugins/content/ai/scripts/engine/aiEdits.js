@@ -12,7 +12,8 @@
 //    Set_GlobalLock(true)) and the turn spans model requests and approval
 //    prompts, which would freeze the editor for the user for that long.
 //    A turn therefore consists of N grouped steps and "Undo AI changes"
-//    undoes exactly those N steps.
+//    undoes exactly those N steps. For the same reason a tool's model request
+//    releases the open groups while it waits (AI.Request._wrapRequest).
 //
 // 2. Tracked changes (text documents only). With "Record AI edits as tracked
 //    changes" on (default; localStorage, or AI.serverSettings.review, see
@@ -40,9 +41,14 @@
 // 4. "Undo AI changes" uses the plugin methods CanUndo/Undo (word only:
 //    word/api_plugins.js, since 8.2.0). Spreadsheet and presentation editors
 //    do not expose Undo to plugins, so the chat shows how many Ctrl+Z steps the
-//    turn took instead. User edits made after the turn cannot be detected via
-//    the plugin API; undo is refused when the plugin itself wrote something
-//    afterwards, and the button tooltip warns about the rest.
+//    turn took instead. User edits cannot be detected via the plugin API:
+//    there is no document-changed event or undo-stack position for plugins
+//    (sdkjs word/api_plugins.js CanUndo/Undo only, common/plugins.js events;
+//    "onKeyDown" misses mouse, toolbar and co-author edits). The document
+//    stays editable during a turn, so Undo may also undo what the user typed
+//    DURING or after the turn. Undo is refused when the plugin itself wrote
+//    something afterwards, and the button tooltip warns about the rest;
+//    Accept/Reject (scoped by the revision snapshot) is the safer path.
 //
 // Server settings (read only):
 //   "review": { "trackChanges": true|false, "force": true|false }
