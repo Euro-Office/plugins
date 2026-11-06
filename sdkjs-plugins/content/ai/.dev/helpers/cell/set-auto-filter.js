@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "setAutoFilter",
+		"category": "data",
 		"text": "Apply Data Filter",
 		"description": "Applies autofilter to a data range, enabling dropdown filters on column headers. Supports filtering by column number or column name (with fuzzy matching). Offers multiple filter types: value comparison operators (greater than, less than, equals), multiple value selection, top/bottom N items or percentage, color-based filtering (cell background or font color), and dynamic filters. Can be used to filter active selection or specific ranges.",
 		"parameters": {
@@ -189,12 +190,12 @@
 			let isSendedEndLongAction = false;
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 					isSendedEndLongAction = true
 				}
 			}
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			let result = await requestEngine.chatRequest(argPromt, false, async function(data) {
@@ -233,8 +234,14 @@
 				return { error: "Invalid field \"" + Asc.scope.field + "\". Must be a number (e.g., 1)" };
 
 			let criteria1 = Asc.scope.criteria1;
-			if (criteria1 && criteria1.startsWith && (criteria1.startsWith("[") || criteria1.startsWith("{")))
-				criteria1 = eval(criteria1);
+			if (criteria1 && criteria1.startsWith && (criteria1.startsWith("[") || criteria1.startsWith("{"))) {
+				// Parse as data only; never evaluate model-supplied text.
+				try {
+					criteria1 = JSON.parse(criteria1);
+				} catch (e) {
+					return { error: "Invalid criteria1 \"" + Asc.scope.criteria1 + "\". Arrays and objects must be valid JSON, e.g. [\"A\",\"B\"] or {\"r\":255,\"g\":0,\"b\":0}." };
+				}
+			}
 			if (Asc.scope.operator === "xlFilterCellColor" || Asc.scope.operator === "xlFilterFontColor") {
 				if (criteria1 && typeof criteria1 === 'object' && criteria1.r !== undefined && criteria1.g !== undefined && criteria1.b !== undefined) {
 					criteria1 = Api.CreateColorFromRGB(criteria1.r, criteria1.g, criteria1.b);

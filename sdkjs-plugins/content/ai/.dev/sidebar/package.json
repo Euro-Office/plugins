@@ -1,0 +1,23 @@
+{
+  "name": "ai-chat-sidebar",
+  "private": true,
+  "description": "Sources of the AI chat sidebar (sidebar/). Dev-only, not packaged.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "check": "npm run build && git diff --exit-code -- ../../sidebar && test -z \"$(git status --porcelain -- ../../sidebar)\"",
+    "dev": "vite build --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@testing-library/preact": "3.2.6",
+    "@types/node": "20.19.43",
+    "jsdom": "30.1.3",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "4.0.18"
+  }
+}

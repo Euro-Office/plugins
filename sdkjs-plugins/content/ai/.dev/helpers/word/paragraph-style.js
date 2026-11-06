@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "changeParagraphStyle",
+		"category": "format",
 		"text": "Change Paragraph Style",
 		"description": "Changes the style of a specified paragraph in the document. If no paragraph number is provided, affects the current paragraph.",
 		"parameters": {
@@ -69,6 +70,8 @@
 		]
 	});
 	
+	// Stale-read risk: "parNumber" comes from an earlier read and shifts when
+	// the user adds or removes paragraphs during the chat turn.
 	func.call = async function(params) {
 		Asc.scope.parNumber = params.parNumber;
 		Asc.scope.styleName = params.style;

@@ -467,35 +467,57 @@ function fetchExternal(url, options, isStreaming) {
 	};
 
 	AI.Request.prototype._wrapRequest = async function(func, data, block, streamFunc) {
-		let isActionRestriction = (block && (undefined !== streamFunc)) ? true : undefined;
-		if (block)
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + this.modelUI.name + ")"]);
-		let result = undefined;
+		// Lets AIProvenance know which models an agent tool used.
+		if (window.AIProvenance)
+			window.AIProvenance.noteRequest(this);
+		// "GroupActions" lock the whole document (library.js). A tool that
+		// started one before its model request would freeze the editor while
+		// the model works, so they are ended here and started again right
+		// before the reply can be written: on the first streamed chunk or when
+		// the request returns (also on errors). Writes before the request and
+		// the reply become separate undo steps.
+		let suspended = Asc.Editor.openGroupActions || 0;
+		for (let i = 0; i < suspended; i++)
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		async function resumeGroupActions() {
+			for (; suspended > 0; suspended--)
+				await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		}
+		if (suspended && streamFunc) {
+			let onChunk = streamFunc;
+			streamFunc = async function() {
+				await resumeGroupActions();
+				return await onChunk.apply(this, arguments);
+			};
+		}
+
 		try {
-			result = await func.call(this, data, streamFunc);
-		} catch (err) {
-			if (err.error) {
-				if (block)
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + this.modelUI.name + ")"]);
-				if (this.errorHandler)
-					this.errorHandler(err);
-				else {
-					if (true) {
+			if (block)
+				await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + this.modelUI.name + ")"]);
+			let result = undefined;
+			try {
+				result = await func.call(this, data, streamFunc);
+			} catch (err) {
+				if (err.error) {
+					if (block)
+						await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.modelUI.name + ")"]);
+					if (this.errorHandler)
+						this.errorHandler(err);
+					else {
 						// timer for exit from long action
 						setTimeout(async function(){
 							await Asc.Library.SendError(err.message, 0);
-						}, 100);						
-					} else {
-						// since 8.3.0!!!
-						await Asc.Editor.callMethod("ShowError", [err.message, 0]);
+						}, 100);
 					}
+					return;
 				}
-				return;
 			}
+			if (block)
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.modelUI.name + ")"]);
+			return result;
+		} finally {
+			await resumeGroupActions();
 		}
-		if (block)
-			await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + this.modelUI.name + ")"]);
-		return result;
 	};
 
 	// CHAT REQUESTS
@@ -546,11 +568,6 @@ function fetchExternal(url, options, isStreaming) {
 			max_input_tokens = this.model.options.max_input_tokens;
 
 		let header_footer_overhead = 500;
-		// for test chunks:
-		if (false) {
-			max_input_tokens = 50;
-			let header_footer_overhead = 0;
-		}
 
 		if (max_input_tokens < header_footer_overhead)
 			max_input_tokens = header_footer_overhead + 1000;
@@ -673,7 +690,6 @@ function fetchExternal(url, options, isStreaming) {
 					let resultObj = getStreamedResult(tail + readData.value);
 					tail = resultObj.tail;
 
-					//let chunks = eval(resultObj.result);
 					let chunks = JSON.parse(resultObj.result);
 
 					let errorObj = null;
@@ -996,7 +1012,12 @@ function fetchExternal(url, options, isStreaming) {
 
 	// IMAGE REQUESTS
 	AI.Request.prototype.imageGenerationRequest = async function(data, block) {
-		return await this._wrapRequest(this._imageGenerationRequest, data, block !== false);
+		let result = await this._wrapRequest(this._imageGenerationRequest, data, block !== false);
+		// Embed IPTC/XMP provenance (DigitalSourceType trainedAlgorithmicMedia)
+		// into every generated PNG/JPEG before it can be inserted anywhere.
+		if (result && typeof result === "string" && window.AIProvenance)
+			result = window.AIProvenance.markImage(result, window.AIProvenance.meta("imageGeneration", this));
+		return result;
 	};
 
 	AI.Request.prototype._imageGenerationRequest = async function(data) {

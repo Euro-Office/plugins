@@ -12,8 +12,14 @@ import { createHost } from "../fakes/host.js";
 export const TOOL_SCRIPTS = [
 	"vendor/md/markdown-it.js",
 	"scripts/engine/library.js",
+	"scripts/helpers/aiProvenance.js",
+	"scripts/engine/aiEdits.js",
 	"scripts/helpers/helperFuncs.js",
-	"scripts/helpers/helpers.js"
+	"scripts/helpers/helpers.js",
+	"scripts/helpers/toolCategories.js",
+	"scripts/helpers/agentHistory.js",
+	"scripts/helpers/citations.js",
+	"scripts/helpers/toolPreviews.js"
 ];
 
 /**

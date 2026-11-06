@@ -114,6 +114,11 @@ class Provider extends AI.Provider {
 		return headers;
 	}
 
+	// getChatCompletions maps only role + text content.
+	isSupportToolMessages(model, modelUI) {
+		return false;
+	}
+
 	getChatCompletions(message, model) {
 		let body = { contents : [] };
 		for (let i = 0, len = message.messages.length; i < len; i++) {
