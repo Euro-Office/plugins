@@ -86,6 +86,7 @@ docker compose -f .dev/docker/compose.yml --profile ollama down -v   # also dele
 ## Troubleshooting
 
 - **Pull denied:** run `docker login ghcr.io` with a GitHub token that has `read:packages`.
+- **Code changes not showing:** the server sends plugin files with a one-year `immutable` cache header, so a normal reload keeps old files. Use a private window or enable "Disable cache" in dev tools. Docker Desktop can also take a few seconds to sync edited files into the container.
 - **Plugin missing or stale:** check that `http://localhost/plugins.json` lists `{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}`. The list is cached briefly, so wait a minute or restart the container.
 - **Ollama requests blocked (CORS):** `OLLAMA_ORIGINS` must allow the editor origin; the compose file sets `*`.
 - The example app has no access control. Use this setup only locally.
