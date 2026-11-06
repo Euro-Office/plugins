@@ -33,9 +33,21 @@
 (function(exports, undefined)
 {
 	let Editor = {};
-	
+
+	// Open "GroupActions" started through Editor.callMethod. sdkjs
+	// startGroupActions (common/apiBase.js) sets a global lock on the
+	// document, so model requests release them while they wait
+	// (AI.Request._wrapRequest, engine.js).
+	Editor.openGroupActions = 0;
+
 	Editor.callMethod = async function(name, args)
 	{
+		if (args && args[0] === "GroupActions") {
+			if (name === "StartAction")
+				Editor.openGroupActions++;
+			else if (name === "EndAction" && Editor.openGroupActions > 0)
+				Editor.openGroupActions--;
+		}
 		return new Promise(resolve => (function(){
 			Asc.plugin.executeMethod(name, args || [], function(returnValue){
 				resolve(returnValue);

@@ -470,30 +470,54 @@ function fetchExternal(url, options, isStreaming) {
 		// Lets AIProvenance know which models an agent tool used.
 		if (window.AIProvenance)
 			window.AIProvenance.noteRequest(this);
-		let isActionRestriction = (block && (undefined !== streamFunc)) ? true : undefined;
-		if (block)
-			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + this.modelUI.name + ")"]);
-		let result = undefined;
-		try {
-			result = await func.call(this, data, streamFunc);
-		} catch (err) {
-			if (err.error) {
-				if (block)
-					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.modelUI.name + ")"]);
-				if (this.errorHandler)
-					this.errorHandler(err);
-				else {
-					// timer for exit from long action
-					setTimeout(async function(){
-						await Asc.Library.SendError(err.message, 0);
-					}, 100);
-				}
-				return;
-			}
+		// "GroupActions" lock the whole document (library.js). A tool that
+		// started one before its model request would freeze the editor while
+		// the model works, so they are ended here and started again right
+		// before the reply can be written: on the first streamed chunk or when
+		// the request returns (also on errors). Writes before the request and
+		// the reply become separate undo steps.
+		let suspended = Asc.Editor.openGroupActions || 0;
+		for (let i = 0; i < suspended; i++)
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		async function resumeGroupActions() {
+			for (; suspended > 0; suspended--)
+				await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 		}
-		if (block)
-			await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.modelUI.name + ")"]);
-		return result;
+		if (suspended && streamFunc) {
+			let onChunk = streamFunc;
+			streamFunc = async function() {
+				await resumeGroupActions();
+				return await onChunk.apply(this, arguments);
+			};
+		}
+
+		try {
+			if (block)
+				await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + this.modelUI.name + ")"]);
+			let result = undefined;
+			try {
+				result = await func.call(this, data, streamFunc);
+			} catch (err) {
+				if (err.error) {
+					if (block)
+						await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.modelUI.name + ")"]);
+					if (this.errorHandler)
+						this.errorHandler(err);
+					else {
+						// timer for exit from long action
+						setTimeout(async function(){
+							await Asc.Library.SendError(err.message, 0);
+						}, 100);
+					}
+					return;
+				}
+			}
+			if (block)
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + this.modelUI.name + ")"]);
+			return result;
+		} finally {
+			await resumeGroupActions();
+		}
 	};
 
 	// CHAT REQUESTS
