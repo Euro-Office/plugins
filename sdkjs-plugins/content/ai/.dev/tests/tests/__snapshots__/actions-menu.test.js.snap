@@ -1,0 +1,181 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`menu structure > cell (editor 9.3) > context menu 1`] = `
+"AI {word,cell,slide} [All] icon=general-ai
+  Grammar & Spelling {word} [Target,Selection] icon=grammar
+    Check all {word} [Target,Selection] click
+    Check current text {word} [Target,Selection] click
+  Summarization {word} [Selection] icon=summarization click
+  Text analysis {word} [Target,Selection] icon=text-analysis-ai
+    Rewrite differently {word} [Selection] click
+    Make longer {word} [Selection] click
+    Make shorter {word} [Selection] click
+    Explain text in comment {word} [Target,Selection] sep click
+    Explain text in hyperlink {word} [Selection] sep click
+    Fix spelling & grammar {word} [Selection] sep click
+    Keywords {word} [Selection] click
+  Translate {word,slide,cell} [Selection] icon=translation
+    English {word,slide,cell} [Selection] data=English click
+    French {word,slide,cell} [Selection] data=French click
+    German {word,slide,cell} [Selection] data=German click
+    Chinese {word,slide,cell} [Selection] data=Chinese click
+    Japanese {word,slide,cell} [Selection] data=Japanese click
+    Russian {word,slide,cell} [Selection] data=Russian click
+    Korean {word,slide,cell} [Selection] data=Korean click
+    Spanish {word,slide,cell} [Selection] data=Spanish click
+    Italian {word,slide,cell} [Selection] data=Italian click
+  Show hyperlink content {word,cell,slide} [Hyperlink] click
+  Image {word,cell,slide} [Selection,Image,OleObject] icon=image-ai
+    Text to Image {word,cell,slide} [Selection] click
+    OCR {word,cell,slide} [Image,OleObject] click
+    Image to Text {word,cell,slide} [Image,OleObject] click
+  Smart actions {cell} [Selection] icon=ask-ai
+    Explain this data {cell} [Selection] click
+    Summarize & insights {cell} [Selection] click
+    Clean up data {cell} [Selection] click
+    Fill missing values {cell} [Selection] click
+    Add calculated column {cell} [Selection] click
+    Create chart {cell} [Selection] click
+    Highlight anomalies {cell} [Selection] click
+    Explain formula {cell} [Selection] click
+    Ask about selection... {cell} [Selection] sep click
+  Chatbot {word,cell,slide} [All] icon=ask-ai sep click"
+`;
+
+exports[`menu structure > cell (editor 9.3) > toolbar 1`] = `
+"AI {word,cell,slide}
+  Settings {word,cell,slide} icon=settings click
+  Chatbot {word,cell,slide} icon=ask-ai sep click
+  Summarization {word,cell,slide} icon=summarization click
+  Translation {word,cell,slide} icon=translation split menu=(Settings) click"
+`;
+
+exports[`menu structure > pdf (editor 9.3) > context menu 1`] = `
+"AI {word,cell,slide} [All] icon=general-ai
+  Text analysis {word} [Target,Selection] icon=text-analysis-ai
+    Rewrite differently {word} [Selection] click
+    Make longer {word} [Selection] click
+    Make shorter {word} [Selection] click
+    Explain text in comment {word} [Target,Selection] sep click
+    Explain text in hyperlink {word} [Selection] sep click
+    Fix spelling & grammar {word} [Selection] sep click
+    Keywords {word} [Selection] click
+  Translate {word,slide,cell} [Selection] icon=translation
+    English {word,slide,cell} [Selection] data=English click
+    French {word,slide,cell} [Selection] data=French click
+    German {word,slide,cell} [Selection] data=German click
+    Chinese {word,slide,cell} [Selection] data=Chinese click
+    Japanese {word,slide,cell} [Selection] data=Japanese click
+    Russian {word,slide,cell} [Selection] data=Russian click
+    Korean {word,slide,cell} [Selection] data=Korean click
+    Spanish {word,slide,cell} [Selection] data=Spanish click
+    Italian {word,slide,cell} [Selection] data=Italian click
+  Show hyperlink content {word,cell,slide} [Hyperlink] click
+  Image {word,cell,slide} [Selection,Image,OleObject] icon=image-ai
+    Text to Image {word,cell,slide} [Selection] click
+    OCR {word,cell,slide} [Image,OleObject] click
+    Image to Text {word,cell,slide} [Image,OleObject] click
+  Chatbot {word,cell,slide} [All] icon=ask-ai sep click"
+`;
+
+exports[`menu structure > pdf (editor 9.3) > toolbar 1`] = `
+"AI {word,cell,slide}
+  Settings {word,cell,slide} icon=settings click
+  Chatbot {word,cell,slide} icon=ask-ai sep click
+  Translation {word,cell,slide} icon=translation split menu=(Settings) click"
+`;
+
+exports[`menu structure > slide (editor 9.3) > context menu 1`] = `
+"AI {word,cell,slide} [All] icon=general-ai
+  Grammar & Spelling {word} [Target,Selection] icon=grammar
+    Check all {word} [Target,Selection] click
+    Check current text {word} [Target,Selection] click
+  Summarization {word} [Selection] icon=summarization click
+  Text analysis {word} [Target,Selection] icon=text-analysis-ai
+    Rewrite differently {word} [Selection] click
+    Make longer {word} [Selection] click
+    Make shorter {word} [Selection] click
+    Explain text in comment {word} [Target,Selection] sep click
+    Explain text in hyperlink {word} [Selection] sep click
+    Fix spelling & grammar {word} [Selection] sep click
+    Keywords {word} [Selection] click
+  Translate {word,slide,cell} [Selection] icon=translation
+    English {word,slide,cell} [Selection] data=English click
+    French {word,slide,cell} [Selection] data=French click
+    German {word,slide,cell} [Selection] data=German click
+    Chinese {word,slide,cell} [Selection] data=Chinese click
+    Japanese {word,slide,cell} [Selection] data=Japanese click
+    Russian {word,slide,cell} [Selection] data=Russian click
+    Korean {word,slide,cell} [Selection] data=Korean click
+    Spanish {word,slide,cell} [Selection] data=Spanish click
+    Italian {word,slide,cell} [Selection] data=Italian click
+  Show hyperlink content {word,cell,slide} [Hyperlink] click
+  Image {word,cell,slide} [Selection,Image,OleObject] icon=image-ai
+    Text to Image {word,cell,slide} [Selection] click
+    OCR {word,cell,slide} [Image,OleObject] click
+    Image to Text {word,cell,slide} [Image,OleObject] click
+  Smart actions {slide} [Selection] icon=ask-ai
+    Improve text {slide} [Selection] click
+    Make concise {slide} [Selection] click
+    Summarize this slide {slide} [Selection] click
+    Ask about selection... {slide} [Selection] sep click
+  Chatbot {word,cell,slide} [All] icon=ask-ai sep click"
+`;
+
+exports[`menu structure > slide (editor 9.3) > toolbar 1`] = `
+"AI {word,cell,slide}
+  Settings {word,cell,slide} icon=settings click
+  Chatbot {word,cell,slide} icon=ask-ai sep click
+  Summarization {word,cell,slide} icon=summarization click
+  Translation {word,cell,slide} icon=translation split menu=(Settings) click"
+`;
+
+exports[`menu structure > word (editor 9.3) > context menu 1`] = `
+"AI {word,cell,slide} [All] icon=general-ai
+  Grammar & Spelling {word} [Target,Selection] icon=grammar
+    Check all {word} [Target,Selection] click
+    Check current text {word} [Target,Selection] click
+  Summarization {word} [Selection] icon=summarization click
+  Text analysis {word} [Target,Selection] icon=text-analysis-ai
+    Rewrite differently {word} [Selection] click
+    Make longer {word} [Selection] click
+    Make shorter {word} [Selection] click
+    Explain text in comment {word} [Target,Selection] sep click
+    Explain text in hyperlink {word} [Selection] sep click
+    Fix spelling & grammar {word} [Selection] sep click
+    Keywords {word} [Selection] click
+  Translate {word,slide,cell} [Selection] icon=translation
+    English {word,slide,cell} [Selection] data=English click
+    French {word,slide,cell} [Selection] data=French click
+    German {word,slide,cell} [Selection] data=German click
+    Chinese {word,slide,cell} [Selection] data=Chinese click
+    Japanese {word,slide,cell} [Selection] data=Japanese click
+    Russian {word,slide,cell} [Selection] data=Russian click
+    Korean {word,slide,cell} [Selection] data=Korean click
+    Spanish {word,slide,cell} [Selection] data=Spanish click
+    Italian {word,slide,cell} [Selection] data=Italian click
+  Show hyperlink content {word,cell,slide} [Hyperlink] click
+  Image {word,cell,slide} [Selection,Image,OleObject] icon=image-ai
+    Text to Image {word,cell,slide} [Selection] click
+    OCR {word,cell,slide} [Image,OleObject] click
+    Image to Text {word,cell,slide} [Image,OleObject] click
+  Smart actions {word} [Selection] icon=ask-ai
+    Improve writing {word} [Selection] click
+    Make shorter {word} [Selection] click
+    Summarize in chat {word} [Selection] click
+    Extract action items {word} [Selection] click
+    Convert to table {word} [Selection] click
+    Continue writing {word} [Selection] click
+    Ask about selection... {word} [Selection] sep click
+  Chatbot {word,cell,slide} [All] icon=ask-ai sep click"
+`;
+
+exports[`menu structure > word (editor 9.3) > toolbar 1`] = `
+"AI {word,cell,slide}
+  Settings {word,cell,slide} icon=settings click
+  Chatbot {word,cell,slide} icon=ask-ai sep click
+  Summarization {word,cell,slide} icon=summarization click
+  Translation {word,cell,slide} icon=translation split menu=(Settings) click
+  Grammar & Spelling {word,cell,slide} icon=grammar split menu=(Check all|Check current text) click
+  Create AI assistant {word,cell,slide} icon=plugin-writer sep click"
+`;
