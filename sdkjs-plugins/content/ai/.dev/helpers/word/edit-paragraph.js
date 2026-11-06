@@ -39,6 +39,9 @@
 		]
 	});
 
+	// Stale-read risk: "index" comes from an earlier readDocument. The document
+	// stays editable during a chat turn, so paragraphs the user adds or
+	// removes meanwhile shift the index and the edit may hit another paragraph.
 	func.call = async function(params) {
 		const actions = ["replace", "insertBefore", "insertAfter", "delete"];
 		if (typeof params.index !== 'number' || params.index < 1)

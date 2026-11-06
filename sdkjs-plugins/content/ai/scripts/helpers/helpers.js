@@ -466,6 +466,9 @@ HELPERS.word.push((function(){
 		]
 	});
 
+	// Stale-read risk: "index" comes from an earlier readDocument. The document
+	// stays editable during a chat turn, so paragraphs the user adds or
+	// removes meanwhile shift the index and the edit may hit another paragraph.
 	func.call = async function(params) {
 		const actions = ["replace", "insertBefore", "insertAfter", "delete"];
 		if (typeof params.index !== 'number' || params.index < 1)
@@ -1545,6 +1548,8 @@ HELPERS.word.push((function(){
 		]
 	});
 	
+	// Stale-read risk: "parNumber" comes from an earlier read and shifts when
+	// the user adds or removes paragraphs during the chat turn.
 	func.call = async function(params) {
 		Asc.scope.parNumber = params.parNumber;
 		Asc.scope.styleName = params.style;
@@ -2124,6 +2129,11 @@ HELPERS.word.push((function(){
 			});
 		}
 
+		// Stale-read risk: the text and selection are read before the model
+		// request, the reply is pasted at the cursor afterwards. The document
+		// stays editable meanwhile, so if the user moves the cursor or edits
+		// the paragraph, the reply lands where the cursor is now. "parNumber"
+		// also shifts when paragraphs are added or removed.
 		let argPromt = params.prompt + ":\n" + text + "\n Answer with only the new one sentence, no need of any explanations";
 
 		let requestEngine = AI.Request.create(AI.ActionType.Chat);

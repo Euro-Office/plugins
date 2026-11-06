@@ -342,6 +342,9 @@
 
 	// Where the next insertion will land: the selected paragraphs, or the
 	// paragraph with the cursor. Call it right before inserting.
+	// Risk: the anchor is a paragraph index. The document stays editable
+	// during agent turns, so paragraphs the user adds or removes before
+	// markInsertion shift it and the wrong paragraphs may be marked.
 	// Returns null when marking is off or not possible (then markInsertion
 	// does nothing). Needs ApiParagraph.GetInternalId (9.2+) and
 	// ApiDocumentContent.GetCurrentParagraph (9.0+).

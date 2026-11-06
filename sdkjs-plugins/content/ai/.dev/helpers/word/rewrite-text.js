@@ -120,6 +120,11 @@
 			});
 		}
 
+		// Stale-read risk: the text and selection are read before the model
+		// request, the reply is pasted at the cursor afterwards. The document
+		// stays editable meanwhile, so if the user moves the cursor or edits
+		// the paragraph, the reply lands where the cursor is now. "parNumber"
+		// also shifts when paragraphs are added or removed.
 		let argPromt = params.prompt + ":\n" + text + "\n Answer with only the new one sentence, no need of any explanations";
 
 		let requestEngine = AI.Request.create(AI.ActionType.Chat);

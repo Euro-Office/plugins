@@ -70,6 +70,8 @@
 		]
 	});
 	
+	// Stale-read risk: "parNumber" comes from an earlier read and shifts when
+	// the user adds or removes paragraphs during the chat turn.
 	func.call = async function(params) {
 		Asc.scope.parNumber = params.parNumber;
 		Asc.scope.styleName = params.style;
