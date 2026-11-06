@@ -5491,6 +5491,74 @@ ${fontsContract}
 })());
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
+		"name": "getSpeakerNotes",
+		"category": "notes",
+		"readOnly": true,
+		"description": "Returns the speaker notes of one slide, or of all slides when slideNumber is omitted (slides without notes are listed with an empty text). Slide numbers are 1-based. Use it to review, summarise or rewrite the presenter notes.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"slideNumber": {
+					"type": "number",
+					"description": "1-based slide number. Omit to read the notes of all slides."
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What are my speaker notes for slide 3?",
+				"arguments": { "slideNumber": 3 }
+			},
+			{
+				"prompt": "Show all speaker notes",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.slideNumber !== undefined && params.slideNumber !== null && (typeof params.slideNumber !== 'number' || params.slideNumber < 1))
+			throw new window.AgentState.ToolError('Parameter "slideNumber" must be a number >= 1. Got: ' + JSON.stringify(params.slideNumber));
+		Asc.scope.notesParams = { slideNumber: params.slideNumber ? Math.floor(params.slideNumber) : null };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.notesParams;
+			let pres = Api.GetPresentation();
+			let total = pres.GetSlidesCount();
+			function notesOf(slide) {
+				let notes = slide.GetNotesPage ? slide.GetNotesPage() : null;
+				if (!notes)
+					return "";
+				return String(notes.GetBodyShapeText() || "").replace(/\r\n?/g, "\n").replace(/\n$/, "");
+			}
+			let slides = [];
+			if (p.slideNumber) {
+				let slide = pres.GetSlideByIndex(p.slideNumber - 1);
+				if (!slide)
+					return { error: "Slide " + p.slideNumber + " does not exist. The presentation has " + total + " slides." };
+				slides.push({ slideNumber: p.slideNumber, notes: notesOf(slide) });
+			} else {
+				for (let i = 0; i < total; i++)
+					slides.push({ slideNumber: i + 1, notes: notesOf(pres.GetSlideByIndex(i)) });
+			}
+			return { totalSlides: total, slides: slides };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args) {
+		let start = typeof args.slideNumber === "number" ? toolText("Read the speaker notes of slide %1", args.slideNumber) : toolText("Read the speaker notes");
+		return { start: start, done: start, phrase: toolText("read speaker notes") };
+	};
+
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
 		"name": "goToSlide",
 		"category": "core",
 		"readOnly": true,
@@ -5529,6 +5597,62 @@ HELPERS.slide.push((function(){
 
 	func.describe = function(args) {
 		return { start: toolText("Go to slide %1", args.slideNumber), done: toolText("Went to slide %1", args.slideNumber), phrase: toolText("went to a slide") };
+	};
+
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
+		"name": "moveSlide",
+		"category": "structure",
+		"description": "Moves a slide to a new position. 'from' is the current 1-based slide number, 'to' is the 1-based number the slide should have afterwards (other slides shift accordingly). Example: from 5 to 1 makes slide 5 the first slide.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"from": {
+					"type": "number",
+					"description": "Current 1-based slide number."
+				},
+				"to": {
+					"type": "number",
+					"description": "Target 1-based slide number."
+				}
+			},
+			"required": ["from", "to"]
+		},
+		"examples": [
+			{
+				"prompt": "Move the last slide (slide 12) to position 2",
+				"arguments": { "from": 12, "to": 2 }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.from !== 'number' || params.from < 1)
+			throw new window.AgentState.ToolError('Parameter "from" must be a number >= 1. Got: ' + JSON.stringify(params.from));
+		if (typeof params.to !== 'number' || params.to < 1)
+			throw new window.AgentState.ToolError('Parameter "to" must be a number >= 1. Got: ' + JSON.stringify(params.to));
+
+		Asc.scope.moveParams = { from: Math.floor(params.from), to: Math.floor(params.to) };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.moveParams;
+			let pres = Api.GetPresentation();
+			let total = pres.GetSlidesCount();
+			if (p.from > total || p.to > total)
+				return { error: "Slide numbers must be between 1 and " + total + " (the presentation has " + total + " slides)." };
+			if (p.from === p.to)
+				return { from: p.from, to: p.to, totalSlides: total, note: "Slide is already at that position." };
+			let slide = pres.GetSlideByIndex(p.from - 1);
+			if (!slide || !slide.MoveTo(p.to - 1))
+				return { error: "Could not move slide " + p.from + "." };
+			return { from: p.from, to: slide.GetSlideIndex() + 1, totalSlides: total };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
 	};
 
 	return func;
@@ -5696,6 +5820,125 @@ HELPERS.slide.push((function(){
 
 	func.describe = function() {
 		return { start: toolText("Replace the selected text"), done: toolText("Replaced the selected text"), phrase: toolText("replaced the selected text") };
+	};
+
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
+		"name": "setSpeakerNotes",
+		"category": "notes",
+		"description": "Writes the speaker notes of a slide. mode 'replace' (default) replaces the existing notes, 'append' adds the text as new paragraphs after them. Line breaks (\\n) start new paragraphs. Defaults to the current slide. Slide numbers are 1-based.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"slideNumber": {
+					"type": "number",
+					"description": "1-based slide number. Defaults to the current slide."
+				},
+				"text": {
+					"type": "string",
+					"description": "The notes text (plain text)."
+				},
+				"mode": {
+					"type": "string",
+					"enum": ["replace", "append"],
+					"description": "Replace the existing notes or append to them.",
+					"default": "replace"
+				}
+			},
+			"required": ["text"]
+		},
+		"examples": [
+			{
+				"prompt": "Write speaker notes for slide 2",
+				"arguments": { "slideNumber": 2, "text": "Welcome everyone.\nToday we look at the Q3 results." }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.slideNumber !== undefined && params.slideNumber !== null && (typeof params.slideNumber !== 'number' || params.slideNumber < 1))
+			throw new window.AgentState.ToolError('Parameter "slideNumber" must be a number >= 1. Got: ' + JSON.stringify(params.slideNumber));
+		if (typeof params.text !== 'string')
+			throw new window.AgentState.ToolError('Parameter "text" must be a string.');
+		let mode = params.mode === undefined || params.mode === null ? "replace" : params.mode;
+		if (mode !== "replace" && mode !== "append")
+			throw new window.AgentState.ToolError('Parameter "mode" must be "replace" or "append". Got: ' + JSON.stringify(params.mode));
+
+		Asc.scope.notesParams = {
+			slideNumber: params.slideNumber ? Math.floor(params.slideNumber) : null,
+			lines: params.text.replace(/\r\n?/g, "\n").split("\n"),
+			mode: mode
+		};
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.notesParams;
+				let pres = Api.GetPresentation();
+				let total = pres.GetSlidesCount();
+				let slide;
+				let number = p.slideNumber;
+				if (number) {
+					slide = pres.GetSlideByIndex(number - 1);
+					if (!slide)
+						return { error: "Slide " + number + " does not exist. The presentation has " + total + " slides." };
+				} else {
+					slide = pres.GetCurrentSlide();
+					if (!slide)
+						return { error: "No current slide. Pass \"slideNumber\"." };
+					number = slide.GetSlideIndex() + 1;
+				}
+				let notes = slide.GetNotesPage();
+				if (!notes)
+					return { error: "Slide " + number + " has no notes page." };
+				let body = notes.GetBodyShape();
+				let content = body ? body.GetDocContent() : null;
+				if (!content)
+					return { error: "The notes of slide " + number + " cannot be edited." };
+
+				let lines = p.lines;
+				let start = 0;
+				if (p.mode === "replace") {
+					content.RemoveAllElements();
+					// RemoveAllElements leaves one empty paragraph
+					let first = content.GetElementsCount() > 0 ? content.GetElement(0) : null;
+					if (first && first.AddText) {
+						first.AddText(lines[0]);
+						start = 1;
+					}
+				} else {
+					let existing = String(notes.GetBodyShapeText() || "").replace(/[\r\n]/g, "");
+					if (existing === "" && content.GetElementsCount() === 1) {
+						content.GetElement(0).AddText(lines[0]);
+						start = 1;
+					}
+				}
+				for (let i = start; i < lines.length; i++) {
+					let par = Api.CreateParagraph();
+					par.AddText(lines[i]);
+					content.Push(par);
+				}
+				return { slideNumber: number, mode: p.mode, notes: String(notes.GetBodyShapeText() || "") };
+			});
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args, result) {
+		let n = result ? result.slideNumber : args.slideNumber;
+		return {
+			start: typeof n === "number" ? toolText("Write the speaker notes of slide %1", n) : toolText("Write the speaker notes of the current slide"),
+			done: result && toolText("Wrote the speaker notes of slide %1", n),
+			phrase: toolText("wrote speaker notes")
+		};
 	};
 
 	return func;
@@ -11485,9 +11728,12 @@ HELPERS.names.slide = {
 	"duplicateSlide": "Duplicate Slide",
 	"findInPresentation": "Find in Presentation",
 	"generatePresentationWithTheme": "Generate Presentation",
+	"getSpeakerNotes": "Read Speaker Notes",
 	"goToSlide": "Go to Slide",
+	"moveSlide": "Move Slide",
 	"readPresentation": "Read Presentation",
 	"replaceSelection": "Replace Selection",
+	"setSpeakerNotes": "Write Speaker Notes",
 	"writeMacro": "Run Macro"
 };
 HELPERS.names.cell = {
