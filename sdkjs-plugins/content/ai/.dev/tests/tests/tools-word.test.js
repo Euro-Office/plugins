@@ -145,6 +145,22 @@ describe("getSelection", () => {
 });
 
 describe("replaceSelection", () => {
+	test("replaces the selection through ReplaceTextSmart (one entry per line)", async () => {
+		const { call, doc, host } = word({ ...SAMPLE, selection: { paragraph: 2, start: 0, end: 27 } });
+		const r = await call("replaceSelection", { text: "Sales rose 12%." });
+		expect(r).toEqual({ replacedCharacters: 27 });
+		expect(host.methodCalls("ReplaceTextSmart")[0].args).toEqual([["Sales rose 12%."]]);
+		expect(doc.texts()[1]).toBe("Sales rose 12%. The deadline is Friday.");
+
+		// the new text is marked as AI-generated and the selection released
+		expect(doc.controls().map((c) => [c.GetTag(), c.GetText(), c.appearance])).toEqual([["ai-generated", "Sales rose 12%.", "hidden"]]);
+		expect(doc.controls()[0].GetAlias()).toMatch(/^AI-generated \(unknown model, \d{4}-\d{2}-\d{2}\)$/);
+		expect(doc.selection).toBeNull();
+
+		doc.selection = [{ para: doc.elements[1], start: 0, end: 3 }];
+		await call("replaceSelection", { text: "a\nb" });
+		expect(host.methodCalls("ReplaceTextSmart")[1].args).toEqual([["a", "b"]]);
+	});
 
 	test("trackChanges turns revision tracking on for the edit and restores it", async () => {
 		const { call, doc } = word({ ...SAMPLE, selection: { paragraph: 2, start: 0, end: 7 } });
@@ -167,6 +183,20 @@ describe("replaceSelection", () => {
 });
 
 describe("editParagraph", () => {
+	test("replace keeps the paragraph style and first run formatting; extra lines become paragraphs", async () => {
+		const { call, doc } = word({ body: [{ text: "Old", style: "Heading 2", textPr: { bold: true } }, "after"] });
+		const r = await call("editParagraph", { index: 1, action: "replace", text: "New title\nSecond line" });
+		expect(r).toEqual({ totalElements: 3 });
+		expect(doc.texts()).toEqual(["New title", "Second line", "after"]);
+		expect(doc.elements[0].style.GetName()).toBe("Heading 2");
+		// new text sits in a hidden "ai-generated" inline control, formatting kept
+		const sdt = doc.elements[0].runs[0];
+		expect(sdt.GetClassType()).toBe("inlineLvlSdt");
+		expect([sdt.GetTag(), sdt.appearance]).toEqual(["ai-generated", "hidden"]);
+		expect(sdt.runs[0].textPr).toEqual({ bold: true });
+		expect(doc.controls().map((c) => c.GetText())).toEqual(["New title", "Second line"]);
+		expect(doc.elements[1].style.GetName()).toBe("Heading 2");
+	});
 
 	test("insertBefore / insertAfter with a style", async () => {
 		const { call, doc } = word({ body: ["one", "two"] });
