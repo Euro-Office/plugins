@@ -6603,6 +6603,13 @@ HELPERS.cell.push((function(){
 			);
 		}
 
+		// ApiWorksheet.GetRange and AddChart take one contiguous range.
+		if (typeof params.range === 'string' && /[,;]/.test(params.range)) {
+			throw new window.AgentState.ToolError(
+				'Charts need one contiguous range like "A1:G13", not several areas ("' + params.range + '"). Copy the columns next to each other first, or chart one area.'
+			);
+		}
+
 		Asc.scope.range = params.range;
 		Asc.scope.chartType = params.chartType || "bar";
 		Asc.scope.title = params.title;
@@ -6640,14 +6647,22 @@ HELPERS.cell.push((function(){
 				fromRow,
 				0
 			);
-			if (chart && Asc.scope.title) {
+			if (!chart)
+				return {error: "not_created", range: chartRange};
+			if (Asc.scope.title) {
 				chart.SetTitle(Asc.scope.title, 14);
 			}
+			return {range: chartRange};
 		});
 
 		if (callResult && callResult.error === "invalid_chart_type") {
 			throw new window.AgentState.ToolError("The chart type \"" + (params.chartType || "bar") + "\" is not valid! Here is a list of available chart types: " + JSON.stringify(callResult.validTypes));
 		}
+		if (!callResult || callResult.error) {
+			let reason = Asc.Editor.lastCommandError && !callResult ? " (" + Asc.Editor.lastCommandError + ")" : "";
+			throw new window.AgentState.ToolError("The chart was not created from \"" + (callResult && callResult.range || params.range || "the selection") + "\"" + reason + ". Check that the range is valid and contains data.");
+		}
+		return {created: true, range: callResult.range};
 	};
 
 	return func;

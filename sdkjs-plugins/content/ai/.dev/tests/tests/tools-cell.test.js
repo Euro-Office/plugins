@@ -358,3 +358,22 @@ describe("invalid addresses", () => {
 		expect(env.host.commandErrors).toEqual([]);
 	});
 });
+
+describe("addChart", () => {
+	test("creates the chart and reports it", async () => {
+		const env = cell(SALES);
+		expect(await env.call("addChart", { range: "A1:B4", title: "Revenue" })).toEqual({ created: true, range: "A1:B4" });
+		expect(env.sheet("Sales").charts.map((c) => [c.ref, c.title])).toEqual([["A1:B4", "Revenue"]]);
+	});
+
+	test("rejects multi-area ranges before touching the sheet", async () => {
+		const env = cell(SALES);
+		await expectToolError(env.call("addChart", { range: "A1:A13,G1:G13" }), /one contiguous range/);
+		expect(env.sheet("Sales").charts).toBeUndefined();
+	});
+
+	test("an exception inside the command is an error, not a success", async () => {
+		const env = cell(SALES);
+		await expectToolError(env.call("addChart", { range: "nonsense" }), /not created.*Incorrect "Range1"/);
+	});
+});
