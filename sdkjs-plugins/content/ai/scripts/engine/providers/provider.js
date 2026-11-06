@@ -510,6 +510,16 @@
 		}
 
 		/**
+		 * Can the request body carry OpenAI-style tool messages (assistant
+		 * messages with tool_calls and role "tool" results)? Providers whose
+		 * getChatCompletions only maps role + text content return false; earlier
+		 * tool exchanges in the chat history are then sent as plain text.
+		 */
+		isSupportToolMessages(model, modelUI) {
+			return true;
+		}
+
+		/**
 		 * Add tools to request body.
 		 * @param {Object} body - Request body object
 		 * @param {Array} tools - Array of tool definitions in OpenAI format

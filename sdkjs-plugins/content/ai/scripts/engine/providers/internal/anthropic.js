@@ -155,29 +155,23 @@ class Provider extends AI.Provider {
 				converted.push(msg);
 			}
 
-			if (true)
+			// Anthropic expects alternating roles: merge consecutive messages of one role.
+			let merged = [];
+			for (let i = 0; i < converted.length; i++) 
 			{
-				let merged = [];
-				for (let i = 0; i < converted.length; i++) 
+				let prev = merged.length > 0 ? merged[merged.length - 1] : null;
+				if (prev && prev.role === converted[i].role) 
 				{
-					let prev = merged.length > 0 ? merged[merged.length - 1] : null;
-					if (prev && prev.role === converted[i].role) 
-					{
-						let prevContent = Array.isArray(prev.content) ? prev.content : [{ type: "text", text: prev.content }];
-						let curContent = Array.isArray(converted[i].content) ? converted[i].content : [{ type: "text", text: converted[i].content }];
-						prev.content = prevContent.concat(curContent);
-					} 
-					else 
-					{
-						merged.push({ role: converted[i].role, content: converted[i].content });
-					}
+					let prevContent = Array.isArray(prev.content) ? prev.content : [{ type: "text", text: prev.content }];
+					let curContent = Array.isArray(converted[i].content) ? converted[i].content : [{ type: "text", text: converted[i].content }];
+					prev.content = prevContent.concat(curContent);
+				} 
+				else 
+				{
+					merged.push({ role: converted[i].role, content: converted[i].content });
 				}
-				result.messages = merged;
 			}
-			else
-			{
-				result.messages = converted;
-			}			
+			result.messages = merged;
 		}
 
 		return result;
