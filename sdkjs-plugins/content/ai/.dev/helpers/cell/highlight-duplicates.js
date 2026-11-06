@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "highlightDuplicates",
+		"category": "data",
 		"text": "Highlight Duplicate Values",
 		"description": "Identifies and highlights duplicate values within a specified range. Compares all cells in the range and highlights cells that contain values appearing more than once. Uses AI to accurately detect duplicates while handling various data types (numbers, text, dates). Highlights all instances of duplicate values with customizable color. Useful for data validation, cleanup tasks, and identifying repeated entries in datasets.",
 		"parameters": {
@@ -166,12 +167,12 @@
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let aiResult = await requestEngine.chatRequest(argPrompt, false, async function(data) {

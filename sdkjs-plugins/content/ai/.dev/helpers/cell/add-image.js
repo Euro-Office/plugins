@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "addImage",
+		"category": "charts-visuals",
 		"text": "Insert Image",
 		"description": "Use this function when you need to insert an image into the spreadsheet.",
 		"parameters": {
@@ -113,12 +114,12 @@
 	
 		try {
 			let actionName = "AI (" + requestEngine.modelUI.name + ")";
-			await Asc.Editor.callMethod("StartAction", ["Block", actionName]);
+			await Asc.Editor.callMethod("StartAction", ["Information", actionName]);
 			let imageUrl;
 			imageUrl = await requestEngine.imageGenerationRequest(fullPrompt);
 			
 			
-			await Asc.Editor.callMethod("EndAction", ["Block", actionName]);
+			await Asc.Editor.callMethod("EndAction", ["Information", actionName]);
 			if (imageUrl) {
 				
 				const img = new Image();

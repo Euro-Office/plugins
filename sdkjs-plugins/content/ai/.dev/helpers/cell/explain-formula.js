@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "explainFormula",
+		"category": "analysis",
 		"text": "Explain Formula",
 		"description": "Analyzes and explains Excel formulas in natural language. Uses AI to provide detailed explanations of formula logic, function parameters, nested operations, and expected results. The explanation is added as a cell comment to the cell containing the formula. Particularly useful for understanding complex formulas with multiple nested functions or unfamiliar Excel functions. Keeps explanations concise (under 1024 characters recommended) while covering all essential information.",
 		"parameters": {
@@ -132,12 +133,12 @@
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let explanation = await requestEngine.chatRequest(argPrompt, false, async function(data) {

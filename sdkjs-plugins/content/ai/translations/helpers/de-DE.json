@@ -40,5 +40,17 @@
 	"Change Slide Background": "Folienhintergrund ändern",
 	"Delete Slide": "Folie löschen",
 	"Duplicate Slide": "Folie duplizieren",
-	"Generate Presentation": "Präsentation generieren"
+	"Generate Presentation": "Präsentation generieren",
+	"Read Document": "Dokument lesen",
+	"Read Selection": "Auswahl lesen",
+	"Replace Selection": "Auswahl ersetzen",
+	"Edit Paragraph": "Absatz bearbeiten",
+	"Inspect Workbook": "Arbeitsmappe untersuchen",
+	"Read Cells": "Zellen lesen",
+	"Write Cells": "Zellen schreiben",
+	"Read Presentation": "Präsentation lesen",
+	"Select Text": "Text auswählen",
+	"Select Cells": "Zellen auswählen",
+	"Go to Slide": "Zur Folie wechseln",
+	"Load Tools": "Werkzeuge laden"
 }

@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "addNewSlide",
+		"category": "structure",
 		"text": "Add New Slide",
 		"description": "Adds a new slide at the end of presentation using default layout from current slide's master",
 		"parameters": {

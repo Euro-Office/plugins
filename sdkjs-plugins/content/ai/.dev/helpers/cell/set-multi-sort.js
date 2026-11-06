@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "setMultiSort",
+		"category": "data",
 		"text": "Sort by Multiple Columns",
 		"description": "Sorts data by multiple columns (up to 3 levels). Use this when you need to sort by primary, secondary, and tertiary sort keys. Each level can have its own sort order.",
 		"parameters": {
@@ -179,12 +180,12 @@
 			let isSendedEndLongAction = false;
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 					isSendedEndLongAction = true
 				}
 			}
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			let result = await requestEngine.chatRequest(argPromt, false, async function(data) {

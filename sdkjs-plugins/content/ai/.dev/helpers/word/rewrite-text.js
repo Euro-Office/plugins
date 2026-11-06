@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "rewriteText",
+		"category": "edit-text",
 		"text": "Rewrite Text",
 		"description": "Use this function when you asked to rewrite or replace some text. If text or paragraph number is not specified assume that we are working with the current paragraph.",
 		
@@ -119,6 +120,11 @@
 			});
 		}
 
+		// Stale-read risk: the text and selection are read before the model
+		// request, the reply is pasted at the cursor afterwards. The document
+		// stays editable meanwhile, so if the user moves the cursor or edits
+		// the paragraph, the reply lands where the cursor is now. "parNumber"
+		// also shifts when paragraphs are added or removed.
 		let argPromt = params.prompt + ":\n" + text + "\n Answer with only the new one sentence, no need of any explanations";
 
 		let requestEngine = AI.Request.create(AI.ActionType.Chat);
@@ -143,15 +149,22 @@
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
+
+		// Provenance: the anchor is taken right before the first chunk is
+		// pasted, the streamed text is wrapped at the end.
+		let provenanceMeta = window.AIProvenance ? window.AIProvenance.scopeMeta("rewriteText") : null;
+		let provenanceAnchor = null;
+		let isFirstChunk = true;
+		let newText = "";
 
 		await requestEngine.chatRequest(argPromt, false, async function(data) {
 			if (!data)
@@ -168,6 +181,13 @@
 				text = null;
 			}
 
+			if (isFirstChunk) {
+				isFirstChunk = false;
+				if (provenanceMeta)
+					provenanceAnchor = await window.AIProvenance.captureAnchor(provenanceMeta);
+			}
+			newText += data;
+
 			await Asc.Library.PasteText(data);
 		});
 		
@@ -177,6 +197,18 @@
 			await Asc.Editor.callCommand(function(){return Api.GetDocument().SetTrackRevisions(false);});
 
 		await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+
+		if (provenanceAnchor && newText)
+			await window.AIProvenance.markInsertion(provenanceAnchor, { text: newText });
+	};
+
+	func.describe = function(args) {
+		let texts = typeof args.parNumber === "number"
+			? [toolText("Rewrite paragraph %1", args.parNumber), toolText("Rewrote paragraph %1", args.parNumber)]
+			: args.type === "sentence"
+				? [toolText("Rewrite the current sentence"), toolText("Rewrote the current sentence")]
+				: [toolText("Rewrite the current paragraph"), toolText("Rewrote the current paragraph")];
+		return { start: texts[0], done: texts[1], phrase: toolText("rewrote text") };
 	};
 
 	return func;

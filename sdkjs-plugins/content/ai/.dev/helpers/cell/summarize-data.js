@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "summarizeData",
+		"category": "analysis",
 		"text": "Summarize Data",
 		"description": "Analyzes and creates a comprehensive text summary of data in the specified range. Automatically determines data types (numeric, categorical, dates) and provides relevant statistics for each type. For numeric data: calculates totals, averages, ranges, and identifies outliers. For categorical data: finds most frequent values and distribution patterns. The summary is placed in a new cell adjacent to the data range with proper formatting and text wrapping.",
 		"parameters": {
@@ -134,12 +135,12 @@
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true;
 			}
 		}
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		let aiResult = await requestEngine.chatRequest(argPrompt, false, async function(data) {
