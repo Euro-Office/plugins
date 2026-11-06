@@ -13,9 +13,11 @@ export const TOOL_SCRIPTS = [
 	"vendor/md/markdown-it.js",
 	"scripts/engine/library.js",
 	"scripts/helpers/aiProvenance.js",
+	"scripts/engine/aiEdits.js",
 	"scripts/helpers/helperFuncs.js",
 	"scripts/helpers/helpers.js",
-	"scripts/helpers/toolCategories.js"
+	"scripts/helpers/toolCategories.js",
+	"scripts/helpers/toolPreviews.js"
 ];
 
 /**
