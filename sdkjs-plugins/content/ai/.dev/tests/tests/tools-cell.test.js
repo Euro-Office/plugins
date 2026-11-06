@@ -142,6 +142,40 @@ describe("writeRange", () => {
 	});
 });
 
+describe("findInSheet", () => {
+	test("finds substrings case-insensitively with addresses", async () => {
+		const r = await cell(SALES).call("findInSheet", { query: "a" });
+		expect(r.matches.map((m) => m.address)).toEqual(["A2", "A4", "A5"]); // Jan, Mar, Total
+		expect(r.totalMatches).toBe(3);
+	});
+
+	test("wholeCell, matchCase, numbers, all sheets and limits", async () => {
+		const env = cell(SALES);
+		expect((await env.call("findInSheet", { query: "jan", wholeCell: true })).matches).toEqual([{ sheet: "Sales", address: "A2", value: "Jan" }]);
+		expect((await env.call("findInSheet", { query: "jan", matchCase: true })).totalMatches).toBe(0);
+		expect((await env.call("findInSheet", { query: 120 })).matches[0].address).toBe("B3");
+		const all = await env.call("findInSheet", { query: "e", allSheets: true, maxResults: 2 });
+		expect(all).toMatchObject({ returned: 2, truncated: true });
+		expect(all.totalMatches).toBeGreaterThan(2);
+		expect((await env.call("findInSheet", { query: "remember", allSheets: true })).matches).toEqual([{ sheet: "Notes", address: "B3", value: "remember" }]);
+		await expectToolError(env.call("findInSheet", { query: "" }), /"query"/);
+		await expectToolError(env.call("findInSheet", { query: "x", sheet: "Nope" }), /Sheet "Nope" not found\. Available sheets: Sales, Notes, Empty/);
+	});
+});
+
+describe("findFormulaErrors", () => {
+	test("reports error cells with their formula", async () => {
+		const r = await cell(SALES).call("findFormulaErrors");
+		expect(r).toEqual({ totalErrors: 1, byType: { "#DIV/0!": 1 }, returned: 1, errors: [{ sheet: "Sales", address: "D5", error: "#DIV/0!", formula: "=D2/0" }] });
+	});
+
+	test("clean sheets and validation", async () => {
+		const env = cell(SALES);
+		expect((await env.call("findFormulaErrors", { sheet: "Notes" })).totalErrors).toBe(0);
+		await expectToolError(env.call("findFormulaErrors", { maxResults: 0 }), /"maxResults"/);
+	});
+});
+
 describe("selectRange", () => {
 	test("selectRange selects on the active or a named sheet", async () => {
 		const env = cell(SALES);

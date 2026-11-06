@@ -616,6 +616,134 @@ HELPERS.word.push((function(){
 })());
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
+		"name": "findText",
+		"category": "core",
+		"readOnly": true,
+		"description": "Searches the main body of the text document (including tables and content controls, not headers, footers or footnotes) for a plain-text string. Returns the total number of matches and, for each returned match, its 1-based occurrence number, the 1-based index of the top-level element that contains it (same numbering as readDocument/editParagraph) and a short snippet of surrounding text. Use it to locate passages before editing them; pass the occurrence number to selectText to select a match. Matching is substring-based and case-insensitive unless matchCase is true.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Text to search for (plain text, not a regular expression)."
+				},
+				"matchCase": {
+					"type": "boolean",
+					"description": "Case-sensitive search.",
+					"default": false
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of matches to return (1-200). totalMatches always reports the full count.",
+					"default": 50
+				}
+			},
+			"required": ["query"]
+		},
+		"examples": [
+			{
+				"prompt": "Where does the document mention the deadline?",
+				"arguments": { "query": "deadline" }
+			},
+			{
+				"prompt": "Find all occurrences of 'GmbH'",
+				"arguments": { "query": "GmbH", "matchCase": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.query !== 'string' || params.query === "")
+			throw new window.AgentState.ToolError('Parameter "query" must be a non-empty string. Got: ' + JSON.stringify(params.query));
+		if (params.matchCase !== undefined && params.matchCase !== null && typeof params.matchCase !== 'boolean')
+			throw new window.AgentState.ToolError('Parameter "matchCase" must be a boolean.');
+		let max = params.maxResults === undefined || params.maxResults === null ? 50 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.findParams = {
+			query: params.query,
+			matchCase: params.matchCase === true,
+			max: Math.min(200, Math.floor(max)),
+			context: 60
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.findParams;
+			let doc = Api.GetDocument();
+			let total = doc.GetElementsCount();
+			let needle = p.matchCase ? p.query : p.query.toLowerCase();
+			let matches = [];
+			let count = 0;
+
+			function snippetAt(text, pos) {
+				let start = Math.max(0, pos - p.context);
+				let end = Math.min(text.length, pos + p.query.length + p.context);
+				return (start > 0 ? "…" : "") + text.substring(start, end) + (end < text.length ? "…" : "");
+			}
+
+			for (let i = 0; i < total; i++) {
+				let el = doc.GetElement(i);
+				if (!el || typeof el.Search !== "function")
+					continue;
+				let ranges = el.Search(p.query, p.matchCase) || [];
+				if (!ranges.length)
+					continue;
+				let text = "";
+				try {
+					text = el.GetText ? (el.GetText() || "") : "";
+				} catch (e) {}
+				text = text.replace(/\r/g, "");
+				let hay = p.matchCase ? text : text.toLowerCase();
+				let from = 0;
+				for (let k = 0; k < ranges.length; k++) {
+					count++;
+					if (matches.length >= p.max)
+						continue;
+					let item = { occurrence: count, index: i + 1, type: el.GetClassType() };
+					let pos = hay.indexOf(needle, from);
+					if (pos !== -1) {
+						from = pos + needle.length;
+						item.snippet = snippetAt(text, pos);
+					} else {
+						// Tables and other containers: fall back to the paragraph holding the match
+						let paraText = "";
+						try {
+							let par = ranges[k].GetParagraph ? ranges[k].GetParagraph(0) : null;
+							paraText = par ? (par.GetText() || "").replace(/\r/g, "") : "";
+						} catch (e) {}
+						let pp = (p.matchCase ? paraText : paraText.toLowerCase()).indexOf(needle);
+						item.snippet = pp !== -1 ? snippetAt(paraText, pp) : (ranges[k].GetText ? ranges[k].GetText() : p.query);
+					}
+					matches.push(item);
+				}
+			}
+
+			return {
+				query: p.query,
+				totalMatches: count,
+				returned: matches.length,
+				truncated: count > matches.length,
+				matches: matches
+			};
+		});
+	};
+
+	func.describe = function(args, result) {
+		let total = result ? result.totalMatches : 0;
+		return {
+			start: toolText("Search for “%1”", args.query),
+			done: result && (total === 0 ? toolText("Searched for “%1” (no matches)", args.query)
+				: total === 1 ? toolText("Searched for “%1” (1 match)", args.query)
+				: toolText("Searched for “%1” (%2 matches)", args.query, total)),
+			phrase: toolText("searched")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
 		"name": "generateDocx",
 		"category": "generate",
 		"description": "Use this function if you are asked to generate a textual document (report, article, letter, etc.) based on a description. Input: Short description of what needs to be generated.",
@@ -1271,6 +1399,97 @@ HELPERS.word.push((function(){
 			start: toolText("Read paragraphs %1 to %2", from, from + count - 1),
 			done: done,
 			phrase: toolText("read the document")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "readOutline",
+		"category": "core",
+		"readOnly": true,
+		"description": "Returns the outline (table of contents) of the text document: every top-level heading paragraph with its heading level (1 = top level, up to 9), its 1-based element index (same numbering as readDocument/editParagraph) and its text. Headings are detected from the paragraph's outline level or a 'Heading N' style. Use it to understand the structure of a long document cheaply, then read or edit specific sections by index.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"maxLevel": {
+					"type": "number",
+					"description": "Only return headings up to this level (1-9).",
+					"default": 9
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What sections does this document have?",
+				"arguments": {}
+			},
+			{
+				"prompt": "List the chapters",
+				"arguments": { "maxLevel": 1 }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let maxLevel = params.maxLevel === undefined || params.maxLevel === null ? 9 : params.maxLevel;
+		if (typeof maxLevel !== 'number' || maxLevel < 1)
+			throw new window.AgentState.ToolError('Parameter "maxLevel" must be a number between 1 and 9. Got: ' + JSON.stringify(params.maxLevel));
+		Asc.scope.outlineParams = { maxLevel: Math.min(9, Math.floor(maxLevel)) };
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.outlineParams;
+			let doc = Api.GetDocument();
+			let total = doc.GetElementsCount();
+			let headings = [];
+
+			function levelOf(par) {
+				let lvl = null;
+				try {
+					let pr = par.GetParaPr();
+					lvl = pr && pr.GetOutlineLvl ? pr.GetOutlineLvl() : null;
+				} catch (e) {}
+				let style = null;
+				try {
+					style = par.GetStyle();
+				} catch (e) {}
+				if (typeof lvl !== "number" && style) {
+					try {
+						let spr = style.GetParaPr();
+						lvl = spr && spr.GetOutlineLvl ? spr.GetOutlineLvl() : null;
+					} catch (e) {}
+				}
+				if (typeof lvl !== "number" && style) {
+					let m = /^(?:heading|überschrift|titre|título|titolo|заголовок)\s*([1-9])$/i.exec(style.GetName() || "");
+					if (m)
+						lvl = parseInt(m[1], 10);
+				}
+				return (typeof lvl === "number" && lvl >= 1 && lvl <= 9) ? lvl : null;
+			}
+
+			for (let i = 0; i < total; i++) {
+				let el = doc.GetElement(i);
+				if (!el || el.GetClassType() !== "paragraph")
+					continue;
+				let level = levelOf(el);
+				if (level === null || level > p.maxLevel)
+					continue;
+				let text = (el.GetText() || "").replace(/[\r\n]+/g, " ").trim();
+				if (text === "")
+					continue;
+				headings.push({ level: level, index: i + 1, text: text.length > 300 ? text.substring(0, 300) + "…" : text });
+			}
+			return { totalElements: total, headings: headings };
+		});
+	};
+
+	func.describe = function(args, result) {
+		return {
+			start: toolText("Read the outline"),
+			done: result && toolText("Read the outline (%1 headings)", (result.headings || []).length),
+			phrase: toolText("read the outline")
 		};
 	};
 
@@ -2961,6 +3180,136 @@ HELPERS.slide.push((function(){
 			await Asc.Editor.callMethod("GoToSlide", [data["idx"] + 1]);
 		}
 	};
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
+		"name": "findInPresentation",
+		"category": "core",
+		"readOnly": true,
+		"description": "Searches the text of all slides (text boxes, placeholders and shapes; optionally speaker notes) for a plain-text string. Returns, per match, the 1-based slide number, the 1-based shape index on that slide (same numbering as readPresentation; null for speaker notes), where it was found ('shape' or 'notes') and a snippet of surrounding text. Case-insensitive unless matchCase is true. Use goToSlide to show a result to the user.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Text to search for (plain text)."
+				},
+				"matchCase": {
+					"type": "boolean",
+					"description": "Case-sensitive search.",
+					"default": false
+				},
+				"includeNotes": {
+					"type": "boolean",
+					"description": "Also search the speaker notes.",
+					"default": true
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of matches to return (1-200).",
+					"default": 50
+				}
+			},
+			"required": ["query"]
+		},
+		"examples": [
+			{
+				"prompt": "On which slide do we talk about pricing?",
+				"arguments": { "query": "pricing" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.query !== 'string' || params.query === "")
+			throw new window.AgentState.ToolError('Parameter "query" must be a non-empty string. Got: ' + JSON.stringify(params.query));
+		let max = params.maxResults === undefined || params.maxResults === null ? 50 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.findParams = {
+			query: params.query,
+			matchCase: params.matchCase === true,
+			includeNotes: params.includeNotes !== false,
+			max: Math.min(200, Math.floor(max)),
+			context: 50
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.findParams;
+			let pres = Api.GetPresentation();
+			let total = pres.GetSlidesCount();
+			let needle = p.matchCase ? p.query : p.query.toLowerCase();
+			let matches = [];
+			let count = 0;
+
+			function scan(text, slideNumber, shapeIndex, where) {
+				if (!text)
+					return;
+				text = String(text).replace(/\r\n?/g, "\n");
+				let hay = p.matchCase ? text : text.toLowerCase();
+				let pos = hay.indexOf(needle);
+				while (pos !== -1) {
+					count++;
+					if (matches.length < p.max) {
+						let start = Math.max(0, pos - p.context);
+						let end = Math.min(text.length, pos + needle.length + p.context);
+						matches.push({
+							slideNumber: slideNumber,
+							shapeIndex: shapeIndex,
+							where: where,
+							snippet: (start > 0 ? "…" : "") + text.substring(start, end).replace(/\n/g, " ") + (end < text.length ? "…" : "")
+						});
+					}
+					pos = hay.indexOf(needle, pos + needle.length);
+				}
+			}
+
+			for (let i = 0; i < total; i++) {
+				let slide = pres.GetSlideByIndex(i);
+				if (!slide)
+					continue;
+				let drawings = slide.GetAllDrawings ? slide.GetAllDrawings() : slide.GetAllShapes();
+				for (let d = 0; d < drawings.length; d++) {
+					let text = "";
+					try {
+						let content = drawings[d].GetDocContent ? drawings[d].GetDocContent() : null;
+						if (content) {
+							let lines = [];
+							for (let j = 0; j < content.GetElementsCount(); j++) {
+								let el = content.GetElement(j);
+								if (el && el.GetText)
+									lines.push(el.GetText());
+							}
+							text = lines.join("\n");
+						}
+					} catch (e) {}
+					scan(text, i + 1, d + 1, "shape");
+				}
+				if (p.includeNotes) {
+					try {
+						let notes = slide.GetNotesPage ? slide.GetNotesPage() : null;
+						if (notes)
+							scan(notes.GetBodyShapeText(), i + 1, null, "notes");
+					} catch (e) {}
+				}
+			}
+			return { query: p.query, totalMatches: count, returned: matches.length, truncated: count > matches.length, matches: matches };
+		});
+	};
+
+	func.describe = function(args, result) {
+		let total = result ? result.totalMatches : 0;
+		return {
+			start: toolText("Search for “%1”", args.query),
+			done: result && (total === 0 ? toolText("Searched for “%1” (no matches)", args.query)
+				: total === 1 ? toolText("Searched for “%1” (1 match)", args.query)
+				: toolText("Searched for “%1” (%2 matches)", args.query, total)),
+			phrase: toolText("searched")
+		};
+	};
+
 	return func;
 })());
 HELPERS.slide.push((function(){
@@ -6594,6 +6943,291 @@ HELPERS.cell.push((function(){
 	return func;
 })());
 HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "findFormulaErrors",
+		"category": "analysis",
+		"readOnly": true,
+		"description": "Scans the used range of a worksheet (or all worksheets) for cells showing an error value (#REF!, #DIV/0!, #VALUE!, #NAME?, #N/A, #NUM!, #NULL!, #SPILL!, #CALC!, #GETTING_DATA) and returns each one's sheet, address, error and formula, plus a count per error type. Use it to audit a workbook, then explain or repair the formulas (fixFormula, writeRange).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"allSheets": {
+					"type": "boolean",
+					"description": "Scan every worksheet.",
+					"default": false
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of error cells to return (1-500).",
+					"default": 200
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Are there any broken formulas?",
+				"arguments": { "allSheets": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let max = params.maxResults === undefined || params.maxResults === null ? 200 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.errorParams = {
+			sheet: params.sheet || null,
+			allSheets: params.allSheets === true,
+			max: Math.min(500, Math.floor(max)),
+			maxCells: 500000
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.errorParams;
+			const ERRORS = ["#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A", "#GETTING_DATA", "#SPILL!", "#CALC!"];
+			let sheets;
+			if (p.allSheets) {
+				sheets = Api.GetSheets();
+			} else {
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				sheets = [ws];
+			}
+			function colName(n) {
+				let s = "";
+				while (n > 0) {
+					let m = (n - 1) % 26;
+					s = String.fromCharCode(65 + m) + s;
+					n = Math.floor((n - 1) / 26);
+				}
+				return s;
+			}
+			let found = [];
+			let counts = {};
+			let total = 0;
+			let budget = p.maxCells;
+			let truncatedScan = false;
+			for (let s = 0; s < sheets.length && budget > 0; s++) {
+				let ws = sheets[s];
+				let used = ws.GetUsedRange();
+				if (!used)
+					continue;
+				let rows = used.GetRowsCount(), cols = used.GetColumnsCount();
+				let r0 = used.GetRow() - 1, c0 = used.GetCol() - 1;
+				let scan = used;
+				if (rows * cols > budget) {
+					rows = Math.max(1, Math.floor(budget / cols));
+					truncatedScan = true;
+					scan = ws.GetRange(colName(c0 + 1) + (r0 + 1) + ":" + colName(c0 + cols) + (r0 + rows));
+				}
+				budget -= rows * cols;
+				let values = scan.GetValue();
+				if (!Array.isArray(values))
+					values = [[values]];
+				for (let r = 0; r < rows && r < values.length; r++) {
+					let row = Array.isArray(values[r]) ? values[r] : [values[r]];
+					for (let c = 0; c < row.length; c++) {
+						let v = row[c];
+						if (typeof v !== "string" || v.charAt(0) !== "#" || ERRORS.indexOf(v) === -1)
+							continue;
+						total++;
+						counts[v] = (counts[v] || 0) + 1;
+						if (found.length >= p.max)
+							continue;
+						let cell = ws.GetRangeByNumber(r0 + r, c0 + c);
+						let item = { sheet: ws.GetName(), address: cell.GetAddress(false, false), error: v };
+						let f = cell.GetFormula();
+						if (typeof f === "string" && f.charAt(0) === "=")
+							item.formula = "=" + f.substring(1).replace(/^\s+/, "");
+						found.push(item);
+					}
+				}
+			}
+			let res = { totalErrors: total, byType: counts, returned: found.length, errors: found };
+			if (total > found.length)
+				res.truncated = true;
+			if (truncatedScan)
+				res.warning = "The workbook is very large; only the first " + p.maxCells + " cells were scanned.";
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "findInSheet",
+		"category": "core",
+		"readOnly": true,
+		"description": "Searches cell values in the used range of a worksheet (or of all worksheets) for a text or number and returns the matching cells with sheet name, A1 address and value. Values are compared as text; by default a cell matches when it contains the query anywhere (case-insensitive). Use wholeCell to require the entire cell value to equal the query. Formulas are not searched, only their results. Use it to locate data before reading or editing it with readRange/writeRange.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Text to search for. Numbers can be passed as text, e.g. '1250'."
+				},
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"allSheets": {
+					"type": "boolean",
+					"description": "Search every worksheet instead of a single one.",
+					"default": false
+				},
+				"matchCase": {
+					"type": "boolean",
+					"description": "Case-sensitive comparison.",
+					"default": false
+				},
+				"wholeCell": {
+					"type": "boolean",
+					"description": "Match only cells whose entire value equals the query.",
+					"default": false
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of matches to return (1-500).",
+					"default": 100
+				}
+			},
+			"required": ["query"]
+		},
+		"examples": [
+			{
+				"prompt": "Where is the customer 'Müller' listed?",
+				"arguments": { "query": "Müller", "allSheets": true }
+			},
+			{
+				"prompt": "Find cells that are exactly 'N/A' on Sheet1",
+				"arguments": { "query": "N/A", "sheet": "Sheet1", "wholeCell": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if ((typeof params.query !== 'string' && typeof params.query !== 'number') || String(params.query) === "")
+			throw new window.AgentState.ToolError('Parameter "query" must be a non-empty string. Got: ' + JSON.stringify(params.query));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let max = params.maxResults === undefined || params.maxResults === null ? 100 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.findParams = {
+			query: String(params.query),
+			sheet: params.sheet || null,
+			allSheets: params.allSheets === true,
+			matchCase: params.matchCase === true,
+			wholeCell: params.wholeCell === true,
+			max: Math.min(500, Math.floor(max)),
+			maxCells: 500000
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.findParams;
+			let sheets;
+			if (p.allSheets) {
+				sheets = Api.GetSheets();
+			} else {
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				sheets = [ws];
+			}
+
+			function colName(n) {
+				let s = "";
+				while (n > 0) {
+					let m = (n - 1) % 26;
+					s = String.fromCharCode(65 + m) + s;
+					n = Math.floor((n - 1) / 26);
+				}
+				return s;
+			}
+
+			let needle = p.matchCase ? p.query : p.query.toLowerCase();
+			let matches = [];
+			let total = 0;
+			let truncatedScan = false;
+			let budget = p.maxCells;
+			for (let s = 0; s < sheets.length; s++) {
+				let ws = sheets[s];
+				let used = ws.GetUsedRange();
+				if (!used)
+					continue;
+				let rows = used.GetRowsCount();
+				let cols = used.GetColumnsCount();
+				let row0 = used.GetRow();
+				let col0 = used.GetCol();
+				if (rows * cols > budget) {
+					rows = Math.max(1, Math.floor(budget / cols));
+					truncatedScan = true;
+				}
+				budget -= rows * cols;
+				let scan = rows === used.GetRowsCount() ? used : ws.GetRange(colName(col0) + row0 + ":" + colName(col0 + cols - 1) + (row0 + rows - 1));
+				let values = scan.GetValue();
+				if (!Array.isArray(values))
+					values = [[values]];
+				for (let r = 0; r < values.length; r++) {
+					let row = Array.isArray(values[r]) ? values[r] : [values[r]];
+					for (let c = 0; c < row.length; c++) {
+						let v = row[c];
+						if (v === null || v === undefined || v === "")
+							continue;
+						let sv = String(v);
+						let hay = p.matchCase ? sv : sv.toLowerCase();
+						if (p.wholeCell ? hay.trim() !== needle.trim() : hay.indexOf(needle) === -1)
+							continue;
+						total++;
+						if (matches.length < p.max)
+							matches.push({ sheet: ws.GetName(), address: colName(col0 + c) + (row0 + r), value: v });
+					}
+				}
+				if (budget <= 0)
+					break;
+			}
+			let res = { query: p.query, totalMatches: total, returned: matches.length, matches: matches };
+			if (total > matches.length)
+				res.truncated = true;
+			if (truncatedScan)
+				res.warning = "The sheet is very large; only the first " + p.maxCells + " cells were searched.";
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args, result) {
+		let total = result ? result.totalMatches : 0;
+		return {
+			start: toolText("Search for “%1”", args.query),
+			done: result && (total === 0 ? toolText("Searched for “%1” (no matches)", args.query)
+				: total === 1 ? toolText("Searched for “%1” (1 match)", args.query)
+				: toolText("Searched for “%1” (%2 matches)", args.query, total)),
+			phrase: toolText("searched")
+		};
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "fixFormula",
@@ -9478,12 +10112,14 @@ HELPERS.names.word = {
 	"checkSpelling": "Check and Fix Spelling",
 	"commentText": "Add Comment to Text",
 	"editParagraph": "Edit Paragraph",
+	"findText": "Find Text",
 	"generateDocx": "Generate Document",
 	"generateForm": "Generate Form Template",
 	"getSelection": "Read Selection",
 	"insertPage": "Insert Blank Page",
 	"changeParagraphStyle": "Change Paragraph Style",
 	"readDocument": "Read Document",
+	"readOutline": "Read Outline",
 	"replaceSelection": "Replace Selection",
 	"rewriteText": "Rewrite Text",
 	"selectText": "Select Text",
@@ -9500,6 +10136,7 @@ HELPERS.names.slide = {
 	"changeSlideBackground": "Change Slide Background",
 	"deleteSlide": "Delete Slide",
 	"duplicateSlide": "Duplicate Slide",
+	"findInPresentation": "Find in Presentation",
 	"generatePresentationWithTheme": "Generate Presentation",
 	"goToSlide": "Go to Slide",
 	"readPresentation": "Read Presentation",
@@ -9520,6 +10157,8 @@ HELPERS.names.cell = {
 	"clearConditionalFormatting": "Clear Conditional Formatting",
 	"explainFormula": "Explain Formula",
 	"fillMissingData": "Fill Missing Data",
+	"findFormulaErrors": "Find Formula Errors",
+	"findInSheet": "Find in Sheet",
 	"fixFormula": "Fix Formula Errors",
 	"formatTable": "Format as Table",
 	"getWorkbookInfo": "Inspect Workbook",
