@@ -1,0 +1,38 @@
+<!doctype html>
+<!--
+SPDX-FileCopyrightText: Euro-Office contributors
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="color-scheme" content="light dark">
+	<title>Editor plugins</title>
+	<meta name="description" content="Browse plugins for the editors: what they do, which services they contact and how to install them.">
+	<link rel="icon" href="data:,">
+	<link rel="stylesheet" href="catalogue.css">
+	<script src="catalogue.js" defer></script>
+</head>
+<body>
+	<header class="site">
+		<h1><a href="#">Editor plugins</a></h1>
+		<p>Plugins for the document, spreadsheet, presentation and PDF editors. Administrators install them on the server.
+			<a href="https://euro-office.github.io/documentation/configuration/plugins/">How to install plugins</a></p>
+	</header>
+	<main>
+		<section id="list" aria-label="Plugin list">
+			<div class="filters">
+				<label>Search <input id="search" type="search" placeholder="Name or description" autocomplete="off"></label>
+				<label>Category <select id="category"><option value="">All</option></select></label>
+			</div>
+			<p id="count" class="muted" aria-live="polite">Loading plugins...</p>
+			<ul id="grid" class="grid"></ul>
+		</section>
+		<article id="detail" hidden></article>
+	</main>
+	<footer class="site muted">
+		<a href="https://github.com/Euro-Office/plugins">Source on GitHub</a>
+	</footer>
+</body>
+</html>
