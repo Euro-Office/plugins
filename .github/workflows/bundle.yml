@@ -15,3 +15,8 @@ jobs:
 
       - name: Check bundle
         run: scripts/check-bundle.sh "$RUNNER_TEMP/sdkjs-plugins"
+
+      - name: Check release packs
+        run: |
+          python3 packer/pack.py
+          scripts/check-packs.py artifacts
