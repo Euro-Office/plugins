@@ -41,7 +41,7 @@ test("every tool source declares a known category", () => {
 test("getTools strips internal fields and keeps the old full list without categories", () => {
 	const c = loadEditor("cell");
 	const all = c.EditorHelper.getTools();
-	assert.ok(all.length > 20);
+	assert.ok(all.length > 30);
 	assert.ok(!names(all).includes("loadTools"));
 	for (const t of all) {
 		assert.deepStrictEqual(plain(Object.keys(t).sort()), ["description", "examples", "name", "parameters", "returns"]);
@@ -75,6 +75,9 @@ test("keyword inference (English and German)", () => {
 	const w = loadEditor("word").EditorHelper;
 	assert.ok(w.selectCategories({ text: "Kommentiere die Einleitung mit Verbesserungsvorschlägen" }).includes("comments-review"));
 	assert.ok(w.selectCategories({ text: "Mach die Überschrift fett" }).includes("format"));
+
+	const s = loadEditor("slide").EditorHelper;
+	assert.ok(s.selectCategories({ text: "Schreibe Sprechernotizen für Folie 3" }).includes("notes"));
 });
 
 test("categories are limited to what the editor has", () => {
