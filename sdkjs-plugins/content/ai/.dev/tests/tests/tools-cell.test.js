@@ -176,7 +176,70 @@ describe("findFormulaErrors", () => {
 	});
 });
 
-describe("selectRange", () => {
+describe("insertRowsColumns / deleteRowsColumns", () => {
+	test("insert rows shifts data down", async () => {
+		const env = cell(SALES);
+		expect(await env.call("insertRowsColumns", { type: "rows", at: 2, count: 2 })).toEqual({ sheet: "Sales", inserted: "2:3" });
+		expect(env.sheet("Sales").value("A4")).toBe("Jan");
+		expect(env.sheet("Sales").value("A2")).toBe("");
+	});
+
+	test("insert columns by letter shifts data right", async () => {
+		const env = cell(SALES);
+		expect(await env.call("insertRowsColumns", { type: "columns", at: "b" })).toEqual({ sheet: "Sales", inserted: "B:B" });
+		expect(env.sheet("Sales").value("C1")).toBe("Revenue");
+	});
+
+	test("delete rows and columns", async () => {
+		const env = cell(SALES);
+		expect(await env.call("deleteRowsColumns", { type: "rows", at: "2" })).toEqual({ sheet: "Sales", deleted: "2:2" });
+		expect(env.sheet("Sales").value("A2")).toBe("Feb");
+		expect(await env.call("deleteRowsColumns", { type: "columns", at: 2, count: 2 })).toEqual({ sheet: "Sales", deleted: "B:C" });
+		expect(env.sheet("Sales").value("B1")).toBe("Profit");
+	});
+
+	test.each([
+		["insertRowsColumns", { type: "cells", at: 1 }, /"type" must be "rows" or "columns"/],
+		["insertRowsColumns", { type: "rows", at: "B" }, /For rows, "at" must be a 1-based row number/],
+		["insertRowsColumns", { type: "columns", at: "B2" }, /For columns, "at" must be a column letter/],
+		["insertRowsColumns", { type: "rows", at: 1, count: 1001 }, /"count" must be a number between 1 and 1000/],
+		["insertRowsColumns", { type: "rows", at: 1048576, count: 2 }, /exceed the sheet limit/],
+		["deleteRowsColumns", { type: "columns", at: "XFD", count: 2 }, /exceed the sheet limit/],
+		["deleteRowsColumns", { type: "rows", at: 1, sheet: "Nope" }, /Sheet "Nope" not found/]
+	])("%s rejects %j", async (tool, args, msg) => {
+		await expectToolError(cell(SALES).call(tool, args), msg);
+	});
+});
+
+describe("manageSheet", () => {
+	test("add, rename, activate and delete", async () => {
+		const env = cell(SALES);
+		expect(await env.call("manageSheet", { action: "add", name: "Q2" })).toEqual({ action: "add", sheets: ["Sales", "Notes", "Empty", "Q2"], activeSheet: "Q2" });
+		expect((await env.call("manageSheet", { action: "rename", name: "q2", newName: "Q2 2026" })).sheets).toContain("Q2 2026");
+		expect((await env.call("manageSheet", { action: "activate", name: "notes" })).activeSheet).toBe("Notes");
+		expect((await env.call("manageSheet", { action: "delete", name: "Empty" })).sheets).toEqual(["Sales", "Notes", "Q2 2026"]);
+	});
+
+	test("rejects duplicates, missing sheets, bad names and deleting the last sheet", async () => {
+		const env = cell(SALES);
+		await expectToolError(env.call("manageSheet", { action: "add", name: "sales" }), /already exists/);
+		await expectToolError(env.call("manageSheet", { action: "rename", name: "Sales", newName: "Notes" }), /already exists/);
+		await expectToolError(env.call("manageSheet", { action: "delete", name: "Nope" }), /not found/);
+		await expectToolError(env.call("manageSheet", { action: "add", name: "a/b" }), /not allowed in sheet names/);
+		await expectToolError(env.call("manageSheet", { action: "add", name: "x".repeat(32) }), /at most 31 characters/);
+		await expectToolError(env.call("manageSheet", { action: "add", name: "'quoted'" }), /apostrophe/);
+		await expectToolError(env.call("manageSheet", { action: "rename", name: "Sales" }), /"newName" is required/);
+		await expectToolError(env.call("manageSheet", { action: "copy", name: "Sales" }), /"action" must be one of/);
+		const single = cell({ sheets: { Only: [] } });
+		await expectToolError(single.call("manageSheet", { action: "delete", name: "Only" }), /Cannot delete the only sheet/);
+	});
+
+	test("an apostrophe inside a name is allowed", async () => {
+		expect((await cell(SALES).call("manageSheet", { action: "add", name: "Bob's data" })).activeSheet).toBe("Bob's data");
+	});
+});
+
+describe("selectRange / freezePanes / setNumberFormat", () => {
 	test("selectRange selects on the active or a named sheet", async () => {
 		const env = cell(SALES);
 		expect(await env.call("selectRange", { range: " B2:C4 " })).toEqual({ sheet: "Sales", selected: "B2:C4" });
@@ -185,6 +248,71 @@ describe("selectRange", () => {
 		await expectToolError(env.call("selectRange", { range: "" }), /"range" must be an A1-style string/);
 	});
 
+	test("freezePanes by rows, columns, cell and unfreeze", async () => {
+		const env = cell(SALES);
+		expect(await env.call("freezePanes", { rows: 1 })).toEqual({ sheet: "Sales", frozenRows: 1, frozenColumns: 0, frozenRange: "1:1" });
+		expect(await env.call("freezePanes", { columns: 1 })).toMatchObject({ frozenRows: 0, frozenColumns: 1, frozenRange: "A:A" });
+		expect(await env.call("freezePanes", { cell: "C3" })).toMatchObject({ frozenRows: 2, frozenColumns: 2, frozenRange: "A1:B2" });
+		expect(await env.call("freezePanes", { unfreeze: true })).toMatchObject({ frozenRows: 0, frozenColumns: 0, frozenRange: null });
+		expect(await env.call("freezePanes", { rows: 0, columns: 0 })).toMatchObject({ frozenRange: null });
+		await expectToolError(env.call("freezePanes", {}), /Pass "rows" and\/or "columns"/);
+		await expectToolError(env.call("freezePanes", { cell: "B2:C3" }), /single cell address/);
+		await expectToolError(env.call("freezePanes", { rows: -1 }), /"rows" must be a number >= 0/);
+	});
+
+	test("setNumberFormat applies to a range and shows a sample", async () => {
+		const env = cell({ sheets: { S: [[0.25, 0.5]] } });
+		const r = await env.call("setNumberFormat", { range: "A1:B1", format: "0.00%" });
+		expect(r).toEqual({ sheet: "S", range: "A1:B1", format: "0.00%", sample: { address: "A1", displayed: "25.00%" } });
+		expect(env.sheet("S").cell("B1").numFmt).toBe("0.00%");
+		await expectToolError(env.call("setNumberFormat", { format: "" }), /"format" must be a non-empty number format code/);
+	});
+});
+
+describe("setDataValidation", () => {
+	test("list from values", async () => {
+		const env = cell(SALES);
+		const r = await env.call("setDataValidation", { range: "E2:E10", type: "list", values: ["Open", " Done ", ""] });
+		expect(r).toMatchObject({ range: "E2:E10", type: "xlValidateList", operator: "xlBetween", formula1: "Open,Done", formula2: null });
+		expect(env.sheet("Sales").validations).toHaveLength(1);
+	});
+
+	test("list from a source range gets a leading =", async () => {
+		const r = await cell(SALES).call("setDataValidation", { range: "E2", type: "list", source: "$H$2:$H$5" });
+		expect(r.formula1).toBe("=$H$2:$H$5");
+	});
+
+	test("numbers with operators and an error message; replaces the previous rule", async () => {
+		const env = cell(SALES);
+		await env.call("setDataValidation", { range: "B2:B4", type: "whole", min: 0, max: 100 });
+		const r = await env.call("setDataValidation", { range: "B2:B4", type: "decimal", operator: "greater", min: 0, max: 5, errorMessage: "Positive only" });
+		expect(r).toMatchObject({ type: "xlValidateDecimal", operator: "xlGreater", formula1: "0", formula2: null });
+		const rules = env.sheet("Sales").validations;
+		expect(rules).toHaveLength(1);
+		expect(rules[0]).toMatchObject({ showError: true, errorMessage: "Positive only" });
+	});
+
+	test("type none removes validation", async () => {
+		const env = cell(SALES);
+		await env.call("setDataValidation", { range: "B2:B4", type: "whole", min: 1, max: 2 });
+		expect(await env.call("setDataValidation", { range: "B2:B4", type: "none" })).toEqual({ sheet: "Sales", range: "B2:B4", removed: true });
+		expect(env.sheet("Sales").validations).toHaveLength(0);
+	});
+
+	test.each([
+		[{ range: "A1", type: "regex" }, /"type" must be one of/],
+		[{ range: "A1", type: "list" }, /needs "values"/],
+		[{ range: "A1", type: "list", values: ["a,b"] }, /must not contain commas/],
+		[{ range: "A1", type: "list", values: ["x".repeat(300)] }, /too long/],
+		[{ range: "A1", type: "custom" }, /needs the formula in "min"/],
+		[{ range: "A1", type: "whole" }, /needs "min"/],
+		[{ range: "A1", type: "whole", min: 1 }, /needs both "min" and "max"/],
+		[{ range: "A1", type: "whole", min: 1, max: 2, operator: "approx" }, /"operator" must be one of/],
+		[{ range: "A1", type: "whole", min: 1, max: 2, alertStyle: "loud" }, /"alertStyle"/],
+		[{ type: "whole" }, /"range" must be an A1-style string/]
+	])("rejects %j", async (args, msg) => {
+		await expectToolError(cell(SALES).call("setDataValidation", args), msg);
+	});
 });
 
 describe("comments", () => {
@@ -221,7 +349,9 @@ describe("invalid addresses", () => {
 	test.each([
 		["readRange", { range: "A1:" }, /Invalid range "A1:"/],
 		["writeRange", { startCell: "1A", values: [["x"]] }, /Invalid start cell "1A"/],
-		["selectRange", { range: "Sheet 2" }, /Invalid range "Sheet 2"/]
+		["selectRange", { range: "Sheet 2" }, /Invalid range "Sheet 2"/],
+		["setNumberFormat", { range: "ZZZZ1", format: "0" }, /Invalid range "ZZZZ1"/],
+		["setDataValidation", { range: "B2-B9", type: "whole", min: 1, max: 2 }, /Invalid range "B2-B9"/]
 	])("%s %j", async (tool, args, msg) => {
 		const env = cell(SALES);
 		await expectToolError(env.call(tool, args), msg);

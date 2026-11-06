@@ -86,6 +86,32 @@ function setup(editorType, defs) {
 		assert.strictEqual(await ctx.ToolApproval.getPreview("replaceSelection", { text: "x" }), null);
 	});
 
+	test("setNumberFormat / setDataValidation: range and rule", async () => {
+		const ctx = setup("cell", ["setNumberFormat", "setDataValidation"]);
+		cellApi(ctx, { "1,1": { text: "1234.5", format: "General", validation: "xlValidateWholeNumber", f1: "1" } });
+		const nf = await ctx.ToolApproval.getPreview("setNumberFormat", { range: "B2:B9", format: "#,##0.00" });
+		assert.deepStrictEqual(nf.items.map((i) => i.value).slice(0, 4), ["Sheet1", "B2:B9", "General", "#,##0.00"]);
+		const dv = await ctx.ToolApproval.getPreview("setDataValidation", { range: "B2:B9", type: "list", values: ["Open", "Done"] });
+		assert.strictEqual(dv.items[2].value, "xlValidateWholeNumber: 1 (B2)");
+		assert.strictEqual(dv.items[3].value, "list: Open, Done");
+	});
+
+	test("deleteRowsColumns / insertRowsColumns / manageSheet: what is affected", async () => {
+		const ctx = setup("cell", ["deleteRowsColumns", "insertRowsColumns", "manageSheet"]);
+		cellApi(ctx, { "1,0": { text: "a" }, "1,2": { text: "c" }, "2,1": { text: "b" } });
+		const del = await ctx.ToolApproval.getPreview("deleteRowsColumns", { type: "rows", at: "2", count: 2 });
+		assert.strictEqual(del.items[1].value, "Rows 2:3");
+		assert.strictEqual(del.items[2].value, "3");
+		assert.deepStrictEqual(del.table.rows.map((r) => r.label), ["2", "3"]);
+		const ins = await ctx.ToolApproval.getPreview("insertRowsColumns", { type: "columns", at: "C" });
+		assert.strictEqual(ins.items[1].value, "Columns C:C");
+		const ms = await ctx.ToolApproval.getPreview("manageSheet", { action: "delete", name: "sheet1" });
+		assert.strictEqual(ms.items[1].value, "A1:C4");
+		assert.deepStrictEqual(JSON.parse(JSON.stringify(ctx.ToolPreviews.rowsColumnsAddress({ type: "columns", at: "AA", count: 2 }))),
+			{ type: "columns", first: 27, last: 28, address: "AA:AB" });
+		assert.strictEqual(ctx.ToolPreviews.rowsColumnsAddress({ type: "rows", at: "x" }), null);
+	});
+
 	test("preview is attached but never sent to the model (getTools)", async () => {
 		const ctx = setup("cell", ["writeRange"]);
 		assert.strictEqual(typeof ctx.EditorHelper.names2funcs.writeRange.preview, "function");

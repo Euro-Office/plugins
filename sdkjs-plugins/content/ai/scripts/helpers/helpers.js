@@ -6995,6 +6995,128 @@ HELPERS.cell.push((function(){
 	return func;
 })());
 HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "deleteRowsColumns",
+		"category": "structure",
+		"description": "Deletes whole rows or whole columns (including their content) from a worksheet. Cells below/right of them shift up/left; formulas pointing at deleted cells become #REF!. Rows are 1-based numbers, columns are letters (A, B, ..., XFD). Read the affected cells first if unsure.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"type": {
+					"type": "string",
+					"enum": ["rows", "columns"],
+					"description": "Whether to delete whole rows or whole columns."
+				},
+				"at": {
+					"type": "string",
+					"description": "First row/column to delete: for rows a 1-based row number (e.g. '5'); for columns a column letter (e.g. 'C')."
+				},
+				"count": {
+					"type": "number",
+					"description": "How many rows/columns to delete (1-1000).",
+					"default": 1
+				}
+			},
+			"required": ["type", "at"]
+		},
+		"examples": [
+			{
+				"prompt": "Delete rows 10 to 12",
+				"arguments": { "type": "rows", "at": "10", "count": 3 }
+			},
+			{
+				"prompt": "Remove column F",
+				"arguments": { "type": "columns", "at": "F" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const MAX_ROWS = 1048576, MAX_COLS = 16384;
+		if (params.type !== "rows" && params.type !== "columns")
+			throw new window.AgentState.ToolError('Parameter "type" must be "rows" or "columns". Got: ' + JSON.stringify(params.type));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let count = params.count === undefined || params.count === null ? 1 : params.count;
+		if (typeof count !== 'number' || count < 1 || count > 1000)
+			throw new window.AgentState.ToolError('Parameter "count" must be a number between 1 and 1000. Got: ' + JSON.stringify(params.count));
+		count = Math.floor(count);
+
+		function colName(n) {
+			let s = "";
+			while (n > 0) {
+				let m = (n - 1) % 26;
+				s = String.fromCharCode(65 + m) + s;
+				n = Math.floor((n - 1) / 26);
+			}
+			return s;
+		}
+		function colNumber(letters) {
+			let n = 0;
+			for (let i = 0; i < letters.length; i++)
+				n = n * 26 + (letters.charCodeAt(i) - 64);
+			return n;
+		}
+
+		let first, address;
+		if (params.type === "rows") {
+			first = typeof params.at === 'string' && /^\s*\d+\s*$/.test(params.at) ? parseInt(params.at, 10) : params.at;
+			if (typeof first !== 'number' || !isFinite(first) || first < 1)
+				throw new window.AgentState.ToolError('For rows, "at" must be a 1-based row number, e.g. 5. Got: ' + JSON.stringify(params.at));
+			first = Math.floor(first);
+			if (first + count - 1 > MAX_ROWS)
+				throw new window.AgentState.ToolError('Rows ' + first + '-' + (first + count - 1) + ' exceed the sheet limit of ' + MAX_ROWS + ' rows.');
+			address = first + ":" + (first + count - 1);
+		} else {
+			if (typeof params.at === 'number')
+				first = Math.floor(params.at);
+			else if (typeof params.at === 'string' && /^\s*\d+\s*$/.test(params.at))
+				first = parseInt(params.at, 10);
+			else if (typeof params.at === 'string' && /^\s*[A-Za-z]{1,3}\s*$/.test(params.at))
+				first = colNumber(params.at.trim().toUpperCase());
+			else
+				first = NaN;
+			if (!isFinite(first) || first < 1)
+				throw new window.AgentState.ToolError('For columns, "at" must be a column letter such as "C" (or a 1-based column number). Got: ' + JSON.stringify(params.at));
+			if (first + count - 1 > MAX_COLS)
+				throw new window.AgentState.ToolError('Columns exceed the sheet limit of ' + MAX_COLS + ' columns (XFD).');
+			address = colName(first) + ":" + colName(first + count - 1);
+		}
+
+		Asc.scope.structParams = { sheet: params.sheet || null, address: address, shift: params.type === "rows" ? "up" : "left" };
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.structParams;
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				let range = ws.GetRange(p.address);
+				if (!range)
+					return { error: "Invalid address \"" + p.address + "\"." };
+				range.Delete(p.shift);
+				return { sheet: ws.GetName(), deleted: p.address };
+			});
+		} catch (e) {
+			throw new window.AgentState.ToolError("Could not delete " + address + ": " + (e && e.message ? e.message : String(e)) + " (the sheet may be protected).");
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "explainFormula",
@@ -8075,6 +8197,133 @@ HELPERS.cell.push((function(){
 
 		if (result && result.error)
 			throw new window.AgentState.ToolError(result.error);
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "freezePanes",
+		"category": "structure",
+		"description": "Freezes rows and/or columns so they stay visible while scrolling, or removes the freeze. Either pass 'rows' and/or 'columns' (number of top rows / left columns to freeze), or 'cell' (Excel semantics: everything above and to the left of this cell is frozen, e.g. 'B2' freezes row 1 and column A), or 'unfreeze': true. Applies to the given sheet, which becomes the active sheet.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"rows": {
+					"type": "number",
+					"description": "Number of top rows to freeze (0 = none)."
+				},
+				"columns": {
+					"type": "number",
+					"description": "Number of left columns to freeze (0 = none)."
+				},
+				"cell": {
+					"type": "string",
+					"description": "Top-left cell of the scrollable area, e.g. 'B2'. Alternative to rows/columns."
+				},
+				"unfreeze": {
+					"type": "boolean",
+					"description": "Remove any frozen panes.",
+					"default": false
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Keep the header row visible",
+				"arguments": { "rows": 1 }
+			},
+			{
+				"prompt": "Freeze the first row and the first column",
+				"arguments": { "cell": "B2" }
+			},
+			{
+				"prompt": "Unfreeze panes",
+				"arguments": { "unfreeze": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let rows = 0, cols = 0;
+		let unfreeze = params.unfreeze === true;
+		if (!unfreeze) {
+			if (typeof params.cell === 'string' && params.cell.trim() !== "") {
+				let m = /^\s*\$?([A-Za-z]{1,3})\$?(\d+)\s*$/.exec(params.cell);
+				if (!m)
+					throw new window.AgentState.ToolError('Parameter "cell" must be a single cell address such as "B2". Got: ' + JSON.stringify(params.cell));
+				let letters = m[1].toUpperCase();
+				let col = 0;
+				for (let i = 0; i < letters.length; i++)
+					col = col * 26 + (letters.charCodeAt(i) - 64);
+				rows = parseInt(m[2], 10) - 1;
+				cols = col - 1;
+			} else {
+				if (params.rows !== undefined && params.rows !== null) {
+					if (typeof params.rows !== 'number' || params.rows < 0)
+						throw new window.AgentState.ToolError('Parameter "rows" must be a number >= 0. Got: ' + JSON.stringify(params.rows));
+					rows = Math.floor(params.rows);
+				}
+				if (params.columns !== undefined && params.columns !== null) {
+					if (typeof params.columns !== 'number' || params.columns < 0)
+						throw new window.AgentState.ToolError('Parameter "columns" must be a number >= 0. Got: ' + JSON.stringify(params.columns));
+					cols = Math.floor(params.columns);
+				}
+			}
+			if (rows === 0 && cols === 0) {
+				if (params.rows === undefined && params.columns === undefined && params.cell === undefined)
+					throw new window.AgentState.ToolError('Pass "rows" and/or "columns", or "cell", or "unfreeze": true.');
+				unfreeze = true;
+			}
+		}
+
+		Asc.scope.freezeParams = { sheet: params.sheet || null, rows: rows, cols: cols, unfreeze: unfreeze };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.freezeParams;
+			let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+			if (!ws)
+				return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+			// Freeze panes act on the active sheet's view
+			ws.SetActive();
+			let panes = ws.GetFreezePanes();
+			function colName(n) {
+				let s = "";
+				while (n > 0) {
+					let m = (n - 1) % 26;
+					s = String.fromCharCode(65 + m) + s;
+					n = Math.floor((n - 1) / 26);
+				}
+				return s;
+			}
+			if (p.unfreeze) {
+				panes.Unfreeze();
+			} else if (p.rows > 0 && p.cols > 0) {
+				panes.FreezeAt("A1:" + colName(p.cols) + p.rows);
+			} else if (p.rows > 0) {
+				panes.FreezeRows(p.rows);
+			} else {
+				panes.FreezeColumns(p.cols);
+			}
+			let loc = panes.GetLocation();
+			return {
+				sheet: ws.GetName(),
+				frozenRows: p.unfreeze ? 0 : p.rows,
+				frozenColumns: p.unfreeze ? 0 : p.cols,
+				frozenRange: loc ? loc.GetAddress(false, false) : null
+			};
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
 	};
 
 	return func;
@@ -9163,6 +9412,248 @@ HELPERS.cell.push((function(){
 })());
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
+		"name": "insertRowsColumns",
+		"category": "structure",
+		"description": "Inserts empty whole rows or whole columns into a worksheet. The new rows/columns are inserted at position 'at' (before the existing row/column there), which shifts existing cells down or right; formulas referencing shifted cells are updated automatically. Rows are 1-based numbers, columns are letters (A, B, ..., XFD).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"type": {
+					"type": "string",
+					"enum": ["rows", "columns"],
+					"description": "Whether to insert whole rows or whole columns."
+				},
+				"at": {
+					"type": "string",
+					"description": "Where to insert: for rows a 1-based row number (new rows start here, e.g. '5'); for columns a column letter (e.g. 'C')."
+				},
+				"count": {
+					"type": "number",
+					"description": "How many rows/columns to insert (1-1000).",
+					"default": 1
+				}
+			},
+			"required": ["type", "at"]
+		},
+		"examples": [
+			{
+				"prompt": "Insert two empty rows above row 5",
+				"arguments": { "type": "rows", "at": "5", "count": 2 }
+			},
+			{
+				"prompt": "Add a column before column C",
+				"arguments": { "type": "columns", "at": "C" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const MAX_ROWS = 1048576, MAX_COLS = 16384;
+		if (params.type !== "rows" && params.type !== "columns")
+			throw new window.AgentState.ToolError('Parameter "type" must be "rows" or "columns". Got: ' + JSON.stringify(params.type));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let count = params.count === undefined || params.count === null ? 1 : params.count;
+		if (typeof count !== 'number' || count < 1 || count > 1000)
+			throw new window.AgentState.ToolError('Parameter "count" must be a number between 1 and 1000. Got: ' + JSON.stringify(params.count));
+		count = Math.floor(count);
+
+		function colName(n) {
+			let s = "";
+			while (n > 0) {
+				let m = (n - 1) % 26;
+				s = String.fromCharCode(65 + m) + s;
+				n = Math.floor((n - 1) / 26);
+			}
+			return s;
+		}
+		function colNumber(letters) {
+			let n = 0;
+			for (let i = 0; i < letters.length; i++)
+				n = n * 26 + (letters.charCodeAt(i) - 64);
+			return n;
+		}
+
+		let first, address;
+		if (params.type === "rows") {
+			first = typeof params.at === 'string' && /^\s*\d+\s*$/.test(params.at) ? parseInt(params.at, 10) : params.at;
+			if (typeof first !== 'number' || !isFinite(first) || first < 1)
+				throw new window.AgentState.ToolError('For rows, "at" must be a 1-based row number, e.g. 5. Got: ' + JSON.stringify(params.at));
+			first = Math.floor(first);
+			if (first + count - 1 > MAX_ROWS)
+				throw new window.AgentState.ToolError('Rows ' + first + '-' + (first + count - 1) + ' exceed the sheet limit of ' + MAX_ROWS + ' rows.');
+			address = first + ":" + (first + count - 1);
+		} else {
+			if (typeof params.at === 'number')
+				first = Math.floor(params.at);
+			else if (typeof params.at === 'string' && /^\s*\d+\s*$/.test(params.at))
+				first = parseInt(params.at, 10);
+			else if (typeof params.at === 'string' && /^\s*[A-Za-z]{1,3}\s*$/.test(params.at))
+				first = colNumber(params.at.trim().toUpperCase());
+			else
+				first = NaN;
+			if (!isFinite(first) || first < 1)
+				throw new window.AgentState.ToolError('For columns, "at" must be a column letter such as "C" (or a 1-based column number). Got: ' + JSON.stringify(params.at));
+			if (first + count - 1 > MAX_COLS)
+				throw new window.AgentState.ToolError('Columns exceed the sheet limit of ' + MAX_COLS + ' columns (XFD).');
+			address = colName(first) + ":" + colName(first + count - 1);
+		}
+
+		Asc.scope.structParams = { sheet: params.sheet || null, address: address, shift: params.type === "rows" ? "down" : "right" };
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.structParams;
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				let range = ws.GetRange(p.address);
+				if (!range)
+					return { error: "Invalid address \"" + p.address + "\"." };
+				range.Insert(p.shift);
+				return { sheet: ws.GetName(), inserted: p.address };
+			});
+		} catch (e) {
+			throw new window.AgentState.ToolError("Could not insert " + address + ": " + (e && e.message ? e.message : String(e)) + " (the sheet may be protected).");
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "manageSheet",
+		"category": "structure",
+		"description": "Adds, renames, deletes or activates a worksheet. 'add' creates a new sheet called 'name' (it becomes the active sheet); 'rename' renames sheet 'name' to 'newName'; 'delete' removes sheet 'name' and all its data (the last remaining sheet cannot be deleted); 'activate' switches to sheet 'name'. Sheet names must be 1-31 characters and must not contain : \\ / ? * [ ]. Returns the resulting list of sheets and the active sheet.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["add", "rename", "delete", "activate"],
+					"description": "What to do."
+				},
+				"name": {
+					"type": "string",
+					"description": "Name of the sheet to add, or of the existing sheet to rename/delete/activate."
+				},
+				"newName": {
+					"type": "string",
+					"description": "New sheet name (required for 'rename')."
+				}
+			},
+			"required": ["action", "name"]
+		},
+		"examples": [
+			{
+				"prompt": "Add a sheet called Summary",
+				"arguments": { "action": "add", "name": "Summary" }
+			},
+			{
+				"prompt": "Rename Sheet1 to Data 2025",
+				"arguments": { "action": "rename", "name": "Sheet1", "newName": "Data 2025" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const actions = ["add", "rename", "delete", "activate"];
+		if (!actions.includes(params.action))
+			throw new window.AgentState.ToolError('Parameter "action" must be one of ' + JSON.stringify(actions) + '. Got: ' + JSON.stringify(params.action));
+		if (typeof params.name !== 'string' || params.name.trim() === "")
+			throw new window.AgentState.ToolError('Parameter "name" must be a non-empty string.');
+
+		function checkName(n, field) {
+			if (n.length > 31)
+				throw new window.AgentState.ToolError('Parameter "' + field + '" is too long (' + n.length + ' characters); sheet names have at most 31 characters.');
+			if (/[:\\\/?*\[\]]/.test(n))
+				throw new window.AgentState.ToolError('Parameter "' + field + '" contains a character that is not allowed in sheet names (: \\ / ? * [ ]).');
+			if (/^'|'$/.test(n))
+				throw new window.AgentState.ToolError('Sheet names cannot start or end with an apostrophe.');
+		}
+
+		if (params.action === "add")
+			checkName(params.name, "name");
+		if (params.action === "rename") {
+			if (typeof params.newName !== 'string' || params.newName.trim() === "")
+				throw new window.AgentState.ToolError('Parameter "newName" is required for action "rename".');
+			checkName(params.newName, "newName");
+		}
+
+		Asc.scope.sheetParams = { action: params.action, name: params.name, newName: params.newName || null };
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.sheetParams;
+				function names() {
+					return Api.GetSheets().map(function(s){ return s.GetName(); });
+				}
+				function find(n) {
+					let list = Api.GetSheets();
+					for (let i = 0; i < list.length; i++) {
+						if (list[i].GetName().toLowerCase() === String(n).toLowerCase())
+							return list[i];
+					}
+					return null;
+				}
+				let ws = find(p.name);
+				switch (p.action) {
+					case "add":
+						if (ws)
+							return { error: "A sheet named \"" + p.name + "\" already exists." };
+						Api.AddSheet(p.name);
+						break;
+					case "rename":
+						if (!ws)
+							return { error: "Sheet \"" + p.name + "\" not found. Available sheets: " + names().join(", ") };
+						let other = find(p.newName);
+						if (other && other.GetName() !== ws.GetName())
+							return { error: "A sheet named \"" + p.newName + "\" already exists." };
+						ws.SetName(p.newName);
+						break;
+					case "delete":
+						if (!ws)
+							return { error: "Sheet \"" + p.name + "\" not found. Available sheets: " + names().join(", ") };
+						if (Api.GetSheets().length <= 1)
+							return { error: "Cannot delete the only sheet of the workbook." };
+						ws.Delete();
+						break;
+					case "activate":
+						if (!ws)
+							return { error: "Sheet \"" + p.name + "\" not found. Available sheets: " + names().join(", ") };
+						ws.SetActive();
+						break;
+				}
+				let active = Api.GetActiveSheet();
+				return { action: p.action, sheets: names(), activeSheet: active ? active.GetName() : null };
+			});
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
 		"name": "readRange",
 		"category": "core",
 		"readOnly": true,
@@ -9701,6 +10192,195 @@ HELPERS.cell.push((function(){
 	return func;
 })());
 HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "setDataValidation",
+		"category": "data",
+		"description": "Adds a data validation rule to a cell range (replacing any existing rule there), or removes validation with type 'none'. Types: 'list' (drop-down; give 'values' as an array of items or 'source' as a range reference like '=$H$2:$H$10'), 'whole' (whole numbers), 'decimal', 'date', 'time', 'textLength' (length of the text), 'custom' (a formula that must be TRUE, in 'min'). For whole/decimal/date/time/textLength use 'operator' with 'min' and, for between/notBetween, 'max'. Dates are given as formulas such as '=DATE(2025,1,31)', times as decimals of a day such as '0.5' (12:00). Optionally set an error message shown when invalid data is entered.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"range": {
+					"type": "string",
+					"description": "A1-style address, e.g. 'B2:B200'."
+				},
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"type": {
+					"type": "string",
+					"enum": ["list", "whole", "decimal", "date", "time", "textLength", "custom", "none"],
+					"description": "Validation type; 'none' removes existing validation."
+				},
+				"values": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "Allowed items for type 'list'. Items must not contain commas."
+				},
+				"source": {
+					"type": "string",
+					"description": "For type 'list': a range reference that holds the allowed items, e.g. '=$H$2:$H$10' or '=Lists!$A$1:$A$5'."
+				},
+				"operator": {
+					"type": "string",
+					"enum": ["between", "notBetween", "equal", "notEqual", "greater", "less", "greaterOrEqual", "lessOrEqual"],
+					"description": "Comparison for whole/decimal/date/time/textLength.",
+					"default": "between"
+				},
+				"min": {
+					"type": "string",
+					"description": "First value or formula (lower bound, or the compared value for single-value operators; the formula for 'custom'). Numbers can be given as text, e.g. '0'."
+				},
+				"max": {
+					"type": "string",
+					"description": "Upper bound for operators 'between' and 'notBetween'."
+				},
+				"alertStyle": {
+					"type": "string",
+					"enum": ["stop", "warning", "information"],
+					"description": "How invalid entries are handled: 'stop' rejects them, 'warning'/'information' only warn.",
+					"default": "stop"
+				},
+				"errorMessage": {
+					"type": "string",
+					"description": "Optional message shown when invalid data is entered."
+				}
+			},
+			"required": ["range", "type"]
+		},
+		"examples": [
+			{
+				"prompt": "Make column C a drop-down with Open, In progress, Done",
+				"arguments": { "range": "C2:C200", "type": "list", "values": ["Open", "In progress", "Done"] }
+			},
+			{
+				"prompt": "Only allow whole numbers from 1 to 10 in B2:B50",
+				"arguments": { "range": "B2:B50", "type": "whole", "operator": "between", "min": "1", "max": "10", "errorMessage": "Enter a number from 1 to 10." }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const types = { list: "xlValidateList", whole: "xlValidateWholeNumber", decimal: "xlValidateDecimal", date: "xlValidateDate", time: "xlValidateTime", textLength: "xlValidateTextLength", custom: "xlValidateCustom", none: null };
+		const operators = { between: "xlBetween", notBetween: "xlNotBetween", equal: "xlEqual", notEqual: "xlNotEqual", greater: "xlGreater", less: "xlLess", greaterOrEqual: "xlGreaterEqual", lessOrEqual: "xlLessEqual" };
+		const alerts = { stop: "xlValidAlertStop", warning: "xlValidAlertWarning", information: "xlValidAlertInformation" };
+
+		if (typeof params.range !== 'string' || params.range.trim() === "")
+			throw new window.AgentState.ToolError('Parameter "range" must be an A1-style string, e.g. "B2:B200".');
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		if (!(params.type in types))
+			throw new window.AgentState.ToolError('Parameter "type" must be one of ' + JSON.stringify(Object.keys(types)) + '. Got: ' + JSON.stringify(params.type));
+		let operator = params.operator === undefined || params.operator === null ? "between" : params.operator;
+		if (!(operator in operators))
+			throw new window.AgentState.ToolError('Parameter "operator" must be one of ' + JSON.stringify(Object.keys(operators)) + '. Got: ' + JSON.stringify(params.operator));
+		let alert = params.alertStyle === undefined || params.alertStyle === null ? "stop" : params.alertStyle;
+		if (!(alert in alerts))
+			throw new window.AgentState.ToolError('Parameter "alertStyle" must be one of ' + JSON.stringify(Object.keys(alerts)) + '.');
+
+		function str(v) {
+			return v === undefined || v === null || v === "" ? null : String(v);
+		}
+		let formula1 = null, formula2 = null;
+		switch (params.type) {
+			case "list":
+				if (Array.isArray(params.values) && params.values.length) {
+					let items = params.values.map(function(v){ return String(v).trim(); }).filter(function(v){ return v !== ""; });
+					if (!items.length)
+						throw new window.AgentState.ToolError('Parameter "values" contains no non-empty items.');
+					if (items.some(function(v){ return v.indexOf(",") !== -1; }))
+						throw new window.AgentState.ToolError('List items must not contain commas. Put the items in cells and pass "source" instead.');
+					formula1 = items.join(",");
+					if (formula1.length > 255)
+						throw new window.AgentState.ToolError('The list is too long (' + formula1.length + ' characters, max 255). Put the items in cells and pass "source" instead.');
+				} else if (typeof params.source === 'string' && params.source.trim() !== "") {
+					formula1 = params.source.trim();
+					if (formula1.charAt(0) !== "=")
+						formula1 = "=" + formula1;
+				} else {
+					throw new window.AgentState.ToolError('Type "list" needs "values" (array of items) or "source" (range reference such as "=$H$2:$H$10").');
+				}
+				break;
+			case "custom":
+				formula1 = str(params.min);
+				if (!formula1)
+					throw new window.AgentState.ToolError('Type "custom" needs the formula in "min", e.g. "=LEN(A2)<=10".');
+				break;
+			case "none":
+				break;
+			default:
+				formula1 = str(params.min);
+				formula2 = str(params.max);
+				if (!formula1)
+					throw new window.AgentState.ToolError('Type "' + params.type + '" needs "min" (the value to compare with).');
+				if ((operator === "between" || operator === "notBetween") && !formula2)
+					throw new window.AgentState.ToolError('Operator "' + operator + '" needs both "min" and "max".');
+				if (operator !== "between" && operator !== "notBetween")
+					formula2 = null;
+		}
+		if (params.errorMessage !== undefined && params.errorMessage !== null && typeof params.errorMessage !== 'string')
+			throw new window.AgentState.ToolError('Parameter "errorMessage" must be a string.');
+
+		Asc.scope.validationParams = {
+			range: params.range.trim(),
+			sheet: params.sheet || null,
+			type: types[params.type],
+			alert: alerts[alert],
+			operator: operators[operator],
+			formula1: formula1,
+			formula2: formula2,
+			errorMessage: params.errorMessage || null
+		};
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.validationParams;
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				let range = null;
+				try {
+					range = ws.GetRange(p.range); // ApiWorksheet.GetRange throws on an invalid address
+				} catch (e) {}
+				if (!range)
+					return { error: "Invalid range \"" + p.range + "\"." };
+				try {
+					range.GetValidation().Delete();
+				} catch (e) {}
+				if (!p.type)
+					return { sheet: ws.GetName(), range: range.GetAddress(false, false), removed: true };
+				// GetValidation() caches per ApiRange; use a fresh range after deleting
+				let fresh = ws.GetRange(p.range);
+				let v;
+				try {
+					v = fresh.GetValidation().Add(p.type, p.alert, p.operator, p.formula1 === null ? undefined : p.formula1, p.formula2 === null ? undefined : p.formula2);
+				} catch (e) {
+					return { error: "The editor rejected the validation rule: " + (e && e.message ? e.message : String(e)) + ". Check min/max/source." };
+				}
+				if (!v)
+					return { error: "The editor rejected the validation rule. Check type, min/max and source." };
+				if (p.errorMessage) {
+					try {
+						v.SetShowError(true);
+						v.SetErrorMessage(p.errorMessage);
+					} catch (e) {}
+				}
+				return { sheet: ws.GetName(), range: fresh.GetAddress(false, false), type: p.type, operator: p.operator, formula1: p.formula1, formula2: p.formula2 };
+			});
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "setMultiSort",
@@ -9934,6 +10614,81 @@ HELPERS.cell.push((function(){
 				Asc.scope.header
 			);
 		});
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "setNumberFormat",
+		"category": "data",
+		"description": "Applies a number format code to a cell range without changing the stored values. Use standard Excel format codes, e.g. 'General', '0', '0.00', '#,##0.00', '0%', '0.0%', '#,##0.00 \"€\"', '[$$-409]#,##0.00', 'dd.mm.yyyy', 'yyyy-mm-dd', 'hh:mm', '@' (text). Use it to show values as currency, percentages, dates or with a fixed number of decimals.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"range": {
+					"type": "string",
+					"description": "A1-style address, e.g. 'C2:C50'. Defaults to the current selection."
+				},
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"format": {
+					"type": "string",
+					"description": "Number format code, e.g. '#,##0.00'."
+				}
+			},
+			"required": ["format"]
+		},
+		"examples": [
+			{
+				"prompt": "Show column D as percentages with one decimal",
+				"arguments": { "range": "D2:D100", "format": "0.0%" }
+			},
+			{
+				"prompt": "Format the selection as euro amounts",
+				"arguments": { "format": "#,##0.00 \"€\"" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.format !== 'string' || params.format === "")
+			throw new window.AgentState.ToolError('Parameter "format" must be a non-empty number format code, e.g. "#,##0.00".');
+		if (params.range !== undefined && params.range !== null && typeof params.range !== 'string')
+			throw new window.AgentState.ToolError('Parameter "range" must be an A1-style string. Got: ' + JSON.stringify(params.range));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+
+		Asc.scope.formatParams = { range: params.range || null, sheet: params.sheet || null, format: params.format };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.formatParams;
+			let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+			if (!ws)
+				return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+			let range = null;
+			try {
+				range = p.range ? ws.GetRange(p.range) : Api.GetSelection(); // ApiWorksheet.GetRange throws on an invalid address
+			} catch (e) {}
+			if (!range)
+				return { error: p.range ? "Invalid range \"" + p.range + "\"." : "No range selected. Pass \"range\"." };
+			range.SetNumberFormat(p.format);
+			let sample = null;
+			try {
+				let cell = ws.GetRangeByNumber(range.GetRow() - 1, range.GetCol() - 1);
+				sample = { address: cell.GetAddress(false, false), displayed: cell.GetText() };
+			} catch (e) {}
+			let res = { sheet: ws.GetName(), range: range.GetAddress(false, false), format: p.format };
+			if (sample)
+				res.sample = sample;
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
 	};
 
 	return func;
@@ -10747,22 +11502,28 @@ HELPERS.names.cell = {
 	"addTop10Condition": "Highlight Top or Bottom Values",
 	"addUniqueValues": "Highlight Unique or Duplicate Values",
 	"clearConditionalFormatting": "Clear Conditional Formatting",
+	"deleteRowsColumns": "Delete Rows or Columns",
 	"explainFormula": "Explain Formula",
 	"fillMissingData": "Fill Missing Data",
 	"findFormulaErrors": "Find Formula Errors",
 	"findInSheet": "Find in Sheet",
 	"fixFormula": "Fix Formula Errors",
 	"formatTable": "Format as Table",
+	"freezePanes": "Freeze Panes",
 	"getComments": "Read Comments",
 	"getWorkbookInfo": "Inspect Workbook",
 	"highlightAnomalies": "Highlight Data Anomalies",
 	"highlightDuplicates": "Highlight Duplicate Values",
 	"insertPivotTable": "Create Pivot Table",
+	"insertRowsColumns": "Insert Rows or Columns",
+	"manageSheet": "Manage Sheets",
 	"readRange": "Read Cells",
 	"replyToComment": "Reply to Comment",
 	"selectRange": "Select Cells",
 	"setAutoFilter": "Apply Data Filter",
+	"setDataValidation": "Set Data Validation",
 	"setMultiSort": "Sort by Multiple Columns",
+	"setNumberFormat": "Set Number Format",
 	"setSort": "Sort Data",
 	"summarizeData": "Summarize Data",
 	"changeTextStyle": "Format Cell Text",
