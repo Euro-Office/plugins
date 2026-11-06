@@ -21,7 +21,7 @@ const EDITORS = ["word", "cell", "slide"];
 const READ_ONLY = {
 	word: ["findText", "getComments", "getSelection", "getTrackedChanges", "loadTools", "readDocument", "readOutline", "selectText"],
 	cell: ["findFormulaErrors", "findInSheet", "getComments", "getWorkbookInfo", "loadTools", "readRange", "selectRange"],
-	slide: ["findInPresentation", "goToSlide", "loadTools", "readPresentation"]
+	slide: ["findInPresentation", "getSpeakerNotes", "goToSlide", "loadTools", "readPresentation"]
 };
 
 // Tools that every editor must provide (the agent prompt relies on them).
