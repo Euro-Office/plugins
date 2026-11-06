@@ -56,7 +56,7 @@ CI runs the same suite in `.github/workflows/ai-plugin-tests.yml` on every PR an
 | `providers.test.js` | OpenAI and Anthropic adapters (tool mapping, `tool_use`/`tool_result`, merging consecutive roles) and `engine.js` `_chatRequestAgent` with a stubbed `fetch` (streamed tool-call deltas, errors, stop). |
 | `provenance.test.js` | AI-content marking:<ul><li>PNG/JPEG XMP round trips, using test images generated in Node;</li><li>document properties, written through the faithful `callCommand`;</li><li>content-control marking;</li><li>Library integration, `findAIContent` and the agent loop.</li></ul> |
 | `tool-categories.test.js`, `agent-history.test.js`, `citations.test.js`, `tool-approval.test.js`, `ai-edits.test.js`, `tool-previews.test.js` | Feature tests that came with those features, ported to vitest. |
-| `editor-actions.test.js` | No editor lock: agent turns start no action, one-shot requests use "Information" Start/End pairs, no "Block" action left in scripts or helper sources, `onAgentStatus` at turn start. |
+| `editor-actions.test.js` | No editor lock: agent turns start no action, one-shot requests use "Information" Start/End pairs, no "Block" action left in scripts or helper sources, `onAgentStatus` at turn start, model requests release open "GroupActions" while they wait, every turn ends with `onChatStreamEnd`. |
 | `static.test.js` | Every script parses, every JSON file is valid, the pages (including `sidebar/index.html`) and providers reference files that exist, and the chat opens as a docked panel. |
 
 The chat UI itself (`sidebar/`) is tested in `.dev/sidebar` with vitest and Testing Library; see `.dev/sidebar/README.md`.

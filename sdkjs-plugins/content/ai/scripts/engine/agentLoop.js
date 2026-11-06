@@ -169,12 +169,27 @@
 	// chatWindow: the Asc.PluginWindow of the chat sidebar; AgentState: the
 	// state of that window (chatWindow.js); messageHistory: what the chat sends,
 	// { messages, usedTools, turnId } or a plain message array.
+	// The final onChatStreamEnd ends the turn in the sidebar, so it is sent on
+	// every path: early returns and errors too.
 	async function runTurn(chatWindow, AgentState, messageHistory) {
+		try {
+			await runTurnBody(chatWindow, AgentState, messageHistory);
+		} catch (e) {
+			console.error("AI agent turn failed:", e);
+			chatWindow.command("onChatReply", Asc.plugin.tr("Error:") + " " + (e && e.message ? e.message : String(e)));
+		} finally {
+			chatWindow.command("onChatStreamEnd");
+		}
+	}
+
+	async function runTurnBody(chatWindow, AgentState, messageHistory) {
 		AgentState.isStopped = false;
 
 		let requestEngine = AI.Request.create(AI.ActionType.Chat);
-		if (!requestEngine)
+		if (!requestEngine) {
+			chatWindow.command("onChatReply", Asc.plugin.tr("Error:") + " " + Asc.plugin.tr("No AI model is selected for the chat. Choose one in the AI settings."));
 			return;
+		}
 
 		if (!window.EditorHelper)
 			window.EditorHelper = new EditorHelperImpl();
@@ -350,9 +365,6 @@
 				hasFinalReply: hasFinalReply
 			});
 		}
-
-		// always end (may be twice)
-		chatWindow.command("onChatStreamEnd");
 	}
 
 	window.AIAgentLoop = {

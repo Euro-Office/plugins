@@ -256,3 +256,23 @@ describe("detectFunctionCallingSupport (code.js)", () => {
 		expect(s.model.capabilities & 2).toBe(0);
 	});
 });
+
+describe("agent turn end", () => {
+	const last = (agent) => agent.win.commands[agent.win.commands.length - 1][0];
+
+	test("no model configured: the turn still ends, with the reason in the chat", async () => {
+		const agent = await createAgent({ fake: createWordDocument({ body: ["a"] }) });
+		agent.ctx.AI.Request.create = () => null;
+		await agent.send("Hi");
+		expect(agent.win.sent("onChatReply")[0]).toMatch(/^Error: No AI model is selected/);
+		expect(last(agent)).toBe("onChatStreamEnd");
+	});
+
+	test("an exception in the turn still ends it, with the error in the chat", async () => {
+		const agent = await createAgent({ fake: createWordDocument({ body: ["a"] }) });
+		agent.engine.queue.push(() => { throw new Error("kaputt"); });
+		await agent.send("Hi");
+		expect(agent.win.sent("onChatReply")).toEqual(["Error: kaputt"]);
+		expect(last(agent)).toBe("onChatStreamEnd");
+	});
+});
