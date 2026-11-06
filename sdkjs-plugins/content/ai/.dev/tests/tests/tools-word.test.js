@@ -407,6 +407,36 @@ describe("tracked changes", () => {
 	});
 });
 
+describe("insertMarkdown", () => {
+	test("converts markdown to HTML and pastes it at the end, as one undo step", async () => {
+		const { call, host, doc } = word({ body: ["one"] });
+		const r = await call("insertMarkdown", { markdown: "# Title\n\n- a\n- b", position: "end" });
+		expect(r).toEqual({ position: "end", insertedCharacters: 16 });
+		const html = host.methodCalls("PasteHtml")[0].args[0];
+		expect(html).toContain("<h1>Title</h1>");
+		expect(html).toContain("<li>a</li>");
+		const names = host.methodCalls().map((c) => c.name + (c.args && c.args[0] && typeof c.args[0] === "string" ? ":" + c.args[0] : ""));
+		expect(names[0]).toBe("StartAction:GroupActions");
+		expect(names).toContain("EndAction:GroupActions");
+		expect(names.indexOf("PasteHtml:" + html)).toBeLessThan(names.indexOf("EndAction:GroupActions"));
+		// an empty paragraph was added at the end before pasting
+		expect(doc.texts()[1]).toBe("");
+	});
+
+	test("replaceSelection needs a selection; the undo group is still closed", async () => {
+		const { call, host } = word({ body: ["one"] });
+		await expectToolError(call("insertMarkdown", { markdown: "x", position: "replaceSelection" }), /Nothing is selected/);
+		expect(host.methodCalls("EndAction")).toHaveLength(1);
+		expect(host.methodCalls("PasteHtml")).toHaveLength(0);
+	});
+
+	test("validates arguments", async () => {
+		const { call } = word({ body: ["one"] });
+		await expectToolError(call("insertMarkdown", { markdown: "  " }), /"markdown" must be a non-empty string/);
+		await expectToolError(call("insertMarkdown", { markdown: "x", position: "top" }), /"position" must be one of/);
+	});
+});
+
 describe("commands run in the editor context", () => {
 	test("no tool command throws inside the editor for a typical document", async () => {
 		const env = word({ ...SAMPLE, selection: { paragraph: 2, start: 0, end: 7 }, comments: [{ id: "1", text: "c" }] });
