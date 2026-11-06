@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Euro-Office contributors
+# SPDX-License-Identifier: Apache-2.0
 # Build the sdkjs-plugins directory for Euro-Office DocumentServer from bundle.txt.
 set -euo pipefail
 
@@ -9,7 +11,8 @@ helper_url='https://onlyoffice.github.io/sdkjs-plugins/'
 names=()
 
 mkdir -p "$dest/v1"
-cp "$root"/sdkjs-plugins/v1/{plugins.js,plugins-ui.js,plugins.css} "$dest/v1/"
+cp "$root/LICENSE" "$dest/"
+cp "$root"/sdkjs-plugins/v1/{plugins.js,plugins-ui.js,plugins.css,3rd-Party.txt} "$dest/v1/"
 
 while read -r name || [ -n "$name" ]; do
 	case $name in '' | '#'*) continue ;; esac

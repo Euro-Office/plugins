@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Euro-Office contributors
+# SPDX-License-Identifier: Apache-2.0
 """Fail if a .plugin lacks a root config.json or loads the v1 helpers from anywhere but sdkjs-plugins/v1/."""
 import posixpath
 import re

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Euro-Office contributors
+# SPDX-License-Identifier: Apache-2.0
 # Fail if a bundled plugin loads external assets on open or registers system/background variations.
 set -euo pipefail
 
