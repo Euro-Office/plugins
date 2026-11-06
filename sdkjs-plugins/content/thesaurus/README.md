@@ -4,7 +4,7 @@ Find synonyms for selected words.
 
 The plugin uses [Big Huge Thesaurus](https://words.bighugelabs.com/).
 
-It is called Thesaurus in the interface and is installed by default in cloud, [self-hosted](https://github.com/ONLYOFFICE/DocumentServer) and [desktop version](https://github.com/ONLYOFFICE/DesktopEditors) of ONLYOFFICE editors. 
+It is called Thesaurus in the interface and is installed by default in cloud, self-hosted and desktop versions of the editors. 
 
 ## How to use
 
@@ -14,4 +14,4 @@ It is called Thesaurus in the interface and is installed by default in cloud, [s
 
 Another way to use it: open the plugin and type the word in the field. Press Lookup to search for synonyms.
 
-If you need more information about how to use or write your own plugin, please see this https://api.onlyoffice.com/docs/plugin-and-macros/get-started/overview/
+If you need more information about how to use or write your own plugin, please see the [plugin developer documentation](https://euro-office.github.io/documentation/development/plugins/).

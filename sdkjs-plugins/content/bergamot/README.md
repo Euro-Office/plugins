@@ -1,6 +1,6 @@
-# Bergamot Translator Plugin for ONLYOFFICE
+# Bergamot Translator Plugin
 
-An offline machine translation plugin for ONLYOFFICE editors, powered by the Bergamot neural machine translation engine.
+An offline machine translation plugin for the editors, powered by the Bergamot neural machine translation engine.
 
 ## Features
 
@@ -45,7 +45,7 @@ The plugin supports translation between the following languages:
 
 ## Usage
 
-1. Install the plugin in your ONLYOFFICE editor
+1. Install the plugin in your editor
 2. Select text you want to translate
 3. Choose source and target languages
 4. Click "Insert to document" to replace selected text with translation

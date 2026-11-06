@@ -4,7 +4,7 @@ Convert selected text into speech.
 
 The plugin uses [guessLanguage][1] to recognize the language and [the SpeechSynthesis][2] interface of [the Web Speech API][3]. 
 
-The Speech plugin is installed by default in cloud and [self-hosted][4] of ONLYOFFICE editors. 
+The Speech plugin is installed by default in cloud and self-hosted versions of the editors. 
 
 ## How to use
 
@@ -21,9 +21,8 @@ So to use new languages you need to add them to your system.
 
 * The plugin doesn't work on Safari 15.3 (17612.4.9.1.8). Problem fixed on Safari 15.4 (17614.1.7.7)
 
-If you need more information about how to use or write your own plugin, please see this https://api.onlyoffice.com/docs/plugin-and-macros/get-started/overview/
+If you need more information about how to use or write your own plugin, please see the [plugin developer documentation](https://euro-office.github.io/documentation/development/plugins/).
 
   [1]: https://richtr.github.io/guessLanguage.js/
   [2]: https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynthesis
   [3]: https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API
-  [4]: https://github.com/ONLYOFFICE/DocumentServer

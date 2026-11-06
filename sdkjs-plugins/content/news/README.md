@@ -33,7 +33,7 @@ The plugin supports multiple news API providers. Choose your preferred provider 
 
 1. **Choose Provider**: Select your preferred news provider (GNews or TheNewsAPI)
 2. **Get API Key**: Register at your chosen provider's website and get your free API key
-3. **Install Plugin**: Open the plugin from the Plugins tab in ONLYOFFICE
+3. **Install Plugin**: Open the plugin from the Plugins tab in the editor
 4. **Setup**: Enter your API key when prompted
 5. **Search**: Use the Search tab to find articles by keywords
 6. **Headlines**: Use the Top Headlines tab to browse news by category
@@ -55,7 +55,7 @@ The plugin supports multiple news API providers. Choose your preferred provider 
 
 ## Requirements
 
-- ONLYOFFICE Document Editor
+- The document editor
 - Internet connection
 - Free API key from your chosen provider ([gnews.io](https://gnews.io) or [thenewsapi.com](https://www.thenewsapi.com))
 

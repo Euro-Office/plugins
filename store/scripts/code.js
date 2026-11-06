@@ -1,6 +1,7 @@
 /**
  *
  * (c) Copyright Ascensio System SIA 2020
+ * Modified by Euro-Office contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,14 +24,12 @@ let isPluginLoading = false;                                         // flag plu
 let isOnline = true;                                                 // flag internet connection
 isLocal && checkInternet();                                          // check internet connection (only for desktop)
 let interval = null;                                                 // interval for checking internet connection (if it doesn't work on launch)
-const OOMarketplaceUrl = 'https://onlyoffice.github.io/';            // url to oficial store (for local version store in desktop)
-const OOIO = 'https://github.com/ONLYOFFICE/onlyoffice.github.io/';  // url to oficial github repository (for links and discussions)
-const discussionsUrl = OOIO + 'discussions/';                        // discussions url
+const OOMarketplaceUrl = 'https://euro-office.github.io/plugins/';   // url to oficial store (for local version store in desktop)
+const OOIO = 'https://github.com/Euro-Office/plugins/';              // url to oficial github repository (for links)
 let searchTimeout = null;                                            // timeot for search
 let founded = [];                                                    // last founded elemens (for not to redraw if a result is the same)
 let catFiltred = [];                                                 // plugins are filtred by caterogy (used for search)
 let updateCount = 0;                                                 // counter for plugins in updating process
-let discussionCount = 0;                                             // counter for loading plugin`s discussions
 let allPlugins = [];                                                 // list of all plugins from config
 let installedPlugins;                                                // list of intalled plugins
 const elements = {};                                                 // all elements
@@ -51,7 +50,6 @@ let isResizeOnStart = false;                                         // flag for
 let slideIndex = 1;                                                  // index for slides
 let PsMain = null;                                                   // scroll for list of plugins
 let PsChangelog = null;                                               // scroll for changelog preview
-const proxyUrl = 'https://plugins-services.onlyoffice.com/proxy';    // url to proxy for getting rating
 const supportedScaleValues = [1, 1.25, 1.5, 1.75, 2];                // supported scale
 let scale = {                                                        // current scale
 	percent  : "100%",                                               // current scale in percent
@@ -457,33 +455,6 @@ function makeRequest(url, method, responseType, body, bHandeNoInternet) {
 	});
 };
 
-function makeDesktopRequest(_url) {
-	// function for getting rating page in desktop
-	return new Promise(function(resolve, reject) {
-		if ( !_url.startsWith('http') ) {
-			resolve({status:'skipped', response: {statusText: _url}});
-		} else {
-			window.AscSimpleRequest.createRequest({
-				url: _url,
-				crossOrigin: true,
-				crossDomain: true,
-				timeout: 10000,
-				headers: '',
-				complete: function(e, status) {
-					if ( status == 'success' ) {
-						resolve({status:status, response:e});
-					} else {
-						reject({status:status, response:e});
-					}
-				},
-				error: function(e, status, error) {
-					reject({status:status, response:e});
-				}
-			});
-		}
-	});
-};
-
 function sendMessage(message) {
 	// this function sends message to editor
 	parent.postMessage(JSON.stringify(message), '*');
@@ -532,11 +503,6 @@ function initElemnts() {
 	elements.divLanguages = document.getElementById('div_languages');
 	elements.inpSearch = document.getElementById('inp_search');
 	elements.btnUpdateAll = document.getElementById('btn_updateAll');
-	elements.divRatingLink = document.getElementById('div_rating_link');
-	elements.discussionLink = document.getElementById('discussion_link');
-	elements.ratingStars = document.getElementById('div_rating_stars');
-	elements.totalVotes = document.getElementById('total_votes');
-	elements.divVotes = document.getElementById('div_votes');
 	elements.arrowPrev = document.getElementById('prev_arrow');
 	elements.arrowNext = document.getElementById('next_arrow');
 	elements.divReadme = document.getElementById('div_readme_link');
@@ -605,11 +571,6 @@ function getAllPluginsData(bFirstRender, bshowMarketplace) {
 						config.changelog = marked.parser(lexed, settings);
 					}
 				);
-				if (plugin.discussion) {
-					discussionCount++;
-					config.discussionUrl = discussionsUrl + plugin.discussion;
-					getDiscussion(config);
-				}
 				count--;
 				if (!count)
 					endPluginsDataLoading(bFirstRender, bshowMarketplace, Unloaded);
@@ -628,42 +589,6 @@ function getAllPluginsData(bFirstRender, bshowMarketplace) {
 		isPluginLoading = false;
 		getInstalledLanguages();
 		showMarketplace();
-	}
-};
-
-function getDiscussion(config) {
-	// get discussion page
-	if (isLocal && window.AscSimpleRequest && window.AscSimpleRequest.createRequest) {
-		makeDesktopRequest(config.discussionUrl).then(
-			function(data) {
-				if (data.status == 'success') {
-					config.rating = parseRatingPage(data.response.responseText);
-				}
-				discussionCount--;
-				if (!discussionCount)
-					showRating();
-			},
-			function(err) {
-				createError(err.response, false);
-				discussionCount--;
-				if (!discussionCount)
-					showRating();
-			}
-		);
-	} else {
-		let body = { target: config.discussionUrl };
-		makeRequest(proxyUrl, 'POST', null, body, false).then(function(data) {
-			data = JSON.parse(data);
-			config.rating = parseRatingPage(data);
-			discussionCount--;
-			if (!discussionCount)
-				showRating();
-		}, function(err) {
-			createError( new Error('Problem with loading rating'), true);
-			discussionCount--;
-			if (!discussionCount)
-				showRating();
-		});
 	}
 };
 
@@ -844,10 +769,6 @@ function createPluginDiv(plugin, bInstalled) {
 					'</div>' +
 					'<div class="div_footer">' +
 						'<div class="advanced_info">' +
-							(plugin.rating
-								? '<div class="flex div_rating_card"> <div class="div_rating"> <div class="stars_grey"></div> <div class="stars_orange" style="width:' + plugin.rating.percent + ';"></div> </div> <span style="margin-left: 5px;">' + plugin.rating.total + '</span> </div>'
-								: '<div class="flex div_rating_card"> <div class="div_rating"> <div class="stars_grey"></div> <div class="stars_orange" style="width:0;"></div> </div> <span style="margin-left: 5px;"></span> </div>'
-							) +
 							(bHasUpdate
 								? '<span class="span_update ' + (!bRemoved ? "" : "hidden") + '">' + getTranslated("Update") + '</span>'
 								: '<div></div>'
@@ -862,34 +783,6 @@ function createPluginDiv(plugin, bInstalled) {
 	div.innerHTML = template;
 	elements.divMain.appendChild(div);
 	if (PsMain) PsMain.update();
-};
-
-function showRating() {
-	// console.log('showRating: ' + (Date.now() - start));
-	allPlugins.forEach(function(plugin) {
-		let div = document.getElementById(plugin.guid);
-		if (plugin.rating && div) {
-			div = div.lastElementChild.firstElementChild.firstElementChild;
-			div.firstElementChild.lastElementChild.style.width = plugin.rating.percent;
-			div.lastElementChild.innerText = plugin.rating.total;
-			div.classList.remove('hidden');
-		}
-	});
-
-	if (elements.divSelected && !elements.divSelected.classList.contains('hidden')) {
-		let guid = elements.divSelected.getAttribute('data-guid');
-		let plugin = findPlugin(true, guid);
-		if (plugin) {
-			elements.totalVotes.innerText = plugin.rating.total;
-			document.getElementById('stars_colored').style.width = plugin.rating.percent;
-			// elements.divRatingLink.classList.remove('hidden');
-			elements.divRatingLink.removeAttribute('title');
-			elements.divVotes.classList.remove('hidden');
-			elements.discussionLink.classList.remove('hidden');
-		} else {
-			elements.divRatingLink.setAttribute('title', getTranslated('No disscussion page for this plugin.'));
-		}
-	}
 };
 
 function onClickInstall(target, event) {
@@ -1013,21 +906,6 @@ function onClickItem() {
 
 	let installed = findPlugin(false, guid);
 	let plugin = findPlugin(true, guid);
-	let discussionUrl = plugin ? plugin.discussionUrl : null;
-	
-	if (plugin && plugin.rating) {
-		elements.divRatingLink.removeAttribute('title');
-		elements.totalVotes.innerText = plugin.rating.total;
-		document.getElementById('stars_colored').style.width = plugin.rating.percent;
-		elements.discussionLink.classList.remove('hidden');
-		elements.divVotes.classList.remove('hidden');
-	} else {
-		document.getElementById('stars_colored').style.width = 0;
-		elements.divVotes.classList.add('hidden');
-		elements.discussionLink.classList.add('hidden');
-		if (!discussionCount)
-			elements.divRatingLink.setAttribute('title', getTranslated('No disscussion page for this plugin.'));
-	}
 
 	if ( !plugin || ( isLocal && installed && plugin.baseUrl.includes('file:') ) ) {
 		elements.divGitLink.classList.add('hidden');
@@ -1107,7 +985,7 @@ function onClickItem() {
 		document.getElementById('div_changelog_preview').innerHTML = '';
 	}
 
-	let pluginUrl = plugin.baseUrl.replace(OOMarketplaceUrl, (OOIO + 'tree/master/') );
+	let pluginUrl = plugin.baseUrl.replace(OOMarketplaceUrl, (OOIO + 'tree/main/') );
 	
 	// TODO problem with plugins icons (different margin from top)
 	elements.divSelected.setAttribute('data-guid', guid);
@@ -1127,11 +1005,6 @@ function onClickItem() {
 		elements.linkReadme.setAttribute('href', '');
 		elements.divReadme.classList.add('hidden');
 	}
-	
-	if (discussionUrl)
-		elements.discussionLink.setAttribute('href', discussionUrl);
-	else
-		elements.discussionLink.removeAttribute('href');
 
 	if (bHasUpdate) {
 		elements.btnUpdate.classList.remove('hidden');
@@ -1419,7 +1292,6 @@ function onTranslate() {
 	document.getElementById('opt_enter').innerHTML = getTranslated('Entertainment');
 	document.getElementById('opt_com').innerHTML = getTranslated('Communication');
 	document.getElementById('opt_spec').innerHTML = getTranslated('Special abilities');
-	document.getElementById('discussion_link').innerHTML = getTranslated('Click to rate');
 	showMarketplace();
 };
 
@@ -1607,7 +1479,7 @@ function toogleView(current, oldEl, text, bAll, bForce) {
 				filterByCategory(document.getElementById('select_categories').value);
 			}
 		}
-		elements.linkNewPlugin.href = bAll ? (OOIO + "pulls") : "https://api.onlyoffice.com/docs/plugin-and-macros/tutorials/installing/onlyoffice-docs-on-premises/";
+		elements.linkNewPlugin.href = bAll ? (OOIO + "pulls") : "https://euro-office.github.io/documentation/configuration/plugins/";
 
 		if (isLocal && !bAll) {
 			elements.linkNewPlugin.href = "#";
@@ -1777,7 +1649,7 @@ function changeAfterInstallOrRemove(bInstall, guid, bHasLocal) {
 
 function checkInternet() {
 	// url for check internet connection
-	let url = 'https://onlyoffice.github.io/store/translations/langs.json';
+	let url = OOMarketplaceUrl + 'store/translations/langs.json';
 	makeRequest(url, 'GET', null, null, true).then(
 		function() {
 			isOnline = true;
@@ -1826,39 +1698,6 @@ function handeNoInternet() {
 
 function getTranslated(text) {
 	return translate[text] || text;
-};
-
-function parseRatingPage(data) {
-	// if we load this page, parse it
-	let result = null;
-	if (data !== 'Not Found') {
-		try {
-			let parser = new DOMParser();
-			let doc = parser.parseFromString(data, "text/html");
-			// we will have a problem if github change their page
-			let first = Number(doc.getElementById('result-row-1').childNodes[1].childNodes[3].innerText.replace(/[\n\s%]/g,''));
-			let second = Number(doc.getElementById('result-row-2').childNodes[1].childNodes[3].innerText.replace(/[\n\s%]/g,''));
-			let third = Number(doc.getElementById('result-row-3').childNodes[1].childNodes[3].innerText.replace(/[\n\s%]/g,''));
-			let fourth = Number(doc.getElementById('result-row-4').childNodes[1].childNodes[3].innerText.replace(/[\n\s%]/g,''));
-			let fifth = Number(doc.getElementById('result-row-5').childNodes[1].childNodes[3].innerText.replace(/[\n\s%]/g,''));
-			let total = Number(doc.getElementsByClassName('text-small color-fg-subtle')[0].childNodes[1].firstChild.textContent.replace(/[\n\sa-z]/g,''));
-			first = Math.ceil(total * first / 100) * 5;   // it's 5 stars
-			second = Math.ceil(total * second / 100) * 4; // it's 4 stars
-			third = Math.ceil(total * third / 100) * 3;   // it's 3 stars
-			fourth = Math.ceil(total * fourth / 100) * 2; // it's 2 stars
-			fifth = Math.ceil(total * fifth / 100);       // it's 1 star
-			let average = total === 0 ? 0 : (first + second + third + fourth + fifth) / total;
-			let percent = average / 5 * 100 + '%';
-			result = {
-				total: total,
-				average: average.toFixed(1),
-				percent: percent
-			};
-		} catch (error) {
-			// nothing to do
-		}
-	}
-	return result;
 };
 
 function parseChangelog(data) {
