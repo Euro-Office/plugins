@@ -442,7 +442,12 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 		},
 
 		onUpdateState() {
-			storage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+			try {
+				storage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+			} catch (e) {
+				// Storage full or blocked: the plugin still waits for the reply.
+				console.warn("AI chat: could not save the chat state", e);
+			}
 			send("onUpdateState");
 		},
 

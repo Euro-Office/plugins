@@ -3,6 +3,7 @@
 // The chat sidebar UI. State and the plugin protocol live in chat.ts.
 
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "preact/hooks";
+import { memo } from "preact/compat";
 import type { JSX } from "preact";
 import type { AIEdits, Approval, Chat, Item, Preview } from "./chat";
 import { renderMarkdown, stripLocationLinksHtml, stripLocationLinksMarkdown } from "./markdown";
@@ -136,8 +137,19 @@ function MessageList({ chat }: { chat: Chat }) {
 		if (window.EOLinks.isLocationHref(href))
 			actions.navigate(href);
 		else if (/^(https?:|mailto:)/i.test(href))
-			window.open((link as HTMLAnchorElement).href, "_blank");
+			window.open((link as HTMLAnchorElement).href, "_blank", "noopener");
 	}
+
+	// Messages are memoized: while streaming, only the streaming message
+	// re-renders, so the cost per chunk doesn't grow with the history length.
+	let approvalsByItem = useMemo(() => {
+		let map = new Map<number, Approval[]>();
+		for (let a of Object.values(state.approvals)) {
+			let list = map.get(a.itemId);
+			list ? list.push(a) : map.set(a.itemId, [a]);
+		}
+		return map;
+	}, [state.approvals]);
 
 	let lastAssistant = -1;
 	state.items.forEach((item, i) => { if (item.role === "assistant" && !item.isToolCall) lastAssistant = i; });
@@ -146,10 +158,11 @@ function MessageList({ chat }: { chat: Chat }) {
 		<div class={"chat" + (state.items.length ? "" : " empty")} ref={ref} onScroll={onScroll} onClick={onClick} role="log" aria-live="polite" aria-label={tr("Chat")}>
 			{state.items.length === 0 && !state.typing && <Welcome chat={chat} />}
 			{state.items.map((item, i) => item.isToolCall
-				? <ToolCallCard key={item.id} chat={chat} item={item} approvals={Object.values(state.approvals).filter((a) => a.itemId === item.id)} />
+				? <ToolCallCard key={item.id} chat={chat} item={item} approvals={approvalsByItem.get(item.id) || NO_APPROVALS} trVersion={state.trVersion} />
 				: item.role === "user"
 					? <UserMessage key={item.id} item={item} />
-					: <AssistantMessage key={item.id} chat={chat} item={item} streaming={i === state.streamingIndex} isLast={i === lastAssistant} />)}
+					: <AssistantMessage key={item.id} chat={chat} item={item} streaming={i === state.streamingIndex} isLast={i === lastAssistant}
+						theme={state.themeType} running={state.running} trVersion={state.trVersion} />)}
 			{state.typing && (
 				<div class="message typing">
 					<div class="span_message">{tr("Thinking")}<span class="dots" aria-hidden="true">...</span></div>
@@ -180,7 +193,9 @@ function Welcome({ chat }: { chat: Chat }) {
 	);
 }
 
-function UserMessage({ item }: { item: Item }) {
+const NO_APPROVALS: Approval[] = [];
+
+const UserMessage = memo(function UserMessage({ item }: { item: Item }) {
 	return (
 		<div class="message user_message">
 			<div class="message_content">
@@ -188,7 +203,7 @@ function UserMessage({ item }: { item: Item }) {
 			</div>
 		</div>
 	);
-}
+});
 
 function activeContent(item: Item): string {
 	let content = item.content;
@@ -197,11 +212,13 @@ function activeContent(item: Item): string {
 	return content || "";
 }
 
-function AssistantMessage({ chat, item, streaming, isLast }: { chat: Chat; item: Item; streaming: boolean; isLast: boolean }) {
-	let { tr, state, actions } = chat;
+interface AssistantMessageProps { chat: Chat; item: Item; streaming: boolean; isLast: boolean; theme: string; running: boolean; trVersion: number }
+
+// Reads only its props (plus the stable chat actions), so memo() is safe.
+const AssistantMessage = memo(function AssistantMessage({ chat, item, streaming, isLast, theme, running, trVersion }: AssistantMessageProps) {
+	let { tr, actions } = chat;
 	let text = activeContent(item);
-	let rendered = useMemo(() => renderMarkdown(text, tr, streaming), [text, streaming, state.trVersion]);
-	let theme = state.themeType;
+	let rendered = useMemo(() => renderMarkdown(text, tr, streaming), [text, streaming, trVersion]);
 
 	let buttons: [string, string, () => void][] = [
 		["btn-update", "Update", actions.regenerate],
@@ -232,17 +249,18 @@ function AssistantMessage({ chat, item, streaming, isLast }: { chat: Chat; item:
 				<div class="action_buttons_list">
 					{buttons.map(([icon, label, onClick]) => (
 						<IconButton key={icon} class="action_button" icon={icon} label={tr(label)} theme={theme} onClick={onClick}
-							disabled={state.running && (icon === "btn-update" || icon === "btn-remove")} />
+							disabled={running && (icon === "btn-update" || icon === "btn-remove")} />
 					))}
 				</div>
 			)}
 		</div>
 	);
-}
+});
 
 // ── Tool calls and approvals ─────────────────────────────────────────────
 
-function ToolCallCard({ chat, item, approvals }: { chat: Chat; item: Item; approvals: Approval[] }) {
+// trVersion is only a prop so translations arriving later re-render the card.
+const ToolCallCard = memo(function ToolCallCard({ chat, item, approvals }: { chat: Chat; item: Item; approvals: Approval[]; trVersion: number }) {
 	let [expanded, setExpanded] = useState(false);
 	let funcName = item.functionName || "Unknown";
 	let displayName = item.humanName || funcName;
@@ -274,7 +292,7 @@ function ToolCallCard({ chat, item, approvals }: { chat: Chat; item: Item; appro
 			</div>
 		</div>
 	);
-}
+});
 
 function macroCode(args: string) {
 	try {

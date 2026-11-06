@@ -39,6 +39,8 @@ export interface VoiceEngine {
 interface MarkdownIt {
 	render(src: string): string;
 	validateLink(url: string): boolean;
+	renderer: { rules: Record<string, (tokens: { content: string }[], idx: number) => string> };
+	utils: { escapeHtml(text: string): string };
 }
 
 declare global {

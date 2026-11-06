@@ -13,6 +13,9 @@ function getMarkdown() {
 	if (!md) {
 		md = window.markdownit();
 		md.validateLink = (url: string) => ALLOWED_LINK.test(url.trim());
+		// Images would load without a click, so model output (or a prompt injected
+		// through document content) could send data to any host. Show the alt text.
+		md.renderer.rules.image = (tokens, idx) => md!.utils.escapeHtml(tokens[idx].content || "");
 	}
 	return md;
 }
