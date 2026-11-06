@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "checkSpelling",
+		"category": "comments-review",
 		"text": "Check and Fix Spelling",
 		"description": "Checks spelling and fixes text errors in the current paragraph.",
 		"parameters": {
@@ -81,12 +82,12 @@
 
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
-		await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+		await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 
 		let isSendedEndLongAction = false;
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
-				await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+				await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 				isSendedEndLongAction = true
 			}
 		}
@@ -120,7 +121,20 @@
 
 		Asc.scope.modelName = requestEngine.modelUI.name;
 		await Asc.Editor.callCommand(function(){
-			return Api.GetDocument().SetAssistantTrackRevisions(true, Asc.scope.modelName);
+			// Same guard as scripts/engine/aiEdits.js enableTracking: the
+			// 3-argument sdkjs setUserColorById caches a colour without
+			// "Normal" and web-apps then crashes reading it.
+			let colors = typeof AscCommon !== "undefined" ? AscCommon : null;
+			let setColor = colors && colors.setUserColorById;
+			let broken = typeof setColor === "function" && setColor.length >= 3;
+			if (broken)
+				colors.setUserColorById = function() {};
+			try {
+				return Api.GetDocument().SetAssistantTrackRevisions(true, Asc.scope.modelName);
+			} finally {
+				if (broken)
+					colors.setUserColorById = setColor;
+			}
 		});
 
 		Asc.scope.text = resultText;

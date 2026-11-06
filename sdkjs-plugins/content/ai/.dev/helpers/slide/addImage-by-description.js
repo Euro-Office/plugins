@@ -33,6 +33,7 @@
 (function(){
 	let func = new RegisteredFunction({
 		"name": "addImageByDescription",
+		"category": "charts-visuals",
 		"text": "Insert Image from Description",
 		"description": "Adds an image on the slide in the presentation",
 		"parameters": {
@@ -116,13 +117,13 @@
 		async function checkEndAction() {
 			if (!isSendedEndLongAction) {
 				let actionName = "AI (" + requestEngine.modelUI.name + ")";
-				await Asc.Editor.callMethod("EndAction", ["Block", actionName]);
+				await Asc.Editor.callMethod("EndAction", ["Information", actionName]);
 				isSendedEndLongAction = true;
 			}
 		}
 
 		let actionName = "AI (" + requestEngine.modelUI.name + ")";
-		await Asc.Editor.callMethod("StartAction", ["Block", actionName]);
+		await Asc.Editor.callMethod("StartAction", ["Information", actionName]);
 		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 		try {
@@ -133,6 +134,8 @@
 
 			if (imageUrl) {
 				Asc.scope.imageUrl = imageUrl;
+				// Provenance: alt text (XMP is embedded by imageGenerationRequest).
+				Asc.scope.aiAlt = window.AIProvenance ? window.AIProvenance.altText(window.AIProvenance.meta("addImage", requestEngine)) : null;
 				let callResult = await Asc.Editor.callCommand(function () {
 					let oPresentation = Api.GetPresentation();
 					let oSlide;
@@ -152,6 +155,8 @@
 					let y = (slideHeight - Asc.scope.height) / 2;
 
 					let oImage = Api.CreateImage(Asc.scope.imageUrl, Asc.scope.width, Asc.scope.height);
+					if (Asc.scope.aiAlt && typeof oImage.SetDescription === "function")
+						oImage.SetDescription(Asc.scope.aiAlt);
 					oImage.SetPosition(x, y);
 					oSlide.AddObject(oImage);
 				});
