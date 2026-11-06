@@ -1,6 +1,6 @@
 {
-	"name": "ONLYOFFICE plugin for development",
-	"description": "ONLYOFFICE plugin for development",
+	"name": "Plugin for development",
+	"description": "Plugin for development",
 	"version": "1.0",
 	"manifest_version": 3,
 	"web_accessible_resources": [{
