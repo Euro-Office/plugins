@@ -1019,6 +1019,100 @@ For radio buttons, always use the same \`groupKey\` for all options of the same 
 })());
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
+		"name": "getComments",
+		"category": "comments-review",
+		"readOnly": true,
+		"description": "Lists the comments of the text document in document order. For each comment returns its id (pass it to replyToComment/resolveComment), author, creation time (ISO 8601, UTC), comment text, the quoted document text it is anchored to, whether it is resolved, and its replies (author, text). Use it to summarise review feedback or to decide which comments to answer or resolve.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"includeResolved": {
+					"type": "boolean",
+					"description": "Also return comments that are already marked as resolved.",
+					"default": true
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of comments to return (1-200).",
+					"default": 100
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Summarize the open review comments",
+				"arguments": { "includeResolved": false }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let max = params.maxResults === undefined || params.maxResults === null ? 100 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.commentParams = {
+			includeResolved: params.includeResolved !== false,
+			max: Math.min(200, Math.floor(max))
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.commentParams;
+			let all = Api.GetDocument().GetAllComments() || [];
+			let comments = [];
+			let open = 0;
+			for (let i = 0; i < all.length; i++) {
+				let c = all[i];
+				let solved = !!c.IsSolved();
+				if (!solved)
+					open++;
+				if (solved && !p.includeResolved)
+					continue;
+				if (comments.length >= p.max)
+					continue;
+				let item = {
+					id: c.GetId(),
+					author: c.GetAuthorName(),
+					text: c.GetText(),
+					quotedText: c.GetQuoteText() || "",
+					resolved: solved,
+					replies: []
+				};
+				try {
+					let t = c.GetTimeUTC();
+					if (t)
+						item.time = new Date(Number(t)).toISOString();
+				} catch (e) {}
+				let n = c.GetRepliesCount() || 0;
+				for (let r = 0; r < n; r++) {
+					let reply = c.GetReply(r);
+					if (reply)
+						item.replies.push({ author: reply.GetAuthorName(), text: reply.GetText() });
+				}
+				comments.push(item);
+			}
+			return {
+				totalComments: all.length,
+				openComments: open,
+				returned: comments.length,
+				comments: comments
+			};
+		});
+	};
+
+	func.describe = function(args, result) {
+		return {
+			start: toolText("Read the comments"),
+			done: result && toolText("Read the comments (%1)", result.totalComments),
+			phrase: toolText("read the comments")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
 		"name": "getSelection",
 		"category": "core",
 		"readOnly": true,
@@ -1113,6 +1207,93 @@ HELPERS.word.push((function(){
 			start: toolText("Read the selected text"),
 			done: result && !result.hasSelection ? toolText("Checked the selection (nothing selected)") : toolText("Read the selected text"),
 			phrase: toolText("read the selection")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "getTrackedChanges",
+		"category": "comments-review",
+		"readOnly": true,
+		"description": "Lists the tracked changes (review mode revisions) in the text document, grouped as a flat list. Each change has its author, type (TextAdd = inserted text, TextRem = deleted text, ParaAdd/ParaRem = added/removed paragraph mark, TextPr/ParaPr = formatting change, RowsAdd/RowsRem/TablePr = table changes), the inserted/deleted text when available, the date (ISO 8601) and the text of the affected paragraph. Also reports whether track changes is currently switched on. Use reviewTrackedChanges to accept or reject them.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of changes to return (1-500).",
+					"default": 200
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What did the reviewers change?",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let max = params.maxResults === undefined || params.maxResults === null ? 200 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+		Asc.scope.revParams = { max: Math.min(500, Math.floor(max)) };
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.revParams;
+			let doc = Api.GetDocument();
+			let report = doc.GetReviewReport() || {};
+			let changes = [];
+			let total = 0;
+			let authors = {};
+			for (let author in report) {
+				if (author === "ToJSON" || typeof report[author] === "function")
+					continue;
+				let list = report[author];
+				if (list && !Array.isArray(list))
+					list = list.reviews || [];
+				if (!Array.isArray(list))
+					continue;
+				authors[author] = list.length;
+				for (let i = 0; i < list.length; i++) {
+					total++;
+					if (changes.length >= p.max)
+						continue;
+					let ch = list[i] || {};
+					let item = { author: author, type: ch.Type || "Unknown" };
+					if (ch.Value !== undefined && ch.Value !== null && ch.Value !== "")
+						item.value = typeof ch.Value === "string" ? ch.Value : String(ch.Value);
+					if (ch.Date)
+						item.date = new Date(Number(ch.Date)).toISOString();
+					try {
+						let el = ch.ReviewedElement;
+						if (el && el.GetText) {
+							let t = (el.GetText() || "").replace(/\r/g, "");
+							item.paragraph = t.length > 200 ? t.substring(0, 200) + "…" : t;
+						}
+					} catch (e) {}
+					changes.push(item);
+				}
+			}
+			return {
+				trackChangesOn: doc.IsTrackRevisions ? !!doc.IsTrackRevisions() : null,
+				totalChanges: total,
+				byAuthor: authors,
+				returned: changes.length,
+				changes: changes
+			};
+		});
+	};
+
+	func.describe = function(args, result) {
+		return {
+			start: toolText("Read the tracked changes"),
+			done: result && toolText("Read the tracked changes (%1)", result.totalChanges),
+			phrase: toolText("read the tracked changes")
 		};
 	};
 
@@ -1563,6 +1744,204 @@ HELPERS.word.push((function(){
 
 	func.describe = function() {
 		return { start: toolText("Replace the selected text"), done: toolText("Replaced the selected text"), phrase: toolText("replaced the selected text") };
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "replyToComment",
+		"category": "comments-review",
+		"description": "Adds a reply to an existing comment in the text document. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"commentId": {
+					"type": "string",
+					"description": "Id of the comment to reply to, as returned by getComments."
+				},
+				"text": {
+					"type": "string",
+					"description": "Reply text."
+				}
+			},
+			"required": ["commentId", "text"]
+		},
+		"examples": [
+			{
+				"prompt": "Answer the comment about the budget that it was updated",
+				"arguments": { "commentId": "3", "text": "Done - the budget table now uses the Q3 figures." }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if ((typeof params.commentId !== 'string' && typeof params.commentId !== 'number') || String(params.commentId) === "")
+			throw new window.AgentState.ToolError('Parameter "commentId" is required. Call getComments to get comment ids.');
+		if (typeof params.text !== 'string' || params.text.trim() === "")
+			throw new window.AgentState.ToolError('Parameter "text" must be a non-empty string.');
+
+		Asc.scope.replyParams = { author: window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.scopeMeta("replyToComment")) : "AI", id: String(params.commentId), text: params.text };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.replyParams;
+			let comment = Api.GetDocument().GetCommentById(p.id);
+			if (!comment)
+				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
+			comment.AddReply(p.text, p.author, "uid-ai");
+			return { commentId: p.id, replies: comment.GetRepliesCount() };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function() {
+		return { start: toolText("Reply to a comment"), done: toolText("Replied to a comment"), phrase: toolText("replied to a comment") };
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "resolveComment",
+		"category": "comments-review",
+		"description": "Marks a comment in the text document as resolved, or reopens it with resolved=false. Get comment ids from getComments.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"commentId": {
+					"type": "string",
+					"description": "Id of the comment, as returned by getComments."
+				},
+				"resolved": {
+					"type": "boolean",
+					"description": "true to resolve the comment, false to reopen it.",
+					"default": true
+				}
+			},
+			"required": ["commentId"]
+		},
+		"examples": [
+			{
+				"prompt": "Resolve comment 5",
+				"arguments": { "commentId": "5", "resolved": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if ((typeof params.commentId !== 'string' && typeof params.commentId !== 'number') || String(params.commentId) === "")
+			throw new window.AgentState.ToolError('Parameter "commentId" is required. Call getComments to get comment ids.');
+		if (params.resolved !== undefined && params.resolved !== null && typeof params.resolved !== 'boolean')
+			throw new window.AgentState.ToolError('Parameter "resolved" must be a boolean.');
+
+		Asc.scope.resolveParams = { id: String(params.commentId), resolved: params.resolved !== false };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.resolveParams;
+			let comment = Api.GetDocument().GetCommentById(p.id);
+			if (!comment)
+				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
+			comment.SetSolved(p.resolved);
+			return { commentId: p.id, resolved: !!comment.IsSolved() };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args) {
+		let reopen = args.resolved === false;
+		return {
+			start: reopen ? toolText("Reopen a comment") : toolText("Resolve a comment"),
+			done: reopen ? toolText("Reopened a comment") : toolText("Resolved a comment"),
+			phrase: reopen ? toolText("reopened a comment") : toolText("resolved a comment")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "reviewTrackedChanges",
+		"category": "comments-review",
+		"description": "Accepts or rejects tracked changes in the text document. scope 'all' affects every tracked change in the document; scope 'selection' affects only the changes inside the user's current selection (use selectText first to select a passage). Returns the number of tracked changes before and after. Inspect the changes with getTrackedChanges first.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["accept", "reject"],
+					"description": "Whether to accept or reject the changes."
+				},
+				"scope": {
+					"type": "string",
+					"enum": ["all", "selection"],
+					"description": "Which changes to process.",
+					"default": "selection"
+				}
+			},
+			"required": ["action"]
+		},
+		"examples": [
+			{
+				"prompt": "Accept all tracked changes",
+				"arguments": { "action": "accept", "scope": "all" }
+			},
+			{
+				"prompt": "Reject the changes in the selected text",
+				"arguments": { "action": "reject", "scope": "selection" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.action !== "accept" && params.action !== "reject")
+			throw new window.AgentState.ToolError('Parameter "action" must be "accept" or "reject". Got: ' + JSON.stringify(params.action));
+		let scope = params.scope === undefined || params.scope === null ? "selection" : params.scope;
+		if (scope !== "all" && scope !== "selection")
+			throw new window.AgentState.ToolError('Parameter "scope" must be "all" or "selection". Got: ' + JSON.stringify(params.scope));
+
+		async function countChanges() {
+			return await Asc.Editor.callCommand(function(){
+				let report = Api.GetDocument().GetReviewReport() || {};
+				let n = 0;
+				for (let author in report) {
+					let list = report[author];
+					if (list && !Array.isArray(list) && typeof list === "object")
+						list = list.reviews;
+					if (Array.isArray(list))
+						n += list.length;
+				}
+				return n;
+			});
+		}
+
+		let before = await countChanges();
+		if (!before)
+			return { action: params.action, scope: scope, changesBefore: 0, changesAfter: 0, note: "The document has no tracked changes." };
+
+		// Plugin methods AcceptReviewChanges/RejectReviewChanges (isAll), available since 7.2.1
+		await Asc.Editor.callMethod(params.action === "accept" ? "AcceptReviewChanges" : "RejectReviewChanges", [scope === "all"]);
+
+		let after = await countChanges();
+		let res = { action: params.action, scope: scope, changesBefore: before, changesAfter: after };
+		if (after === before)
+			res.note = scope === "selection" ? "No tracked changes were inside the current selection. Select the passage first (selectText) or use scope 'all'." : "No changes were processed.";
+		return res;
+	};
+
+	func.describe = function(args, result) {
+		let reject = args.action === "reject";
+		let changed = result ? Math.max(0, (result.changesBefore || 0) - (result.changesAfter || 0)) : 0;
+		return {
+			start: reject ? toolText("Reject tracked changes") : toolText("Accept tracked changes"),
+			done: result && (reject ? toolText("Rejected %1 tracked changes", changed) : toolText("Accepted %1 tracked changes", changed)),
+			phrase: toolText("reviewed tracked changes")
+		};
 	};
 
 	return func;
@@ -7702,6 +8081,140 @@ HELPERS.cell.push((function(){
 })());
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
+		"name": "getComments",
+		"category": "comments-review",
+		"readOnly": true,
+		"description": "Lists the comments in the workbook. For each comment returns its id (pass it to replyToComment), the sheet and cell address it belongs to (address is omitted when it cannot be determined, e.g. for comments on cells outside the used range), the cell value, author, comment text, whether it is resolved, and its replies.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Only return comments of this sheet. Defaults to all sheets."
+				},
+				"includeResolved": {
+					"type": "boolean",
+					"description": "Also return resolved comments.",
+					"default": true
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of comments to return (1-200).",
+					"default": 100
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What do the comments in this workbook say?",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let max = params.maxResults === undefined || params.maxResults === null ? 100 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.commentParams = {
+			sheet: params.sheet || null,
+			includeResolved: params.includeResolved !== false,
+			max: Math.min(200, Math.floor(max)),
+			maxScanCells: 20000
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.commentParams;
+			let sheets;
+			if (p.sheet) {
+				let ws = Api.GetSheet(p.sheet);
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				sheets = [ws];
+			} else {
+				sheets = Api.GetSheets();
+			}
+
+			function describe(c, sheetName, address) {
+				let item = {
+					id: c.GetId(),
+					sheet: sheetName,
+					author: c.GetAuthorName(),
+					text: c.GetText(),
+					resolved: !!c.IsSolved(),
+					replies: []
+				};
+				if (address)
+					item.address = address;
+				let q = c.GetQuoteText();
+				if (q !== null && q !== undefined && q !== "")
+					item.cellValue = q;
+				let n = c.GetRepliesCount() || 0;
+				for (let r = 0; r < n; r++) {
+					let reply = c.GetReply(r);
+					if (reply)
+						item.replies.push({ author: reply.GetAuthorName(), text: reply.GetText() });
+				}
+				return item;
+			}
+
+			let comments = [];
+			let total = 0;
+			for (let s = 0; s < sheets.length; s++) {
+				let ws = sheets[s];
+				let list = ws.GetComments() || [];
+				if (!list.length)
+					continue;
+				// Map comment ids to cell addresses by scanning the used range (bounded).
+				let addresses = {};
+				let used = ws.GetUsedRange();
+				if (used) {
+					let rows = used.GetRowsCount(), cols = used.GetColumnsCount();
+					if (rows * cols <= p.maxScanCells) {
+						let r0 = used.GetRow() - 1, c0 = used.GetCol() - 1;
+						for (let r = 0; r < rows; r++) {
+							for (let c = 0; c < cols; c++) {
+								let cell = ws.GetRangeByNumber(r0 + r, c0 + c);
+								let cm = cell.GetComment();
+								if (cm)
+									addresses[cm.GetId()] = cell.GetAddress(false, false);
+							}
+						}
+					}
+				}
+				for (let i = 0; i < list.length; i++) {
+					let c = list[i];
+					total++;
+					if (!p.includeResolved && c.IsSolved())
+						continue;
+					if (comments.length < p.max)
+						comments.push(describe(c, ws.GetName(), addresses[c.GetId()]));
+				}
+			}
+			return { totalComments: total, returned: comments.length, comments: comments };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args, result) {
+		return {
+			start: toolText("Read the comments"),
+			done: result && toolText("Read the comments (%1)", result.totalComments),
+			phrase: toolText("read the comments")
+		};
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
 		"name": "getWorkbookInfo",
 		"category": "core",
 		"readOnly": true,
@@ -8805,6 +9318,80 @@ HELPERS.cell.push((function(){
 			done: read ? toolText("Read cells %1", read) : "",
 			phrase: toolText("read cells")
 		};
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "replyToComment",
+		"category": "comments-review",
+		"description": "Adds a reply to an existing cell comment in the workbook, or marks it as resolved. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"commentId": {
+					"type": "string",
+					"description": "Id of the comment, as returned by getComments."
+				},
+				"text": {
+					"type": "string",
+					"description": "Reply text. May be omitted when only changing 'resolved'."
+				},
+				"resolved": {
+					"type": "boolean",
+					"description": "Optionally mark the comment as resolved (true) or reopen it (false)."
+				}
+			},
+			"required": ["commentId"]
+		},
+		"examples": [
+			{
+				"prompt": "Reply to the comment on B4 that the value was checked, and resolve it",
+				"arguments": { "commentId": "1", "text": "Checked against the invoice - value is correct.", "resolved": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if ((typeof params.commentId !== 'string' && typeof params.commentId !== 'number') || String(params.commentId) === "")
+			throw new window.AgentState.ToolError('Parameter "commentId" is required. Call getComments to get comment ids.');
+		let hasText = typeof params.text === 'string' && params.text.trim() !== "";
+		if (params.text !== undefined && params.text !== null && typeof params.text !== 'string')
+			throw new window.AgentState.ToolError('Parameter "text" must be a string.');
+		if (params.resolved !== undefined && params.resolved !== null && typeof params.resolved !== 'boolean')
+			throw new window.AgentState.ToolError('Parameter "resolved" must be a boolean.');
+		if (!hasText && typeof params.resolved !== 'boolean')
+			throw new window.AgentState.ToolError('Provide a non-empty "text" for the reply and/or "resolved".');
+
+		Asc.scope.replyParams = {
+			author: window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.scopeMeta("replyToComment")) : "AI",
+			id: String(params.commentId),
+			text: hasText ? params.text : null,
+			resolved: typeof params.resolved === 'boolean' ? params.resolved : null
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.replyParams;
+			let comment = Api.GetCommentById(p.id);
+			if (!comment)
+				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
+			if (p.text !== null)
+				comment.AddReply(p.text, p.author, "uid-ai");
+			if (p.resolved !== null)
+				comment.SetSolved(p.resolved);
+			// Re-read: ApiComment wraps a copy of the comment data.
+			let fresh = Api.GetCommentById(p.id) || comment;
+			return { commentId: p.id, replies: fresh.GetRepliesCount(), resolved: !!fresh.IsSolved() };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function() {
+		return { start: toolText("Reply to a comment"), done: toolText("Replied to a comment"), phrase: toolText("replied to a comment") };
 	};
 
 	return func;
@@ -10115,12 +10702,17 @@ HELPERS.names.word = {
 	"findText": "Find Text",
 	"generateDocx": "Generate Document",
 	"generateForm": "Generate Form Template",
+	"getComments": "Read Comments",
 	"getSelection": "Read Selection",
+	"getTrackedChanges": "Read Tracked Changes",
 	"insertPage": "Insert Blank Page",
 	"changeParagraphStyle": "Change Paragraph Style",
 	"readDocument": "Read Document",
 	"readOutline": "Read Outline",
 	"replaceSelection": "Replace Selection",
+	"replyToComment": "Reply to Comment",
+	"resolveComment": "Resolve Comment",
+	"reviewTrackedChanges": "Accept or Reject Changes",
 	"rewriteText": "Rewrite Text",
 	"selectText": "Select Text",
 	"changeTextStyle": "Format Text",
@@ -10161,11 +10753,13 @@ HELPERS.names.cell = {
 	"findInSheet": "Find in Sheet",
 	"fixFormula": "Fix Formula Errors",
 	"formatTable": "Format as Table",
+	"getComments": "Read Comments",
 	"getWorkbookInfo": "Inspect Workbook",
 	"highlightAnomalies": "Highlight Data Anomalies",
 	"highlightDuplicates": "Highlight Duplicate Values",
 	"insertPivotTable": "Create Pivot Table",
 	"readRange": "Read Cells",
+	"replyToComment": "Reply to Comment",
 	"selectRange": "Select Cells",
 	"setAutoFilter": "Apply Data Filter",
 	"setMultiSort": "Sort by Multiple Columns",
