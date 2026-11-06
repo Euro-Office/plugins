@@ -32,10 +32,20 @@ describe("describe() templates", () => {
 		expect(word.describeToolCall("readDocument", { startIndex: 51 }, { result: { totalElements: 300, returned: 50, hasMore: true } }).resultSummary).toBe("Read paragraphs 51 to 100 of 300");
 	});
 
-	test("edits: editParagraph, replaceSelection, writeRange, writeMacro", () => {
+	test("findText: matches counted, long queries truncated to 60 characters", () => {
+		const outcome = (n) => ({ result: { totalMatches: n } });
+		expect(word.describeToolCall("findText", { query: "budget" }, outcome(3)).resultSummary).toBe("Searched for “budget” (3 matches)");
+		expect(word.describeToolCall("findText", { query: "budget" }, outcome(1)).resultSummary).toBe("Searched for “budget” (1 match)");
+		expect(word.describeToolCall("findText", { query: "budget" }, outcome(0)).resultSummary).toBe("Searched for “budget” (no matches)");
+		const long = word.describeToolCall("findText", { query: "x".repeat(100) + "\n\nsecret" }).summary;
+		expect(long).toBe("Search for “" + "x".repeat(59) + "…”");
+	});
+
+	test("edits: editParagraph, replaceSelection, insertMarkdown, writeRange, writeMacro", () => {
 		expect(word.describeToolCall("editParagraph", { index: 3, action: "insertAfter", text: "Intro", style: "Heading 1" }, { result: {} }))
 			.toEqual({ summary: "Insert a heading after paragraph 3", groupPhrase: "edited the document", resultSummary: "Inserted a heading after paragraph 3" });
 		expect(word.describeToolCall("replaceSelection", { text: "Hi" }, { result: {} }).resultSummary).toBe("Replaced the selected text");
+		expect(word.describeToolCall("insertMarkdown", { markdown: "# A", position: "end" }).summary).toBe("Add text at the end of the document");
 		expect(cell.describeToolCall("writeRange", { startCell: "A1", values: [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]] }, { result: { sheet: "Sheet1", range: "A1:C4", cellsWritten: 12 } }))
 			.toEqual({ summary: "Write 12 cells to A1", groupPhrase: "wrote cells", resultSummary: "Wrote 12 cells to Sheet1!A1:C4" });
 		const macro = word.describeToolCall("writeMacro", { code: "Api.GetDocument().RemoveAllElements()" }, { result: 1 });
@@ -43,29 +53,29 @@ describe("describe() templates", () => {
 	});
 
 	test("fallback: tool name and up to three short values, long values skipped", () => {
-		expect(cell.describeToolCall("addChart", { range: "D2:D100", chartType: "line", title: "Sales" }))
-			.toEqual({ summary: "Create Chart · D2:D100 · line · Sales", groupPhrase: "used “Create Chart”" });
-		expect(cell.describeToolCall("addChart", { range: "D2:D100", title: "x".repeat(200) }).summary).toBe("Create Chart · D2:D100");
-		expect(cell.describeToolCall("addChart", { range: "A".repeat(45) }).summary).toBe("Create Chart · " + "A".repeat(29) + "…");
+		expect(cell.describeToolCall("setNumberFormat", { range: "D2:D100", sheet: "Sales", format: "0.0%" }))
+			.toEqual({ summary: "Set Number Format · D2:D100 · Sales · 0.0%", groupPhrase: "used “Set Number Format”" });
+		expect(cell.describeToolCall("setNumberFormat", { range: "D2:D100", format: "x".repeat(200) }).summary).toBe("Set Number Format · D2:D100");
+		expect(cell.describeToolCall("setNumberFormat", { range: "A".repeat(45) }).summary).toBe("Set Number Format · " + "A".repeat(29) + "…");
 		expect(word.describeToolCall("noSuchTool", {}).summary).toBe("noSuchTool");
 	});
 
 	test("errors in plain words", () => {
 		expect(cell.describeToolCall("readRange", { range: "A1", sheet: "Q3" }, { error: "Sheet \"Q3\" not found." }).resultSummary).toBe("Couldn't find sheet “Q3”");
 		expect(word.describeToolCall("replaceSelection", { text: "x" }, { error: "Nothing is selected. Ask the user to select text" }).resultSummary).toBe("Couldn't do this: nothing is selected");
-		expect(word.describeToolCall("getSelection", {}, { error: "Something failed" }).resultSummary).toBe("Couldn't do this: Read the selected text");
+		expect(word.describeToolCall("readOutline", {}, { error: "Parameter \"maxLevel\" must be a number" }).resultSummary).toBe("Couldn't do this: Read the outline");
 		expect(word.describeToolCall("replaceSelection", { text: "x" }, { error: "The user declined this action.", declined: true }).resultSummary).toBe("You declined: Replace the selected text");
 	});
 
 	test("a throwing describe() falls back instead of breaking the call", () => {
-		word.names2funcs.getSelection.describe = () => { throw new Error("boom"); };
-		expect(word.describeToolCall("getSelection", {}).summary).toBe("Read Selection");
+		word.names2funcs.readOutline.describe = () => { throw new Error("boom"); };
+		expect(word.describeToolCall("readOutline", { maxLevel: 2 }).summary).toBe("Read Outline · 2");
 	});
 
 	test("placeholders are filled in one pass: a value containing %1 stays literal", () => {
 		expect(cell.describeToolCall("writeRange", { startCell: "A1", values: [[1, 2]] }, { result: { sheet: "S%1", range: "A1", cellsWritten: 2 } }).resultSummary)
 			.toBe("Wrote 2 cells to S%1!A1");
-		expect(word.describeToolCall("selectText", { query: "50%2 off" }).summary).toBe("Select “50%2 off”");
+		expect(word.describeToolCall("findText", { query: "50%2 off" }, { result: { totalMatches: 3 } }).resultSummary).toBe("Searched for “50%2 off” (3 matches)");
 	});
 
 	test("unknown tool names from the model are capped at 60 characters", () => {
@@ -81,13 +91,13 @@ describe("describe() templates", () => {
 	});
 
 	test("non-string start/done/phrase from describe() are ignored", () => {
-		word.names2funcs.selectText.describe = () => ({ start: { html: "<b>x</b>" }, done: 42, phrase: ["a"] });
-		expect(word.describeToolCall("selectText", { query: "a" }, { result: {} })).toEqual({ summary: "Select Text · a", groupPhrase: "used “Select Text”", resultSummary: "Select Text · a" });
+		word.names2funcs.readOutline.describe = () => ({ start: { html: "<b>x</b>" }, done: 42, phrase: ["a"] });
+		expect(word.describeToolCall("readOutline", { maxLevel: 2 }, { result: {} })).toEqual({ summary: "Read Outline · 2", groupPhrase: "used “Read Outline”", resultSummary: "Read Outline · 2" });
 	});
 
 	test("describe() is never sent to providers", () => {
 		for (const helper of [word, cell, helperFor("slide")]) {
-			expect(helper.funcs.filter((f) => f.describe).length).toBeGreaterThan(3);
+			expect(helper.funcs.filter((f) => f.describe).length).toBeGreaterThan(5);
 			expect(JSON.stringify(helper.getTools())).not.toContain("describe");
 		}
 	});
@@ -96,8 +106,8 @@ describe("describe() templates", () => {
 describe("translations", () => {
 	test("German through Asc.plugin.tr, with placeholders", () => {
 		const cell = helperFor("cell", (s) => deTr[s] || s);
-		expect(cell.describeToolCall("selectRange", { range: "B2" }, { result: { sheet: "S", selected: "B2" } }))
-			.toEqual({ summary: "Zellen B2 auswählen", groupPhrase: "Zellen ausgewählt", resultSummary: "Zellen S!B2 ausgewählt" });
+		expect(cell.describeToolCall("findInSheet", { query: "Budget" }, { result: { totalMatches: 2 } }))
+			.toEqual({ summary: "Nach „Budget“ suchen", groupPhrase: "gesucht", resultSummary: "Nach „Budget“ gesucht (2 Treffer)" });
 		expect(cell.describeToolCall("writeRange", { startCell: "A1", values: [[1]] }, { result: { sheet: "S", range: "A1", cellsWritten: 1 } }).resultSummary).toBe("1 Zellen in S!A1 geschrieben");
 		expect(cell.describeToolCall("readRange", {}, { error: "Sheet \"Q3\" not found." }).resultSummary).toBe("Tabellenblatt „Q3“ nicht gefunden");
 	});
@@ -110,7 +120,7 @@ describe("translations", () => {
 			for (const m of fs.readFileSync(file, "utf8").matchAll(/toolText\("([^"]+)"/g))
 				templates.add(m[1]);
 		}
-		expect(templates.size).toBeGreaterThan(60);
+		expect(templates.size).toBeGreaterThan(80);
 		expect([...templates].filter((t) => !deTr[t])).toEqual([]);
 		// placeholders survive translation
 		expect([...templates].filter((t) => (t.match(/%\d/g) || []).sort().join() !== (deTr[t].match(/%\d/g) || []).sort().join())).toEqual([]);
@@ -122,18 +132,18 @@ describe("events", () => {
 		const fake = createWordDocument({ body: ["Budget plan", "Other"], selection: { paragraph: 1, start: 0, end: 6 } });
 		const agent = await createAgent({ editorType: "word", fake });
 		agent.engine.queue.push(
-			{ content: "", tool_calls: [toolCall("c1", "selectText", { query: "Budget" }), toolCall("c2", "replaceSelection", { text: "Plan" })] },
+			{ content: "", tool_calls: [toolCall("c1", "findText", { query: "Budget" }), toolCall("c2", "replaceSelection", { text: "Plan" })] },
 			{ content: "Done." }
 		);
 		await agent.send("Go");
 		expect(agent.win.sent("onToolCallStart").map((e) => [e.summary, e.groupPhrase])).toEqual([
-			["Select “Budget”", "selected text"],
+			["Search for “Budget”", "searched"],
 			["Replace the selected text", "replaced the selected text"]
 		]);
-		expect(agent.win.sent("onToolCallEnd").map((e) => e.resultSummary)).toEqual(["Selected “Budget”", "Replaced the selected text"]);
+		expect(agent.win.sent("onToolCallEnd").map((e) => e.resultSummary)).toEqual(["Searched for “Budget” (1 match)", "Replaced the selected text"]);
 		expect(agent.approvals.map((a) => a.summary)).toEqual(["Replace the selected text"]);
 		const sentToModel = JSON.stringify(agent.engine.requests);
-		expect(sentToModel).not.toContain("Selected “");
+		expect(sentToModel).not.toContain("Searched for");
 		expect(sentToModel).not.toContain("groupPhrase");
 	});
 });
