@@ -242,6 +242,8 @@ GrammarChecker.prototype.onAccept = async function(paraId, rangeId)
 	let range = this.getAnnotationRangeObj(paraId, rangeId);
 	await Asc.Editor.callMethod("SelectAnnotationRange", [range]);
 	
+	// Not marked as AI-generated: assistive edit, see "grammarAnnotation" in
+	// AIProvenance.EXEMPT_ACTIONS (scripts/helpers/aiProvenance.js).
 	Asc.scope.text = text;
 	await Asc.Editor.callCommand(function(){
 		Api.ReplaceTextSmart([Asc.scope.text]);

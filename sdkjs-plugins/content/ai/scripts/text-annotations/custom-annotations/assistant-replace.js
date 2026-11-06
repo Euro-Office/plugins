@@ -185,6 +185,11 @@ Object.assign(AssistantReplace.prototype, {
         let range = this.getAnnotationRangeObj(paraId, rangeId);
         await Asc.Editor.callMethod("SelectAnnotationRange", [range]);
 
+        // Provenance: an accepted custom-assistant suggestion is AI-written
+        // text (unlike the exempt spelling/grammar fixes): mark and record it.
+        let provenanceMeta = window.AIProvenance ? window.AIProvenance.meta("customAssistant", AI.Request.create(AI.ActionType.Chat, true)) : null;
+        let provenanceAnchor = provenanceMeta ? await window.AIProvenance.captureAnchor(provenanceMeta) : null;
+
         Asc.scope.text = text;
         await Asc.Editor.callCommand(function () {
             Api.ReplaceTextSmart([Asc.scope.text]);
@@ -193,6 +198,11 @@ Object.assign(AssistantReplace.prototype, {
 
         await Asc.Editor.callMethod("RemoveAnnotationRange", [range]);
         await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+        if (provenanceMeta) {
+            if (provenanceAnchor)
+                await window.AIProvenance.markInsertion(provenanceAnchor, { text: text });
+            await window.AIProvenance.record(provenanceMeta);
+        }
         await Asc.Editor.callMethod("FocusEditor");
     },
 });
