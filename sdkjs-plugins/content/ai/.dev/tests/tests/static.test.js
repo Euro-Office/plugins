@@ -46,14 +46,30 @@ describe("JSON", () => {
 			expect(fs.existsSync(path.join(PLUGIN_DIR, v.url)), v.url).toBe(true);
 	});
 
-	test("index.html only loads files that exist", () => {
-		for (const page of ["index.html"]) {
+	test("index.html and the chat sidebar only load files that exist", () => {
+		for (const page of ["index.html", "sidebar/index.html"]) {
 			const html = fs.readFileSync(path.join(PLUGIN_DIR, page), "utf8");
 			for (const [, src] of html.matchAll(/<(?:script|link)[^>]+(?:src|href)="([^"]+)"/g)) {
 				if (/^https?:/.test(src)) continue;
 				expect(fs.existsSync(path.join(PLUGIN_DIR, path.dirname(page), src)), page + " -> " + src).toBe(true);
 			}
 		}
+	});
+
+	test("the chat sidebar's SDK requests (./config.json, ./translations/langs.json) find files, no 404s", () => {
+		const root = JSON.parse(fs.readFileSync(path.join(PLUGIN_DIR, "config.json"), "utf8"));
+		const sidebar = JSON.parse(fs.readFileSync(path.join(PLUGIN_DIR, "sidebar/config.json"), "utf8"));
+		// enableDrops: otherwise the SDK cancels every drop on the page (also into the input)
+		expect(sidebar).toEqual({ guid: root.guid, enableDrops: true });
+		// empty: the SDK loads no translation file, the page loads ../translations itself
+		expect(JSON.parse(fs.readFileSync(path.join(PLUGIN_DIR, "sidebar/translations/langs.json"), "utf8"))).toEqual([]);
+	});
+
+	test("the chat sidebar opens as a docked right panel", () => {
+		const js = fs.readFileSync(path.join(PLUGIN_DIR, "scripts/engine/chatWindow.js"), "utf8");
+		expect(js).toMatch(/url\s*:\s*"sidebar\/index\.html"/);
+		expect(js).toMatch(/type\s*:\s*"panelRight"/);
+		expect(js).not.toMatch(/localStorage\.(getItem|setItem)\("onlyoffice_ai_chat_placement"/);
 	});
 
 	test("every internal provider listed in providers/config.json exists", () => {
@@ -71,7 +87,6 @@ describe("licence headers", () => {
 		"components/Tooltip/style.css",
 		"resources/styles/aiModelEdit.css",
 		"resources/styles/aiModelsList.css",
-		"resources/styles/chat.css",
 		"resources/styles/common.css",
 		"resources/styles/customAssistant.css",
 		"resources/styles/customProviders.css",
@@ -102,4 +117,12 @@ describe("licence headers", () => {
 		expect(head).toContain("SPDX-License-Identifier: AGPL-3.0-only");
 	});
 
+	test("the built sidebar keeps its headers and the Preact notice", () => {
+		const js = fs.readFileSync(path.join(PLUGIN_DIR, "sidebar/sidebar.js"), "utf8");
+		expect(js.startsWith("/*!")).toBe(true);
+		expect(js).toMatch(/Includes Preact \d+\.\d+\.\d+/);
+		expect(js).toContain("Copyright (c) 2015-present Jason Miller");
+		expect(js).toContain("Permission is hereby granted, free of charge");
+		expect(fs.readFileSync(path.join(PLUGIN_DIR, "sidebar/sidebar.css"), "utf8")).toMatch(/^\/\*! SPDX-FileCopyrightText: Euro-Office contributors \| SPDX-License-Identifier: AGPL-3\.0-only \*\//);
+	});
 });

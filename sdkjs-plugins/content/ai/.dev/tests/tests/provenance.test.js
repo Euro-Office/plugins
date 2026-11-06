@@ -9,6 +9,7 @@ import { describe, test, expect, beforeEach } from "vitest";
 import zlib from "node:zlib";
 import { JSDOM } from "jsdom";
 import { createToolEnv } from "../lib/plugin.js";
+import { createAgent, toolCall } from "../lib/agent.js";
 import { createWordDocument } from "../fakes/word.js";
 import { createWorkbook } from "../fakes/cell.js";
 import { createPresentation } from "../fakes/slide.js";
@@ -401,5 +402,41 @@ describe("Library insert methods with provenance metadata", () => {
 		await ctx.Asc.Library.InsertAsComment("Looks good", { action: "chat:comment", provider: "P", model: "m" });
 		expect(doc.comments[0].GetAuthorName()).toBe("AI Assistant (m)");
 		expect(doc.customProperties.AIGenerated).toBe(true);
+	});
+});
+
+describe("agent loop records AI edits", () => {
+	let agent;
+	beforeEach(async () => {
+		agent = await createAgent({ editorType: "word", fake: createWordDocument({ body: ["Hello world", "Second"], selection: { paragraph: 1, start: 0, end: 5 } }) });
+	});
+
+	test("read-only tools leave the file unmarked", async () => {
+		agent.engine.queue.push({ tool_calls: [toolCall("c1", "readDocument", {}), toolCall("c2", "getSelection", {})] });
+		await agent.send("Read");
+		expect(agent.fake.doc.customProperties).toEqual({});
+	});
+
+	test("editing tools mark the text and record the agent's model", async () => {
+		agent.engine.queue.push({ tool_calls: [toolCall("c1", "replaceSelection", { text: "Howdy" })] });
+		await agent.send("Change");
+		const doc = agent.fake.doc;
+		expect(doc.texts()[0]).toBe("Howdy world");
+		expect(doc.controls().map((c) => [c.GetText(), c.GetAlias().replace(/\d{4}-\d{2}-\d{2}/, "DATE")])).toEqual([["Howdy", "AI-generated (fake-1, DATE)"]]);
+		expect(doc.customProperties.AIGeneratedModels).toBe("FakeProvider/fake-1");
+	});
+
+	test("prompt-based calls are recorded too", async () => {
+		const a = await createAgent({ editorType: "word", supportsTools: false, fake: createWordDocument({ body: ["one", "two"] }) });
+		a.engine.queue.push({ content: '[functionCalling (editParagraph)]: {"index": 2, "action": "replace", "text": "zwei"}' });
+		await a.send("Translate");
+		expect(a.fake.doc.controls().map((c) => c.GetText())).toEqual(["zwei"]);
+		expect(a.fake.doc.customProperties.AIGeneratedModels).toBe("FakeProvider/fake-1");
+	});
+
+	test("chat 'replace' button marks and records with the chat model", async () => {
+		await agent.win.fire("onChatReplace", { type: "replace", data: "Bye" });
+		expect(agent.fake.doc.controls().map((c) => c.GetText())).toEqual(["Bye"]);
+		expect(agent.fake.doc.customProperties.AIGeneratedModels).toBe("FakeProvider/fake-1");
 	});
 });
