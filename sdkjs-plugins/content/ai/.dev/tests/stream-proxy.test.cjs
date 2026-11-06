@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Euro-Office contributors
+// SPDX-FileCopyrightText: Euro-Office contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // Run with: node --test sdkjs-plugins/content/ai/.dev/tests/stream-proxy.test.cjs
