@@ -339,34 +339,26 @@ constructor() {\n\
 		
 	});
 
+	// Tool calls from an external host. Not emitted by sdkjs itself: a host
+	// page (e.g. the DocSpace AI agent) registers a DocsAPI connector
+	// (docEditor.createConnector()) and calls
+	// connector.sendEvent("ai_onCallTool", { name, arguments }); sdkjs relays it
+	// (common/editorscommon.js -> g_asc_plugins.externalConnectorMessage ->
+	// "SendEvent" plugin method -> onPluginEvent, common/plugins.js) to plugins
+	// that attached the event, and relays our "ai_onCallToolResult" back to the
+	// connector the same way. The host is not trusted to have asked the user,
+	// so the call goes through the same argument parsing and approval as the
+	// chat agent (scripts/engine/toolApproval.js): read-only tools run
+	// directly, all others need approval in the chat window (opened if
+	// needed), unknown tools and bad arguments give an error result.
 	_this.attachEditorEvent("ai_onCallTool", async function(toolCall) {
-		let funcName = toolCall.name;
-		let funcArgs = toolCall.arguments;
-		let argsObj = null;
-
+		let toolResult;
 		try {
-			argsObj = typeof funcArgs === 'string' ? JSON.parse(funcArgs) : funcArgs;
-		} catch(e) {
-			argsObj = {};
-		}
-
-		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
-
-		let toolResult = {};
-		try {
-			toolResult = await window.EditorHelper.names2funcs[funcName].call(argsObj);
-			if (!toolResult)
-				toolResult = {};
-			toolResult.message = "System function '" + funcName + "' executed successfully";
+			toolResult = await window.ToolApproval.handleEditorToolCall(toolCall);
 		} catch (e) {
-			let errorMsg = "Error calling function: " + funcName;
-			console.error(errorMsg);
-			toolResult = {
-				error: errorMsg
-			};
+			console.error("ai_onCallTool failed:", e);
+			toolResult = { error: "Error calling function: " + (toolCall && toolCall.name ? toolCall.name : "") };
 		}
-
-		await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
 		window.Asc.plugin.sendEvent("ai_onCallToolResult", toolResult);
 	});
 
@@ -511,7 +503,7 @@ async function initWithTranslate(counter) {
 
 				if (isFromMethod) {
 					await Asc.Editor.callMethod("SendEventInternal", ["ai_onStartAction", {
-						type : "Block",
+						type : "Information",
 						description : "AI (" + requestEngine.modelUI.name + ")"
 					}]);
 				}
@@ -563,7 +555,7 @@ async function initWithTranslate(counter) {
 
 				if (isFromMethod) {
 					await Asc.Editor.callMethod("SendEventInternal", ["ai_onEndAction", {
-						type : "Block",
+						type : "Information",
 						description : "AI (" + requestEngine.modelUI.name + ")"
 					}]);
 				}
@@ -646,6 +638,8 @@ async function initWithTranslate(counter) {
 		initAssistants();
 		initExternalProviders();
 
+		window.AIChatWindow.addButton();
+
 		if (window.Asc.plugin.sendEvent)
 			window.Asc.plugin.sendEvent("ai_onInit", {});
 
@@ -712,8 +706,10 @@ window.Asc.plugin.init = async function() {
 		delete window.Asc.plugin.info.aiPluginSettings;
 	}
 
-	await initWithTranslate(1 << 1);
+	// Before the chat panel is created (initWithTranslate), so its page
+	// starts empty.
 	clearChatState();
+	await initWithTranslate(1 << 1);
 
 	window.setInit();
 };
@@ -729,8 +725,22 @@ window.Asc.plugin.button = async function(id, windowId) {
 
 	if (window.chatWindow && window.chatWindow.id === windowId)
 	{
+		// Chat closed: stop the agent and treat pending tool approvals as denied.
+		if (window.AgentState) {
+			window.AgentState.isStopped = true;
+			if (window.AgentState.denyPendingApprovals)
+				window.AgentState.denyPendingApprovals();
+		}
+		if (window.ToolApproval)
+			window.ToolApproval.unbindWindow(window.chatWindow);
 		clearChatState();
 		delete window.chatWindow;
+		// Closing removes the panel and its right-bar button: add it again,
+		// closed, once the editor has finished closing this one.
+		setTimeout(function() {
+			if (window.AIChatWindow)
+				window.AIChatWindow.addButton();
+		}, 0);
 	}
 
 	if (textAnnotatorPopup && textAnnotatorPopup.popup && textAnnotatorPopup.popup.id === windowId)
@@ -843,14 +853,36 @@ function onOpenSettingsModal() {
 		],
 		isModal : true,
 		EditorsSupport : ["word", "slide", "cell", "pdf"],
-		size : [320, 350]
+		size : [320, 390]
 	};
 
 	if (!settingsWindow) {
 		settingsWindow = new window.Asc.PluginWindow();
 		settingsWindow.attachEvent("onInit", function() {
+			// Sent first so the window height includes the section.
+			if (window.AIEdits) {
+				settingsWindow.command("onUpdateReviewTrackChanges", {
+					enabled: window.AIEdits.isTrackChangesEnabled(),
+					locked: window.AIEdits.isLocked(),
+					visible: window.AIEdits.isTrackingSupported()
+				});
+			}
 			updateActions();
 			updateModels();
+			if (window.AIProvenance) {
+				settingsWindow.command("onUpdateProvenance", {
+					enabled: window.AIProvenance.isEnabled(),
+					locked: window.AIProvenance.isLocked()
+				});
+			}
+		});
+		settingsWindow.attachEvent("onChangeReviewTrackChanges", function(enabled) {
+			if (window.AIEdits && !window.AIEdits.isLocked())
+				window.AIEdits.setUserTrackChanges(enabled === true);
+		});
+		settingsWindow.attachEvent("onChangeProvenance", function(enabled) {
+			if (window.AIProvenance && !window.AIProvenance.isLocked())
+				window.AIProvenance.setUserEnabled(enabled === true);
 		});
 		settingsWindow.attachEvent("onUpdateHeight", function(height) {
 			if(height > variation.size[1]) {
@@ -1160,7 +1192,7 @@ async function customAssistantOnClickToolbarIcon(assistantId, buttonAssistant)
 		return result;
 	});
 
-	await Asc.Editor.callMethod("StartAction", ["Block", preloaderMessage]);
+	await Asc.Editor.callMethod("StartAction", ["Information", preloaderMessage]);
 
 	const status = await customAssistantManager.run(assistantId, paraIds);
 	switch (status) {
@@ -1186,7 +1218,7 @@ async function customAssistantOnClickToolbarIcon(assistantId, buttonAssistant)
 			break;		
 	}
 
-	await Asc.Editor.callMethod("EndAction", ["Block", preloaderMessage]);
+	await Asc.Editor.callMethod("EndAction", ["Information", preloaderMessage]);
 }
 
 /**
@@ -1227,7 +1259,7 @@ async function detectFunctionCallingSupport(model) {
 	if ((model.capabilities & AI.CapabilitiesUI.Chat) === 0) return;
 	if ((model.capabilities & AI.CapabilitiesUI.Tools) !== 0) return;
 
-	await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + model.name + ")"]);
+	await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + model.name + ")"]);
 
 	try {
 		var provider = AI.createProviderInstance(
@@ -1298,9 +1330,9 @@ async function detectFunctionCallingSupport(model) {
 		}
 	} catch (error) {
 		console.log("[AI tools detection]:" + model.name + ": false");
+	} finally {
+		await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + model.name + ")"]);
 	}
-
-	await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + model.name + ")"]);
 }
 
 /**
@@ -1464,24 +1496,26 @@ function onOpenSummarizationModal() {
 		});
 	});
 	summarizationWindow.attachEvent("onSummarize", async function(data) {
+		// Provenance: mark the summary and record the action (aiProvenance.js).
+		let meta = window.AIProvenance ? window.AIProvenance.meta("summarization", AI.Request.create(AI.ActionType.Summarization, true)) : null;
 		switch (data.type) {
 		case "review": {
 			if (Asc.plugin.info.editorType === "word")
-				await Asc.Library.InsertAsReview(data.data);
+				await Asc.Library.InsertAsReview(data.data, false, meta);
 			else
-				await Asc.Library.InsertAsComment(data.data);
+				await Asc.Library.InsertAsComment(data.data, meta);
 			break;
 		}
 		case "comment": {
-			await Asc.Library.InsertAsComment(data.data);
+			await Asc.Library.InsertAsComment(data.data, meta);
 			break;
 		}
 		case "replace": {
-			await Asc.Library.PasteText(data.data);
+			await Asc.Library.PasteText(data.data, meta);
 			break;
 		}
 		case "end": {
-			await Asc.Library.InsertAsText(data.data);
+			await Asc.Library.InsertAsText(data.data, meta);
 			break;
 		}
 		}

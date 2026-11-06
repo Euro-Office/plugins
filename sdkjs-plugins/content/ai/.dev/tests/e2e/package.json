@@ -1,0 +1,12 @@
+{
+  "name": "ai-plugin-e2e",
+  "private": true,
+  "description": "Opt-in end-to-end test: real Document Server + this plugin + a scripted OpenAI-compatible stub.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.57.0"
+  }
+}
