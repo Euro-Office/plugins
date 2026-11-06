@@ -9,7 +9,7 @@ cd sdkjs-plugins/content/ai/.dev/helpers
 python3 helpers.py
 ```
 
-Then commit the tool source **and** `scripts/helpers/helpers.js`. Add `"text"` labels to `translations/helpers/` (en and de); `.dev/tests` checks them.
+Then commit the tool source **and** `scripts/helpers/helpers.js`. See `.dev/tests/README.md` ("Adding a test for a new tool") for labels, translations, the read-only allowlist and tests.
 
 ## Why `helpers.js` is committed
 

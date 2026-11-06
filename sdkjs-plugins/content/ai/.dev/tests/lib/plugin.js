@@ -13,7 +13,8 @@ export const TOOL_SCRIPTS = [
 	"vendor/md/markdown-it.js",
 	"scripts/engine/library.js",
 	"scripts/helpers/helperFuncs.js",
-	"scripts/helpers/helpers.js"
+	"scripts/helpers/helpers.js",
+	"scripts/helpers/toolCategories.js"
 ];
 
 /**

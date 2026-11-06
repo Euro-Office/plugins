@@ -40,5 +40,17 @@
 	"Change Slide Background": "Change Slide Background",
 	"Delete Slide": "Delete Slide",
 	"Duplicate Slide": "Duplicate Slide",
-	"Generate Presentation": "Generate Presentation"
+	"Generate Presentation": "Generate Presentation",
+	"Read Document": "Read Document",
+	"Read Selection": "Read Selection",
+	"Replace Selection": "Replace Selection",
+	"Edit Paragraph": "Edit Paragraph",
+	"Inspect Workbook": "Inspect Workbook",
+	"Read Cells": "Read Cells",
+	"Write Cells": "Write Cells",
+	"Read Presentation": "Read Presentation",
+	"Select Text": "Select Text",
+	"Select Cells": "Select Cells",
+	"Go to Slide": "Go to Slide",
+	"Load Tools": "Load Tools"
 }

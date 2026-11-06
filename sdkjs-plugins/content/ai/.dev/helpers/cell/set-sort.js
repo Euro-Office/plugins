@@ -34,6 +34,7 @@
 
 	let func = new RegisteredFunction({
 		"name": "setSort",
+		"category": "data",
 		"text": "Sort Data",
 		"description": "Sorts data in a range by a single column in ascending or descending order.",
 		"parameters": {
@@ -151,12 +152,12 @@
 			let isSendedEndLongAction = false;
 			async function checkEndAction() {
 				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+					await Asc.Editor.callMethod("EndAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 					isSendedEndLongAction = true
 				}
 			}
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
+			await Asc.Editor.callMethod("StartAction", ["Information", "AI (" + requestEngine.modelUI.name + ")"]);
 			await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 
 			let result = await requestEngine.chatRequest(argPromt, false, async function(data) {
