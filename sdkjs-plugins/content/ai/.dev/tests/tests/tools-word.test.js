@@ -240,6 +240,40 @@ describe("editParagraph", () => {
 	});
 });
 
+describe("findText", () => {
+	test("case-insensitive by default; reports element index, occurrence and snippet", async () => {
+		const { call } = word(SAMPLE);
+		const r = await call("findText", { query: "deadline" });
+		expect(r.totalMatches).toBe(3);
+		expect(r.matches.map((m) => [m.occurrence, m.index, m.type])).toEqual([[1, 2, "paragraph"], [2, 4, "table"], [3, 6, "paragraph"]]);
+		expect(r.matches[0].snippet).toBe("Revenue grew by 12 percent. The deadline is Friday.");
+		// tables have no GetText(): the snippet comes from the matching cell paragraph
+		expect(r.matches[1].snippet).toBe("deadline 5");
+	});
+
+	test("matchCase and maxResults", async () => {
+		const { call } = word(SAMPLE);
+		const r = await call("findText", { query: "Deadline", matchCase: true });
+		expect(r.totalMatches).toBe(1);
+		expect(r.matches[0].index).toBe(6);
+		const capped = await call("findText", { query: "deadline", maxResults: 1 });
+		expect(capped).toMatchObject({ totalMatches: 3, returned: 1, truncated: true });
+	});
+
+	test("long paragraphs get a short snippet with ellipses", async () => {
+		const { call } = word({ body: ["a".repeat(100) + "needle" + "b".repeat(100)] });
+		const r = await call("findText", { query: "needle" });
+		expect(r.matches[0].snippet).toBe("…" + "a".repeat(60) + "needle" + "b".repeat(60) + "…");
+	});
+
+	test("validates arguments", async () => {
+		const { call } = word(SAMPLE);
+		await expectToolError(call("findText", { query: "" }), /"query" must be a non-empty string/);
+		await expectToolError(call("findText", { query: "x", matchCase: "yes" }), /"matchCase" must be a boolean/);
+		await expectToolError(call("findText", { query: "x", maxResults: 0 }), /"maxResults"/);
+	});
+});
+
 describe("selectText", () => {
 	test("selects the n-th occurrence so replaceSelection can edit it", async () => {
 		const { call, doc } = word(SAMPLE);
@@ -258,11 +292,37 @@ describe("selectText", () => {
 	});
 });
 
+describe("readOutline", () => {
+	test("lists headings by style and outline level", async () => {
+		const { call } = word({
+			body: [
+				{ text: "Intro", style: "Heading 1" },
+				"body",
+				{ text: "Sub", style: "Heading 2" },
+				{ text: "Custom outline", outlineLvl: 3 },
+				{ text: "Kapitel", style: "Überschrift 2" },
+				{ text: "  ", style: "Heading 1" }
+			]
+		});
+		const r = await call("readOutline");
+		expect(r.headings).toEqual([
+			{ level: 1, index: 1, text: "Intro" },
+			{ level: 2, index: 3, text: "Sub" },
+			{ level: 3, index: 4, text: "Custom outline" },
+			{ level: 2, index: 5, text: "Kapitel" }
+		]);
+		const top = await call("readOutline", { maxLevel: 1 });
+		expect(top.headings.map((h) => h.text)).toEqual(["Intro"]);
+		await expectToolError(call("readOutline", { maxLevel: 0 }), /"maxLevel"/);
+	});
+});
+
 describe("commands run in the editor context", () => {
 	test("no tool command throws inside the editor for a typical document", async () => {
 		const env = word({ ...SAMPLE, selection: { paragraph: 2, start: 0, end: 7 }, comments: [{ id: "1", text: "c" }] });
 		for (const [name, args] of [
-			["readDocument", {}], ["getSelection", {}], ["selectText", { query: "Revenue" }]
+			["readDocument", {}], ["getSelection", {}], ["findText", { query: "e" }], ["readOutline", {}],
+			["selectText", { query: "Revenue" }]
 		])
 			await env.call(name, args);
 		expect(env.host.commandErrors).toEqual([]);

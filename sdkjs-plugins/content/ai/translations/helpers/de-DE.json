@@ -49,8 +49,13 @@
 	"Read Cells": "Zellen lesen",
 	"Write Cells": "Zellen schreiben",
 	"Read Presentation": "Präsentation lesen",
+	"Find Text": "Text suchen",
 	"Select Text": "Text auswählen",
+	"Read Outline": "Gliederung lesen",
+	"Find in Sheet": "Im Tabellenblatt suchen",
 	"Select Cells": "Zellen auswählen",
+	"Find Formula Errors": "Formelfehler finden",
+	"Find in Presentation": "In Präsentation suchen",
 	"Go to Slide": "Zur Folie wechseln",
 	"Load Tools": "Werkzeuge laden"
 }

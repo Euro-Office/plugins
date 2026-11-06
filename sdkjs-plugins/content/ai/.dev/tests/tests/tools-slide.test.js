@@ -67,6 +67,26 @@ describe("replaceSelection (slide)", () => {
 	});
 });
 
+describe("findInPresentation", () => {
+	test("searches shapes and notes", async () => {
+		const r = await slide(DECK).call("findInPresentation", { query: "budget" });
+		expect(r.totalMatches).toBe(3);
+		expect(r.matches).toEqual([
+			{ slideNumber: 1, shapeIndex: 2, where: "shape", snippet: "Agenda Budget review" },
+			{ slideNumber: 2, shapeIndex: 1, where: "shape", snippet: "Budget 2026" },
+			{ slideNumber: 3, shapeIndex: null, where: "notes", snippet: "Mention the budget again" }
+		]);
+	});
+
+	test("matchCase, includeNotes and maxResults", async () => {
+		const env = slide(DECK);
+		expect((await env.call("findInPresentation", { query: "budget", matchCase: true })).totalMatches).toBe(1);
+		expect((await env.call("findInPresentation", { query: "budget", includeNotes: false })).totalMatches).toBe(2);
+		expect(await env.call("findInPresentation", { query: "budget", maxResults: 1 })).toMatchObject({ totalMatches: 3, returned: 1, truncated: true });
+		await expectToolError(env.call("findInPresentation", { query: "" }), /"query"/);
+	});
+});
+
 describe("navigation", () => {
 	test("goToSlide calls the GoToSlide plugin method", async () => {
 		const env = slide(DECK);
