@@ -83,6 +83,7 @@ export function App({ chat }: { chat: Chat }) {
 					<IconButton class="icon_button" icon="close" label={tr("Remove attached text")} theme={state.themeType} onClick={chat.actions.clearAttachedText} />
 				</div>
 			)}
+			{state.running && !state.stopped && <AgentStatus chat={chat} />}
 			<Composer chat={chat} />
 			{state.error && (
 				<div class="div_error" role="alert" onClick={chat.actions.clearError}>
@@ -163,11 +164,6 @@ function MessageList({ chat }: { chat: Chat }) {
 					? <UserMessage key={item.id} item={item} />
 					: <AssistantMessage key={item.id} chat={chat} item={item} streaming={i === state.streamingIndex} isLast={i === lastAssistant}
 						theme={state.themeType} running={state.running} trVersion={state.trVersion} />)}
-			{state.typing && (
-				<div class="message typing">
-					<div class="span_message">{tr("Thinking")}<span class="dots" aria-hidden="true">...</span></div>
-				</div>
-			)}
 		</div>
 	);
 }
@@ -452,6 +448,29 @@ function ChipsRow({ chat }: { chat: Chat }) {
 			{chips.actions.map((a) => (
 				<button type="button" key={a.id} class="selection_chip btn-text-default" onClick={() => actions.chip(a.id)}>{a.text}</button>
 			))}
+		</div>
+	);
+}
+
+// ── Agent status ─────────────────────────────────────────────────────────
+
+// Only the phase is announced (aria-live); the seconds counter is hidden
+// from screen readers so it is not read out every second.
+function AgentStatus({ chat }: { chat: Chat }) {
+	let { state, tr } = chat;
+	let [, tick] = useReducer((n: number) => n + 1, 0);
+	useEffect(() => {
+		let t = setInterval(tick, 1000);
+		return () => clearInterval(t);
+	}, []);
+	let label = state.activeTool
+		? state.activeTool + "…"
+		: tr("Thinking") + "…" + (state.agentModel ? " (" + state.agentModel + ")" : "");
+	let seconds = Math.max(0, Math.floor((Date.now() - state.turnStart) / 1000));
+	return (
+		<div class="agent_status">
+			<span class="agent_status_label" aria-live="polite">{label}</span>
+			<span class="agent_status_time" aria-hidden="true">{seconds} s</span>
 		</div>
 	);
 }

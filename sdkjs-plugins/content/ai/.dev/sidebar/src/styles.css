@@ -164,11 +164,7 @@ html.compact-radius body.theme-type-dark .user_message .message_content {
 	color: var(--text-normal, inherit);
 }
 
-.typing .span_message {
-	color: var(--text-tertiary, rgba(0, 0, 0, 0.4));
-}
-
-.dots, .tool_call_dots {
+.tool_call_dots {
 	animation: dots_blink 1.2s infinite;
 }
 
@@ -730,6 +726,26 @@ html.compact-radius .input_message_wrapper {
 
 .input_control_button:hover {
 	opacity: 0.7;
+}
+
+.agent_status {
+	display: flex;
+	gap: 6px;
+	margin: 0 8px 4px;
+	font-size: 11px;
+	color: var(--text-secondary, #666);
+}
+
+.agent_status_label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.agent_status_time {
+	font-variant-numeric: tabular-nums;
 }
 
 .stop_icon {

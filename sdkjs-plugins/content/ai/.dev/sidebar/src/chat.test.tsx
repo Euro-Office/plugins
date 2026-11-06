@@ -129,7 +129,7 @@ describe("startup", () => {
 });
 
 describe("sending and replies", () => {
-	test("a message is sent as { messages, usedTools, turnId } and shows a typing indicator", () => {
+	test("a message is sent as { messages, usedTools, turnId } and shows the agent status", () => {
 		setup();
 		submit("Summarize this");
 		const [req] = chatMessages();
@@ -137,7 +137,7 @@ describe("sending and replies", () => {
 		expect(req.usedTools).toEqual([]);
 		expect(req.turnId).toMatch(/^t[a-z0-9]+$/);
 		expect(input().value).toBe("");
-		expect($(".typing")!.textContent).toContain("Thinking");
+		expect($(".agent_status")!.textContent).toContain("Thinking");
 		// running: Stop instead of Send, a second submit does nothing
 		expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
 		fireEvent.keyDown(input(), { key: "Enter" });
@@ -165,13 +165,13 @@ describe("sending and replies", () => {
 		setup();
 		submit("Hi");
 		fire("onChatStreamStart");
-		expect($(".typing")).toBeNull();
 		fire("onChatStreamChunk", "# Ti");
 		fire("onChatStreamChunk", "tle\n\nSome *text*");
 		expect($(".assistant_message h1")!.textContent).toBe("Title");
 		expect($(".assistant_message em")!.textContent).toBe("text");
 		expect($(".action_buttons_list")).toBeNull();
-		fire("onChatStreamEnd");
+		fire("onChatStreamEnd"); // end of the stream
+		fire("onChatStreamEnd"); // end of the turn (agentLoop.js always sends it)
 		expect($(".action_buttons_list")).not.toBeNull();
 		expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
 		expect(document.activeElement).toBe(input());
@@ -289,6 +289,75 @@ describe("sending and replies", () => {
 		reply("<img src=x onerror=alert(1)> <script>alert(1)</script>");
 		expect($$(".assistant_message img:not(.icon)")).toHaveLength(0);
 		expect($$(".assistant_message script")).toHaveLength(0);
+	});
+});
+
+describe("agent status line", () => {
+	const status = () => $(".agent_status");
+	const label = () => $(".agent_status_label")!.textContent;
+	const seconds = () => $(".agent_status_time")!.textContent;
+
+	test("shows the model while thinking and the tool while it runs, with ticking seconds", () => {
+		vi.useFakeTimers();
+		setup();
+		expect(status()).toBeNull();
+		submit("Read it");
+		fire("onAgentStatus", { model: "GPT Test" });
+		expect(label()).toBe("Thinking… (GPT Test)");
+		expect(seconds()).toBe("0 s");
+		act(() => { vi.advanceTimersByTime(3000); });
+		expect(seconds()).toBe("3 s");
+		fire("onToolCallStart", { type: "native", id: "c1", functionName: "readDocument", humanName: "Read Document", arguments: "{}" });
+		expect(label()).toBe("Read Document…");
+		fire("onToolCallEnd", { type: "native", id: "c1", functionName: "readDocument", arguments: "{}", result: { message: "ok" } });
+		expect(label()).toBe("Thinking… (GPT Test)");
+		// one Thinking indicator only (no typing bubble in the log)
+		expect(root.textContent!.match(/Thinking/g)).toHaveLength(1);
+		// the phase is announced, the seconds are not
+		expect($(".agent_status_label")!.getAttribute("aria-live")).toBe("polite");
+		expect($(".agent_status_time")!.getAttribute("aria-hidden")).toBe("true");
+		reply("Done");
+		expect(status()).toBeNull();
+	});
+
+	test("stays while text streamed before a tool call ends, clears when the turn ends", () => {
+		setup();
+		submit("Edit");
+		fire("onChatStreamStart");
+		fire("onChatStreamChunk", "Let me look.");
+		fire("onChatStreamEnd");
+		expect(status()).not.toBeNull();
+		expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
+		fire("onToolCallStart", { type: "native", id: "c1", functionName: "readDocument", humanName: "Read Document", arguments: "{}" });
+		expect(label()).toBe("Read Document…");
+		fire("onToolCallEnd", { type: "native", id: "c1", functionName: "readDocument", arguments: "{}", result: { message: "ok" } });
+		fire("onChatStreamEnd");
+		expect(status()).toBeNull();
+	});
+
+	test("clears on stop", () => {
+		setup();
+		submit("Go");
+		fire("onToolCallStart", { type: "native", id: "c1", functionName: "readDocument", humanName: "Read Document", arguments: "{}" });
+		fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+		expect(status()).toBeNull();
+		fire("onChatStreamEnd");
+		expect(status()).toBeNull();
+		submit("Again");
+		expect(label()).toBe("Thinking…");
+	});
+
+	test("clears on error", () => {
+		setup();
+		submit("Q");
+		reply("Error: [provider]");
+		expect(status()).toBeNull();
+	});
+
+	test("editor-initiated tool calls outside a turn show no status", () => {
+		setup();
+		fire("onToolCallStart", { type: "native", id: "e1", functionName: "readDocument", humanName: "Read Document", arguments: "{}" });
+		expect(status()).toBeNull();
 	});
 });
 

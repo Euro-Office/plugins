@@ -179,6 +179,9 @@
 		if (!window.EditorHelper)
 			window.EditorHelper = new EditorHelperImpl();
 
+		// The sidebar shows "Thinking… (model)" while the agent runs.
+		chatWindow.command("onAgentStatus", { model: requestEngine.modelUI.name });
+
 		let provider = AI.Storage.getProvider(requestEngine.modelUI.provider);
 		let isSupportTools = provider && provider.isSupportTools(requestEngine.model, requestEngine.modelUI);
 
@@ -269,23 +272,15 @@
 		while (iteration < AgentState.MAX_LOOP_ITERATIONS && !AgentState.isStopped) {
 			iteration++;
 
-			await Asc.Editor.callMethod("StartAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
-
-			let isSendedEndLongAction = false;
-			async function checkEndAction() {
-				if (!isSendedEndLongAction) {
-					await Asc.Editor.callMethod("EndAction", ["Block", "AI (" + requestEngine.modelUI.name + ")"]);
-					isSendedEndLongAction = true;
-				}
-			}
-
+			// No editor lock while the model works: the document stays editable
+			// and the sidebar shows the progress (onAgentStatus, tool events).
+			// Accepted risk: the per-turn accept/reject snapshot (aiEdits.js)
+			// may include tracked changes the user makes during the turn.
 			let isStreamToChat = false;
 			let fullResponse = await requestEngine.chatRequestAgent(requestData, false, async function(chunk) {
 				if (!isStreamToChat) {
 					isStreamToChat = true;
 					chatWindow.command("onChatStreamStart");
-
-					await checkEndAction();
 				}
 
 				chatWindow.command("onChatStreamChunk", chunk);
@@ -294,8 +289,6 @@
 			if (isStreamToChat) {
 				chatWindow.command("onChatStreamEnd");
 			}
-
-			await checkEndAction();
 
 			if (AgentState.isStopped)
 				break;

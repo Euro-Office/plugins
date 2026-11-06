@@ -288,14 +288,6 @@ describe("loop control", () => {
 		expect(agent.win.commands[agent.win.commands.length - 1][0]).toBe("onChatStreamEnd");
 	});
 
-	test("the editor is blocked during model calls and released afterwards", async () => {
-		const agent = await wordAgent();
-		agent.engine.queue.push({ tool_calls: [toolCall("c1", "readDocument", {})] }, { content: "ok" });
-		await agent.send("Hi");
-		const actions = agent.host.methodCalls().filter((c) => c.name === "StartAction" || c.name === "EndAction").map((c) => c.name + ":" + c.args[0]);
-		expect(actions).toEqual(["StartAction:Block", "EndAction:Block", "StartAction:Block", "EndAction:Block"]);
-	});
-
 	test("a missing provider response becomes an error reply", async () => {
 		const agent = await wordAgent();
 		agent.engine.queue.push({ raw: null });

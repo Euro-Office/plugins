@@ -45,11 +45,12 @@ The background plugin opens the sidebar in `scripts/engine/chatWindow.js` (`wind
 
 | Event | Payload | Sent by | Effect |
 |---|---|---|---|
-| `onChatStreamStart` | none | `agentLoop.js` | Hides the typing indicator, adds an empty answer that streams. |
+| `onAgentStatus` | `{ model }` | `agentLoop.js` (turn start) | Model name for the status line above the input ("Thinking… (model)", the running tool's name, elapsed seconds) shown while the agent runs. |
+| `onChatStreamStart` | none | `agentLoop.js` | Adds an empty answer that streams. |
 | `onChatStreamChunk` | `string` | `agentLoop.js` | Appends to the streaming answer (ignored after Stop). |
-| `onChatStreamEnd` | none | `agentLoop.js` (once per streamed request and once at the end of a turn) | Ends streaming and the turn: adds "Operation was interrupted." if stopped after a tool call, clears chat approvals (keeps editor ones), re-enables input and chips. |
+| `onChatStreamEnd` | none | `agentLoop.js` (once per streamed request and once at the end of a turn) | Ends streaming. The turn ends with the last one (not right after a stream): adds "Operation was interrupted." if stopped after a tool call, clears chat approvals (keeps editor ones), re-enables input and chips. |
 | `onChatReply` | `string` | `agentLoop.js` (non-streamed reply, "Maximum iterations reached...", `"Error: [provider]"` when the request failed) | Adds the answer; an empty reply becomes the "Something went wrong" error item. Dropped after Stop. |
-| `onToolCallStart` | `{ type: "native", id, functionName, humanName, arguments, source? }` or `{ type: "system_prompt", id, call }` | `agentLoop.js`, `toolApproval.js` (editor calls) | Adds a tool call card, or a call to the previous card for the same tool. |
+| `onToolCallStart` | `{ type: "native", id, functionName, humanName, arguments, source? }` or `{ type: "system_prompt", id, call }` | `agentLoop.js`, `toolApproval.js` (editor calls) | Adds a tool call card, or a call to the previous card for the same tool. During a turn the status line shows its `humanName` until `onToolCallEnd`. |
 | `onToolCallEnd` | same plus `result` (`{message}`, `{error}`, object or string) | same | Sets the result, removes the approval prompts of that call. |
 | `onToolCall` | start and result in one (deprecated) | older plugins | Adds a finished call. |
 | `onToolApprovalRequest` | `{ id, toolCallId, functionName, humanName, arguments, source: "chat"\|"editor", code?, preview? }` | `toolApproval.js` | Approval card on the tool call card (creates one if needed): question, editor-request label, preview (`items`, `text`, `table`, `note` from `toolPreviews.js`, text only), macro code for `writeMacro`, arguments. Takes focus. |

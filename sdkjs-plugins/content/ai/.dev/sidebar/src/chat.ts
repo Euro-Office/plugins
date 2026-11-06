@@ -82,6 +82,11 @@ export interface State {
 	running: boolean;
 	stopped: boolean;
 	typing: boolean;
+	// Status line while the agent runs: model name (onAgentStatus), the
+	// running tool's human name and when the turn started (Date.now()).
+	agentModel: string;
+	activeTool: string | null;
+	turnStart: number;
 	streamingIndex: number | null;
 	approvals: Record<string, Approval>;
 	chips: Chips | null;
@@ -110,6 +115,7 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 	const state: State = {
 		items: [], input: "", attachedText: "",
 		running: false, stopped: false, typing: false, streamingIndex: null,
+		agentModel: "", activeTool: null, turnStart: 0,
 		approvals: {},
 		chips: null, chipsDismissedKey: null, chipsBusy: false,
 		voiceSupported: false, recording: false,
@@ -235,6 +241,8 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 		state.typing = true;
 		state.running = true;
 		state.stopped = false;
+		state.activeTool = null;
+		state.turnStart = Date.now();
 		setChipsBusy(true);
 
 		// Rebuild the request history (scripts/helpers/agentHistory.js): turns
@@ -253,6 +261,7 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 		state.typing = false;
 		state.running = false;
 		state.stopped = false;
+		state.activeTool = null;
 		setChipsBusy(false);
 		state.focusInput++;
 	}
@@ -415,7 +424,12 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 		},
 
 		onChatStreamEnd() {
+			let endsStream = state.streamingIndex !== null;
 			state.streamingIndex = null;
+			// Text streamed before tool calls ends its stream, not the turn:
+			// agentLoop.js always sends a last onChatStreamEnd when the turn ends.
+			if (endsStream && !state.stopped)
+				return;
 			if (state.stopped) {
 				let last = state.items[state.items.length - 1];
 				if (last && last.isToolCall)
@@ -470,10 +484,17 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 			}
 		},
 
+		onAgentStatus(data) {
+			if (data && data.model)
+				state.agentModel = String(data.model);
+		},
+
 		onToolCallStart(data) {
 			if (!data)
 				return;
 			let { name, args } = parseCall(data);
+			if (state.running)
+				state.activeTool = data.humanName || name;
 			let index = addToolCall({ functionName: name, humanName: data.humanName || name, arguments: args, result: null });
 			if (data.id)
 				toolCallIndices[data.id] = index;
@@ -483,6 +504,7 @@ export function createChat(plugin: PluginApi, storage: Storage = window.localSto
 			if (!data)
 				return;
 			let result = parseResult(data);
+			state.activeTool = null;
 			if (data.id)
 				clearApprovals(data.id);
 			if (data.id && toolCallIndices[data.id] !== undefined) {
