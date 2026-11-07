@@ -1,3 +1,4 @@
+# Modified by Euro-Office contributors
 name: Pack Plugins and Create Release
 
 on:
@@ -46,6 +47,11 @@ jobs:
       with:
         python-version: '3.x'
     
+    - name: Fetch plugins from their own repositories
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: scripts/fetch-external.sh
+
     - name: Pack plugins
       run: |
         python packer/pack.py
