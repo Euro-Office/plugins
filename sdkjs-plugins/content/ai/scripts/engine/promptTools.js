@@ -52,7 +52,7 @@
 	const CALL_PREFIX = "[functionCalling";
 
 	function isToolCall(content) {
-		return typeof content === "string" && content.startsWith(CALL_PREFIX);
+		return typeof content === "string" && content.trimStart().startsWith(CALL_PREFIX);
 	}
 
 	function newCallId() {

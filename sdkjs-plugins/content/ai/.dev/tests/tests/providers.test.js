@@ -202,6 +202,17 @@ describe("engine: agent requests", () => {
 		expect(chunks).toEqual([]);
 	});
 
+	test("prompt-based calls after leading whitespace are buffered too", async () => {
+		const p = loadProvider("openai");
+		const text = "\n\n[functionCalling (readDocument)]: {\"startIndex\": 1}";
+		const events = splitEvery(text, 5).map((t) => ({ data: { choices: [{ delta: { content: t } }] } }));
+		responder = () => streamResponse([sse(events)]);
+		const chunks = [];
+		const res = await agentRequest(p, "gpt-4o", { messages: [{ role: "user", content: "hi" }] }, async (c) => chunks.push(c));
+		expect(res.content).toBe(text);
+		expect(chunks).toEqual([]);
+	});
+
 	test("Anthropic streaming: tool_use blocks are assembled from input_json_delta events", async () => {
 		const p = loadProvider("anthropic");
 		const events = [
