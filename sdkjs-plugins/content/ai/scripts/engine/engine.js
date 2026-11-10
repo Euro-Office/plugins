@@ -960,7 +960,7 @@ function fetchExternal(url, options, isStreaming) {
 						let testAllContent = allContent.trimStart();
 
 						if (testAllContent.length >= testFuncCalling.length) {
-							if (!allContent.startsWith(testFuncCalling)) {
+							if (!testAllContent.startsWith(testFuncCalling)) {
 								isSimpleStream = true;
 								functionBuffer = "";
 								await streamFunc(allContent);

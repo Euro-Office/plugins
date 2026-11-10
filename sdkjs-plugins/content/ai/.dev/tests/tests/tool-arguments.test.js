@@ -187,6 +187,7 @@ describe("AIPromptTools.toToolCalls", () => {
 		expect(bad.function).toEqual({ name: "readDocument", arguments: "" });
 		expect(bad.argumentsError).toMatch(/not valid JSON/);
 		expect(PT.isToolCall("[functionCalling (x)]: {}")).toBe(true);
-		expect(PT.isToolCall(" [functionCalling (x)]: {}")).toBe(false);
+		expect(PT.isToolCall("\n [functionCalling (x)]: {}")).toBe(true);
+		expect(PT.isToolCall("Sure: [functionCalling (x)]: {}")).toBe(false);
 	});
 });

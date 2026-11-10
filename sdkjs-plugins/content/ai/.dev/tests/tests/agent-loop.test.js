@@ -361,6 +361,15 @@ describe("prompt-based tool calling (models without native tools)", () => {
 		expect(agent.win.sent("onChatReply")).toEqual(["You selected Hello."]);
 	});
 
+	test("a call after leading whitespace still runs", async () => {
+		const agent = await wordAgent({ supportsTools: false });
+		agent.engine.queue.push({ content: "\n\n[functionCalling (getSelection)]: {}" }, { content: "You selected Hello." });
+		await agent.send("What did I select?");
+
+		expect(transcript(agent)[1].content).toMatch(/^SYSTEM: Function executed successfully/);
+		expect(agent.win.sent("onChatReply")).toEqual(["You selected Hello."]);
+	});
+
 	test("editing calls need approval; a refusal is reported", async () => {
 		const agent = await wordAgent({ supportsTools: false });
 		agent.decide = "deny";
