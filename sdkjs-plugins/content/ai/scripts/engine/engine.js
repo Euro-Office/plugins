@@ -128,6 +128,25 @@ function fetchExternal(url, options, isStreaming) {
 
 (function(window, undefined)
 {
+	// The server keeps the provider keys: requests go to its /ai-proxy, which adds them.
+	function toProxyRequest(url, request) {
+		let proxyRequest = {
+			"method" : request.method,
+			"body" : JSON.stringify({
+				"target" : url,
+				"method" : request.method,
+				"headers" : request.headers,
+				"data" : request.body
+			})
+		};
+		if (!AI.serverSettings)
+			return [AI.PROXY_URL, proxyRequest];
+		proxyRequest["headers"] = {
+			"Authorization" : "Bearer " + Asc.plugin.info.jwt,
+		};
+		return [AI.serverSettings.proxy, proxyRequest];
+	}
+
 	async function requestWrapper(message) {
 		return new Promise(function (resolve, reject) {
 			if (AI.isLocalDesktopForNotStreamedRequests && (AI.isLocalUrl(message.url) || message.isUseProxy)) {
@@ -154,25 +173,8 @@ function fetchExternal(url, options, isStreaming) {
 				if (request.method != "GET") {
 					request.body = message.isBlob ? message.body : (message.body ? JSON.stringify(message.body) : "");
 
-					if (message.isUseProxy) {
-						request = {
-							"method" : request.method,
-							"body" : JSON.stringify({
-								"target" : message.url,
-								"method" : request.method,
-								"headers" : request.headers,
-								"data" : request.body
-							})
-						}
-						if (AI.serverSettings){
-							requestUrl = AI.serverSettings.proxy;
-							request["headers"] = {
-								"Authorization" : "Bearer " + Asc.plugin.info.jwt,
-							}
-						} else {
-							requestUrl = AI.PROXY_URL;
-						}
-					}
+					if (message.isUseProxy)
+						[requestUrl, request] = toProxyRequest(message.url, request);
 				}
 				
 				try {
@@ -261,7 +263,6 @@ function fetchExternal(url, options, isStreaming) {
 		}
 
 		let abortController = new AbortController();
-		let requestUrl = message.url;
 
 		let request = {
 			method: message.method,
@@ -273,19 +274,12 @@ function fetchExternal(url, options, isStreaming) {
 			request.body = message.isBlob
 				? message.body
 				: (message.body ? JSON.stringify(message.body) : "");
+		}
 
-			if (message.isUseProxy && AI.serverSettings) {
-				requestUrl = AI.serverSettings.proxy;
-				request.body = JSON.stringify({
-					"target" : message.url,
-					"method" : request.method,
-					"headers" : request.headers,
-					"data" : request.body
-				});
-				request.headers = {
-					"Authorization" : "Bearer " + Asc.plugin.info.jwt
-				};
-			}
+		let requestUrl = message.url;
+		if (message.isUseProxy && request.method !== "GET") {
+			[requestUrl, request] = toProxyRequest(message.url, request);
+			request.signal = abortController.signal;
 		}
 
 		try {
@@ -801,7 +795,9 @@ function fetchExternal(url, options, isStreaming) {
 		let options = { streaming: isStreaming };
 
 		objRequest.url = AI._getEndpointUrl(provider, AI.Endpoints.Types.v1.Chat_Completions, this.model, options);
-		objRequest.body = provider.getChatCompletions({ messages : content.messages }, this.model);
+		// Providers may rewrite the list (e.g. Anthropic removes the system
+		// message); the agent reuses content.messages for the next iteration.
+		objRequest.body = provider.getChatCompletions({ messages : content.messages.slice() }, this.model);
 
 		if (content.tools) {
 			provider.addTools(objRequest.body, content.tools);
