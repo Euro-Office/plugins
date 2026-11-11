@@ -36,6 +36,13 @@
 	// Sent with every request.
 	const ALWAYS = ["core", "macro"];
 
+	// Also sent with every request in that editor. Almost every slide edit
+	// adds shapes, tables or charts, and requests rarely name them ("a box
+	// with an arrow"); without these tools models fall back to writeMacro.
+	const ALWAYS_FOR_EDITOR = {
+		"slide": ["charts-visuals"]
+	};
+
 	// Used when the message is very short or no keyword matched, so ordinary
 	// requests work without a loadTools round trip.
 	const DEFAULTS = {
@@ -170,7 +177,7 @@
 		let fromContext = categoriesFromContext(context, editorType);
 		let fallback = matched.length === 0 || countWords(text) < MIN_WORDS_FOR_INFERENCE;
 
-		let categories = ALWAYS.concat(matched, fromContext);
+		let categories = ALWAYS.concat(ALWAYS_FOR_EDITOR[editorType] || [], matched, fromContext);
 		if (fallback)
 			categories = categories.concat(DEFAULTS[editorType] || []);
 		return { categories: unique(categories), matched: matched, fallback: fallback };

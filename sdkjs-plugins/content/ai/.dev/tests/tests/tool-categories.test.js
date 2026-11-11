@@ -84,6 +84,15 @@ test("categories are limited to what the editor has", () => {
 	assert.ok(!cats.includes("data"));
 });
 
+test("slides always get the shape, chart and table tools", () => {
+	const s = loadEditor("slide").EditorHelper;
+	const cats = s.selectCategories({ text: "Add a new slide with a box and an arrow" });
+	assert.ok(cats.includes("charts-visuals"));
+	assert.ok(names(s.getTools(cats)).includes("addShapeToSlide"));
+	const w = loadEditor("word").EditorHelper;
+	assert.ok(!w.selectCategories({ text: "Make the heading bold and blue" }).includes("charts-visuals"));
+});
+
 test("short or unmatched messages fall back to the editor default set", () => {
 	const h = loadEditor("word").EditorHelper;
 	for (const t of ["", "hi", "do it", "Please help me with this thing"]) {
@@ -159,7 +168,12 @@ test("tools payload is smaller for typical prompts", () => {
 		const all = h.getTools();
 		for (const p of prompts[ed]) {
 			const sel = h.getTools(h.selectCategories({ text: p }));
-			assert.ok(Buffer.byteLength(wire(sel)) < Buffer.byteLength(wire(all)), ed + ": " + p);
+			// Slides always get the large charts-visuals group, so a request may
+			// select every slide tool (plus loadTools), but never more.
+			if (ed === "slide")
+				assert.ok(Buffer.byteLength(wire(sel.filter((t) => t.name !== "loadTools"))) <= Buffer.byteLength(wire(all)), ed + ": " + p);
+			else
+				assert.ok(Buffer.byteLength(wire(sel)) < Buffer.byteLength(wire(all)), ed + ": " + p);
 			rows.push([ed, p, all.length + "→" + sel.length, Buffer.byteLength(wire(all)) + "→" + Buffer.byteLength(wire(sel))]);
 		}
 	}
