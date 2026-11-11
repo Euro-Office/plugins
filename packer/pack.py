@@ -5,9 +5,9 @@ Plugin Packer - Utility for packaging plugins with configurable exclusions
 
 import os
 import shutil
+import sys
 import json
 import time
-import re
 from pathlib import Path
 from fnmatch import fnmatch
 import argparse
@@ -19,8 +19,10 @@ class PluginPacker:
     DEFAULT_EXCLUDES = ['deploy/*', 'node_modules/*', '.dev/*']
     MAX_RETRIES = 3
     RETRY_DELAY = 1
-    OLD_PATH_PATTERN = r'https://onlyoffice\.github\.io/sdkjs-plugins/v1/[\w\-\./\*]*'
-    NEW_PATH = './../v1/'
+    # installed plugins live in sdkjs-plugins/<name>/ next to the v1/ helpers, same rewrite as scripts/bundle.sh
+    HELPER_URL = 'https://onlyoffice.github.io/sdkjs-plugins/'
+    # zotero is AGPL with Section 7 terms we do not accept for redistribution
+    SKIP = {'zotero'}
     
     def __init__(self, old_mode=False):
         self.old_mode = old_mode
@@ -37,13 +39,14 @@ class PluginPacker:
         )
         return parser.parse_args()
 
-    def replace_html_paths(self, file_path):
+    def replace_html_paths(self, file_path, plugin_dir):
         """Replace paths in HTML files before packing"""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            new_content = re.sub(self.OLD_PATH_PATTERN, lambda match: self.NEW_PATH + match.group(0).split('/v1/')[1], content)
+            depth = os.path.relpath(file_path, plugin_dir).replace('\\', '/').count('/')
+            new_content = content.replace(self.HELPER_URL, '../' * (depth + 1))
             
             # If changes were made, write back to file
             if new_content != content:
@@ -63,7 +66,7 @@ class PluginPacker:
             for file in files:
                 if file.lower().endswith('.html'):
                     file_path = os.path.join(root, file)
-                    if self.replace_html_paths(file_path):
+                    if self.replace_html_paths(file_path, directory):
                         html_files_processed += 1
         return html_files_processed
 
@@ -212,26 +215,32 @@ class PluginPacker:
         """Main packing method"""
         if not os.path.exists(self.content_dir):
             print(f"Content directory {self.content_dir} does not exist")
-            return
-        
+            return ["<content dir>"]
+
         os.makedirs(self.artifacts_dir, exist_ok=True)
-        
+        failed = []
+
         for plugin_name in os.listdir(self.content_dir):
             plugin_path = os.path.join(self.content_dir, plugin_name)
-            
-            if not os.path.isdir(plugin_path):
+
+            if not os.path.isdir(plugin_path) or plugin_name in self.SKIP:
                 continue
-            
+
             if self.old_mode:
-                self.pack_plugin_old_mode(plugin_path, plugin_name)
+                ok = self.pack_plugin_old_mode(plugin_path, plugin_name)
             else:
-                self.pack_plugin_new_mode(plugin_path, plugin_name)
+                ok = self.pack_plugin_new_mode(plugin_path, plugin_name)
+            if not ok:
+                failed.append(plugin_name)
+        return failed
 
     def run(self):
         """Run the plugin packer"""
         args = self.parse_arguments()
         self.old_mode = args.old_mode
-        self.pack_plugins()
+        failed = self.pack_plugins()
+        if failed:
+            sys.exit(f"Failed to pack: {', '.join(failed)}")
 
 
 def main():

@@ -1,4 +1,5 @@
 var blackTheme = {
+    'common.bi.image': 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
     'common.bisize.width': '251px',
     'common.bisize.height': '21px',
     'common.backgroundImage': 'none',
