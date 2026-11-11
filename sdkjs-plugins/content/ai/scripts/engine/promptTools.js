@@ -36,6 +36,8 @@
 // FORMAT") to answer with one call per reply:
 //     [functionCalling (toolName)]: {JSON arguments}
 // and gets the result back as a user message starting with "SYSTEM: ".
+// Some models write a sentence first and the call on a later line; the call
+// counts wherever a line starts with it, and the text before it is a reply.
 //
 // This adapter lets the agent loop (agentLoop.js) handle these calls on the
 // same path as native ones:
@@ -50,9 +52,35 @@
 (function(window, undefined)
 {
 	const CALL_PREFIX = "[functionCalling";
+	const CALL_LINE_RE = /(^|\n)[ \t\r]*\[functionCalling/;
+	const NEXT_CALL_LINE_RE = /\n[ \t\r]*\[functionCalling/;
+
+	// Index of the line holding the call, or -1.
+	function findCall(content) {
+		if (typeof content !== "string")
+			return -1;
+		let match = CALL_LINE_RE.exec(content);
+		return match ? match.index + match[1].length : -1;
+	}
+
+	// How much of a partial streamed reply can be shown: everything except a
+	// call and a last line that may still turn into one.
+	function streamableLength(content) {
+		let callStart = findCall(content);
+		if (callStart !== -1)
+			return callStart;
+		let lastLine = content.lastIndexOf("\n") + 1;
+		return CALL_PREFIX.startsWith(content.substring(lastLine).trimStart()) ? lastLine : content.length;
+	}
 
 	function isToolCall(content) {
-		return typeof content === "string" && content.trimStart().startsWith(CALL_PREFIX);
+		return findCall(content) !== -1;
+	}
+
+	// The text before the call, shown as a normal reply.
+	function textBeforeCall(content) {
+		let callStart = findCall(content);
+		return callStart > 0 ? content.substring(0, callStart).trim() : "";
 	}
 
 	function newCallId() {
@@ -61,7 +89,12 @@
 
 	// content: the model reply (isToolCall(content) is true).
 	function toToolCalls(content) {
-		let parsed = window.EditorHelper.parseFuncCall(content);
+		// One call per reply: a second call is left out, not shown as part of the first.
+		let callText = content.substring(findCall(content));
+		let next = NEXT_CALL_LINE_RE.exec(callText);
+		if (next)
+			callText = callText.substring(0, next.index);
+		let parsed = window.EditorHelper.parseFuncCall(callText);
 		let call = {
 			id: newCallId(),
 			type: "function",
@@ -69,7 +102,7 @@
 				name: parsed.funcName || "",
 				arguments: parsed.error ? "" : JSON.stringify(parsed.args || {})
 			},
-			promptCall: content
+			promptCall: callText
 		};
 		if (parsed.error)
 			call.argumentsError = parsed.error;
@@ -112,11 +145,13 @@
 	}
 
 	window.AIPromptTools = {
-		isToolCall    : isToolCall,
-		toToolCalls   : toToolCalls,
-		callMessages  : callMessages,
-		resultMessage : resultMessage,
-		toolCallEvent : toolCallEvent
+		isToolCall       : isToolCall,
+		streamableLength : streamableLength,
+		textBeforeCall   : textBeforeCall,
+		toToolCalls      : toToolCalls,
+		callMessages     : callMessages,
+		resultMessage    : resultMessage,
+		toolCallEvent    : toolCallEvent
 	};
 
 })(window);

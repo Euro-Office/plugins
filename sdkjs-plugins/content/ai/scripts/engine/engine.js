@@ -863,9 +863,11 @@ function fetchExternal(url, options, isStreaming) {
 			let allContent = "";
 			let tail = "";
 			let isSimpleStream = content.tools ? true : false;
-			
+
+			// Without native tools a reply may hold a prompt-based call
+			// (promptTools.js): stream the text before it, never the call.
 			let isBufferingFunction = false;
-			let functionBuffer = "";
+			let streamedLength = 0;
 
 			let allTools = Object.create(null);
 
@@ -953,34 +955,20 @@ function fetchExternal(url, options, isStreaming) {
 					allContent += chunkContent;
 					if (isSimpleStream) {
 						await streamFunc(chunkContent);
-					} else if (isBufferingFunction) {
-						functionBuffer += chunkContent;
-					} else {
-						let testFuncCalling = "[functionCalling";
-						let testAllContent = allContent.trimStart();
-
-						if (testAllContent.length >= testFuncCalling.length) {
-							if (!testAllContent.startsWith(testFuncCalling)) {
-								isSimpleStream = true;
-								functionBuffer = "";
-								await streamFunc(allContent);
-							} else {
-								isBufferingFunction = true;
-								functionBuffer = testAllContent;
-							}
-						} else if (testFuncCalling.startsWith(testAllContent)) {
-							functionBuffer = testAllContent;
-						} else {
-							isSimpleStream = true;
-							functionBuffer = "";
-							await streamFunc(allContent);
+					} else if (!isBufferingFunction) {
+						isBufferingFunction = window.AIPromptTools.isToolCall(allContent);
+						let streamable = window.AIPromptTools.streamableLength(allContent);
+						if (streamable > streamedLength && allContent.substring(0, streamable).trim()) {
+							await streamFunc(allContent.substring(streamedLength, streamable));
+							streamedLength = streamable;
 						}
 					}
-				}				
+				}
 			}
 
-			if (!window.AgentState.isStopped && !isBufferingFunction && functionBuffer.length > 0) {
-				await streamFunc(allContent);
+			if (!window.AgentState.isStopped && !isSimpleStream && !isBufferingFunction &&
+				streamedLength < allContent.length && allContent.trim()) {
+				await streamFunc(allContent.substring(streamedLength));
 			}
 
 			let finalToolCalls = null;

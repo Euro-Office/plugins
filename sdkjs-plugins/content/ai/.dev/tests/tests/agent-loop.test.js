@@ -370,6 +370,17 @@ describe("prompt-based tool calling (models without native tools)", () => {
 		expect(agent.win.sent("onChatReply")).toEqual(["You selected Hello."]);
 	});
 
+	test("a call after some text runs and the text is shown as a reply", async () => {
+		const agent = await wordAgent({ supportsTools: false });
+		agent.engine.queue.push({ content: "Let me check.\n[functionCalling (getSelection)]: {}" }, { content: "You selected Hello." });
+		await agent.send("What did I select?");
+
+		expect(transcript(agent)[1].content).toMatch(/^SYSTEM: Function executed successfully/);
+		expect(agent.win.sent("onChatStreamChunk")).toEqual(["Let me check."]);
+		expect(agent.win.sent("onToolCallStart")[0].call).toBe("[functionCalling (getSelection)]: {}");
+		expect(agent.win.sent("onChatReply")).toEqual(["You selected Hello."]);
+	});
+
 	test("editing calls need approval; a refusal is reported", async () => {
 		const agent = await wordAgent({ supportsTools: false });
 		agent.decide = "deny";

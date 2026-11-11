@@ -185,6 +185,8 @@ test("prompt-based transcripts pass through and are summarized when old", () => 
 	const recent = H.build([user("q", pt), reply("ok")]);
 	assert.deepStrictEqual(recent.map((m) => m.role), ["user", "assistant", "user", "assistant"]);
 	assert.strictEqual(H.summarize(pt.messages), "[Tools used in this step (details omitted): readRange]");
+	const afterText = [{ role: "assistant", content: "Reading it.\n[functionCalling (readRange)]: {}" }];
+	assert.strictEqual(H.summarize(afterText), "[Tools used in this step (details omitted): readRange]");
 });
 
 test("compactTranscript drops unknown shapes and extra fields", () => {
