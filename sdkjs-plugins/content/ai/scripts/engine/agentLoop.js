@@ -343,6 +343,12 @@
 			if (!toolCalls && window.AIPromptTools.isToolCall(result)) {
 				protocol = window.AIPromptTools;
 				toolCalls = protocol.toToolCalls(result);
+				let textBefore = protocol.textBeforeCall(result);
+				if (textBefore && !isStreamToChat) {
+					chatWindow.command("onChatStreamStart");
+					chatWindow.command("onChatStreamChunk", textBefore);
+					chatWindow.command("onChatStreamEnd");
+				}
 			}
 
 			if (toolCalls && toolCalls.length > 0) {

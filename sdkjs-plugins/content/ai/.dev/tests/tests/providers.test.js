@@ -53,7 +53,7 @@ beforeEach(() => {
 		},
 		Response, ReadableStream
 	});
-	sb.load("scripts/engine/providers/base.js", "scripts/engine/providers/provider.js", "scripts/engine/engine.js");
+	sb.load("scripts/engine/providers/base.js", "scripts/engine/providers/provider.js", "scripts/engine/engine.js", "scripts/engine/promptTools.js");
 	sb.ctx.AgentState = { isStopped: false };
 });
 
@@ -200,6 +200,27 @@ describe("engine: agent requests", () => {
 		const res = await agentRequest(p, "gpt-4o", { messages: [{ role: "user", content: "hi" }] }, async (c) => chunks.push(c));
 		expect(res.content).toBe(text);
 		expect(chunks).toEqual([]);
+	});
+
+	test("text before a prompt-based call on a later line is streamed, the call is not", async () => {
+		const p = loadProvider("openai");
+		const text = "I'll add the slide now.\n[functionCalling (addNewSlide)]: {}";
+		const events = splitEvery(text, 3).map((t) => ({ data: { choices: [{ delta: { content: t } }] } }));
+		responder = () => streamResponse([sse(events)]);
+		const chunks = [];
+		const res = await agentRequest(p, "gpt-4o", { messages: [{ role: "user", content: "hi" }] }, async (c) => chunks.push(c));
+		expect(res.content).toBe(text);
+		expect(chunks.join("")).toBe("I'll add the slide now.\n");
+	});
+
+	test("a call marker in the middle of a line is plain text", async () => {
+		const p = loadProvider("openai");
+		const text = "Use [functionCalling (x)] only on its own line.";
+		const events = splitEvery(text, 4).map((t) => ({ data: { choices: [{ delta: { content: t } }] } }));
+		responder = () => streamResponse([sse(events)]);
+		const chunks = [];
+		await agentRequest(p, "gpt-4o", { messages: [{ role: "user", content: "hi" }] }, async (c) => chunks.push(c));
+		expect(chunks.join("")).toBe(text);
 	});
 
 	test("prompt-based calls after leading whitespace are buffered too", async () => {
