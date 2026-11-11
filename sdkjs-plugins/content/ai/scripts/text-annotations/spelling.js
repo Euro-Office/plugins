@@ -218,6 +218,8 @@ SpellChecker.prototype.onAccept = async function(paraId, rangeId)
 	await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
 	await Asc.Editor.callMethod("SelectAnnotationRange", [range]);
 	
+	// Not marked as AI-generated: assistive edit, see "spellingAnnotation" in
+	// AIProvenance.EXEMPT_ACTIONS (scripts/helpers/aiProvenance.js).
 	Asc.scope.text = anot["suggested"];
 	await Asc.Editor.callCommand(function(){
 		Api.ReplaceTextSmart([Asc.scope.text]);
