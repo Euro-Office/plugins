@@ -19,9 +19,9 @@ const EDITORS = ["word", "cell", "slide"];
 // Adding a tool here is a security decision: it must not change the document
 // (moving the selection/view is fine).
 const READ_ONLY = {
-	word: ["getSelection", "loadTools", "readDocument", "selectText"],
-	cell: ["getWorkbookInfo", "loadTools", "readRange", "selectRange"],
-	slide: ["goToSlide", "loadTools", "readPresentation"]
+	word: ["findAIContent", "findText", "getComments", "getSelection", "getTrackedChanges", "loadTools", "readDocument", "readOutline", "selectText"],
+	cell: ["findFormulaErrors", "findInSheet", "getComments", "getWorkbookInfo", "loadTools", "readRange", "selectRange"],
+	slide: ["findInPresentation", "getSpeakerNotes", "goToSlide", "loadTools", "readPresentation"]
 };
 
 // Tools that every editor must provide (the agent prompt relies on them).

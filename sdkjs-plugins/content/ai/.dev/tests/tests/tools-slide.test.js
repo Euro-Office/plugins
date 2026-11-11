@@ -67,7 +67,66 @@ describe("replaceSelection (slide)", () => {
 	});
 });
 
-describe("navigation", () => {
+describe("findInPresentation", () => {
+	test("searches shapes and notes", async () => {
+		const r = await slide(DECK).call("findInPresentation", { query: "budget" });
+		expect(r.totalMatches).toBe(3);
+		expect(r.matches).toEqual([
+			{ slideNumber: 1, shapeIndex: 2, where: "shape", snippet: "Agenda Budget review" },
+			{ slideNumber: 2, shapeIndex: 1, where: "shape", snippet: "Budget 2026" },
+			{ slideNumber: 3, shapeIndex: null, where: "notes", snippet: "Mention the budget again" }
+		]);
+	});
+
+	test("matchCase, includeNotes and maxResults", async () => {
+		const env = slide(DECK);
+		expect((await env.call("findInPresentation", { query: "budget", matchCase: true })).totalMatches).toBe(1);
+		expect((await env.call("findInPresentation", { query: "budget", includeNotes: false })).totalMatches).toBe(2);
+		expect(await env.call("findInPresentation", { query: "budget", maxResults: 1 })).toMatchObject({ totalMatches: 3, returned: 1, truncated: true });
+		await expectToolError(env.call("findInPresentation", { query: "" }), /"query"/);
+	});
+});
+
+describe("speaker notes", () => {
+	test("getSpeakerNotes for all slides or one", async () => {
+		const env = slide(DECK);
+		expect(await env.call("getSpeakerNotes")).toEqual({
+			totalSlides: 3,
+			slides: [
+				{ slideNumber: 1, notes: "Say hello\nIntroduce team" },
+				{ slideNumber: 2, notes: "" },
+				{ slideNumber: 3, notes: "Mention the budget again" }
+			]
+		});
+		expect((await env.call("getSpeakerNotes", { slideNumber: 3 })).slides).toHaveLength(1);
+		await expectToolError(env.call("getSpeakerNotes", { slideNumber: 9 }), /Slide 9 does not exist/);
+	});
+
+	test("setSpeakerNotes replaces notes of the current slide", async () => {
+		const env = slide(DECK);
+		const r = await env.call("setSpeakerNotes", { text: "Line 1\r\nLine 2" });
+		expect(r).toEqual({ slideNumber: 2, mode: "replace", notes: "Line 1\r\nLine 2" });
+		expect(env.host.methodCalls().map((c) => c.name)).toEqual(["StartAction", "EndAction"]);
+	});
+
+	test("setSpeakerNotes appends to existing or empty notes", async () => {
+		const env = slide(DECK);
+		const r = await env.call("setSpeakerNotes", { slideNumber: 1, text: "Thank sponsors", mode: "append" });
+		expect(r.notes).toBe("Say hello\r\nIntroduce team\r\nThank sponsors");
+		const empty = await env.call("setSpeakerNotes", { slideNumber: 2, text: "First note", mode: "append" });
+		expect(empty.notes).toBe("First note");
+	});
+
+	test("setSpeakerNotes validation", async () => {
+		const env = slide(DECK);
+		await expectToolError(env.call("setSpeakerNotes", { slideNumber: 5, text: "x" }), /Slide 5 does not exist/);
+		await expectToolError(env.call("setSpeakerNotes", {}), /"text" must be a string/);
+		await expectToolError(env.call("setSpeakerNotes", { text: "x", mode: "prepend" }), /"mode" must be "replace" or "append"/);
+		expect(env.host.methodCalls("EndAction")).toHaveLength(1);
+	});
+});
+
+describe("navigation and order", () => {
 	test("goToSlide calls the GoToSlide plugin method", async () => {
 		const env = slide(DECK);
 		expect(await env.call("goToSlide", { slideNumber: 3 })).toEqual({ slideNumber: 3, totalSlides: 3 });
@@ -76,4 +135,12 @@ describe("navigation", () => {
 		await expectToolError(env.call("goToSlide", {}), /"slideNumber"/);
 	});
 
+	test("moveSlide reorders slides", async () => {
+		const env = slide(DECK);
+		expect(await env.call("moveSlide", { from: 1, to: 3 })).toEqual({ from: 1, to: 3, totalSlides: 3 });
+		expect(env.pres.slides.map((s) => s.drawings[0].content.text())).toEqual(["Budget 2026", "Thanks", "Welcome"]);
+		expect((await env.call("moveSlide", { from: 2, to: 2 })).note).toMatch(/already at that position/);
+		await expectToolError(env.call("moveSlide", { from: 1, to: 4 }), /between 1 and 3/);
+		await expectToolError(env.call("moveSlide", { from: 0, to: 1 }), /"from"/);
+	});
 });

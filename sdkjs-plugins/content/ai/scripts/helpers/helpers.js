@@ -616,6 +616,261 @@ HELPERS.word.push((function(){
 })());
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
+		"name": "findAIContent",
+		"category": "comments-review",
+		"readOnly": true,
+		"description": "Lists the parts of the text document that were marked as AI-generated (content controls tagged 'ai-generated', added when AI text is inserted) together with the document-level AI provenance properties (AIGenerated, AIGeneratedModels, AIGeneratedLastUpdate). For each marked part returns its 1-based number in document order, kind (inline/block), the 1-based index of the top-level element that contains it (same numbering as readDocument; omitted when it is nested in a table or another container), the model and date, the character count and a text snippet. Use it to answer questions like 'What in this document was written by AI?'. Text that was edited by the user afterwards stays inside the mark.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of marked parts to return (1-200).",
+					"default": 50
+				},
+				"maxChars": {
+					"type": "number",
+					"description": "Truncate each snippet to this many characters (20-2000).",
+					"default": 200
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What in this document was AI-generated?",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let max = params.maxResults === undefined || params.maxResults === null ? 50 : params.maxResults;
+		let maxChars = params.maxChars === undefined || params.maxChars === null ? 200 : params.maxChars;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+		if (typeof maxChars !== 'number' || maxChars < 1)
+			throw new window.AgentState.ToolError('Parameter "maxChars" must be a number >= 1. Got: ' + JSON.stringify(params.maxChars));
+
+		Asc.scope.findAIParams = {
+			tag: window.AIProvenance ? window.AIProvenance.TAG : "ai-generated",
+			max: Math.min(200, Math.floor(max)),
+			maxChars: Math.max(20, Math.min(2000, Math.floor(maxChars)))
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.findAIParams;
+			let doc = Api.GetDocument();
+
+			let fileLevel = null;
+			if (typeof doc.GetCustomProperties === "function") {
+				let props = doc.GetCustomProperties();
+				fileLevel = {
+					AIGenerated: props.Get("AIGenerated"),
+					AIGeneratedModels: props.Get("AIGeneratedModels"),
+					AIGeneratedLastUpdate: props.Get("AIGeneratedLastUpdate"),
+					AIGeneratedPolicy: props.Get("AIGeneratedPolicy")
+				};
+			}
+
+			let list = [];
+			if (typeof doc.GetContentControlsByTag === "function") {
+				list = doc.GetContentControlsByTag(p.tag) || [];
+			} else {
+				let all = doc.GetAllContentControls() || [];
+				for (let i = 0; i < all.length; i++) {
+					if (all[i].GetTag && all[i].GetTag() === p.tag)
+						list.push(all[i]);
+				}
+			}
+
+			// Top-level index of the element holding the mark, if it is not nested.
+			function topLevelIndex(el) {
+				if (!el || typeof el.GetPosInParent !== "function")
+					return undefined;
+				if (typeof el.GetParentTableCell === "function" && el.GetParentTableCell())
+					return undefined;
+				if (typeof el.GetParentContentControl === "function" && el.GetParentContentControl())
+					return undefined;
+				let pos = el.GetPosInParent();
+				return (typeof pos === "number" && pos >= 0) ? pos + 1 : undefined;
+			}
+
+			let items = [];
+			let totalChars = 0;
+			for (let i = 0; i < list.length; i++) {
+				let cc = list[i];
+				let kind = cc.GetClassType() === "blockLvlSdt" ? "block" : "inline";
+				let content = "";
+				try {
+					let range = cc.GetRange();
+					content = range ? (range.GetText() || "") : "";
+				} catch (e) {}
+				content = content.replace(/\r/g, "");
+				totalChars += content.length;
+				if (items.length >= p.max)
+					continue;
+
+				let alias = typeof cc.GetAlias === "function" ? (cc.GetAlias() || "") : "";
+				let item = { number: i + 1, kind: kind, label: alias, characters: content.length };
+				let m = /^AI-generated \((.*), (\d{4}-\d{2}-\d{2})\)$/.exec(alias);
+				if (m) {
+					item.model = m[1];
+					item.date = m[2];
+				}
+
+				let holder = kind === "block" ? cc : (typeof cc.GetParentParagraph === "function" ? cc.GetParentParagraph() : null);
+				let index = topLevelIndex(holder);
+				if (index !== undefined)
+					item.index = index;
+
+				item.snippet = content.length > p.maxChars ? content.substring(0, p.maxChars) + "…" : content;
+				items.push(item);
+			}
+
+			return {
+				fileLevel: fileLevel,
+				markedParts: list.length,
+				markedCharacters: totalChars,
+				returned: items.length,
+				parts: items,
+				note: list.length ? undefined : "No marked AI-generated text found. Text inserted before marking was enabled, or edited outside the AI plugin, is not marked."
+			};
+		});
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "findText",
+		"category": "core",
+		"readOnly": true,
+		"description": "Searches the main body of the text document (including tables and content controls, not headers, footers or footnotes) for a plain-text string. Returns the total number of matches and, for each returned match, its 1-based occurrence number, the 1-based index of the top-level element that contains it (same numbering as readDocument/editParagraph) and a short snippet of surrounding text. Use it to locate passages before editing them; pass the occurrence number to selectText to select a match. Matching is substring-based and case-insensitive unless matchCase is true.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Text to search for (plain text, not a regular expression)."
+				},
+				"matchCase": {
+					"type": "boolean",
+					"description": "Case-sensitive search.",
+					"default": false
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of matches to return (1-200). totalMatches always reports the full count.",
+					"default": 50
+				}
+			},
+			"required": ["query"]
+		},
+		"examples": [
+			{
+				"prompt": "Where does the document mention the deadline?",
+				"arguments": { "query": "deadline" }
+			},
+			{
+				"prompt": "Find all occurrences of 'GmbH'",
+				"arguments": { "query": "GmbH", "matchCase": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.query !== 'string' || params.query === "")
+			throw new window.AgentState.ToolError('Parameter "query" must be a non-empty string. Got: ' + JSON.stringify(params.query));
+		if (params.matchCase !== undefined && params.matchCase !== null && typeof params.matchCase !== 'boolean')
+			throw new window.AgentState.ToolError('Parameter "matchCase" must be a boolean.');
+		let max = params.maxResults === undefined || params.maxResults === null ? 50 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.findParams = {
+			query: params.query,
+			matchCase: params.matchCase === true,
+			max: Math.min(200, Math.floor(max)),
+			context: 60
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.findParams;
+			let doc = Api.GetDocument();
+			let total = doc.GetElementsCount();
+			let needle = p.matchCase ? p.query : p.query.toLowerCase();
+			let matches = [];
+			let count = 0;
+
+			function snippetAt(text, pos) {
+				let start = Math.max(0, pos - p.context);
+				let end = Math.min(text.length, pos + p.query.length + p.context);
+				return (start > 0 ? "…" : "") + text.substring(start, end) + (end < text.length ? "…" : "");
+			}
+
+			for (let i = 0; i < total; i++) {
+				let el = doc.GetElement(i);
+				if (!el || typeof el.Search !== "function")
+					continue;
+				let ranges = el.Search(p.query, p.matchCase) || [];
+				if (!ranges.length)
+					continue;
+				let text = "";
+				try {
+					text = el.GetText ? (el.GetText() || "") : "";
+				} catch (e) {}
+				text = text.replace(/\r/g, "");
+				let hay = p.matchCase ? text : text.toLowerCase();
+				let from = 0;
+				for (let k = 0; k < ranges.length; k++) {
+					count++;
+					if (matches.length >= p.max)
+						continue;
+					let item = { occurrence: count, index: i + 1, type: el.GetClassType() };
+					let pos = hay.indexOf(needle, from);
+					if (pos !== -1) {
+						from = pos + needle.length;
+						item.snippet = snippetAt(text, pos);
+					} else {
+						// Tables and other containers: fall back to the paragraph holding the match
+						let paraText = "";
+						try {
+							let par = ranges[k].GetParagraph ? ranges[k].GetParagraph(0) : null;
+							paraText = par ? (par.GetText() || "").replace(/\r/g, "") : "";
+						} catch (e) {}
+						let pp = (p.matchCase ? paraText : paraText.toLowerCase()).indexOf(needle);
+						item.snippet = pp !== -1 ? snippetAt(paraText, pp) : (ranges[k].GetText ? ranges[k].GetText() : p.query);
+					}
+					matches.push(item);
+				}
+			}
+
+			return {
+				query: p.query,
+				totalMatches: count,
+				returned: matches.length,
+				truncated: count > matches.length,
+				matches: matches
+			};
+		});
+	};
+
+	func.describe = function(args, result) {
+		let total = result ? result.totalMatches : 0;
+		return {
+			start: toolText("Search for “%1”", args.query),
+			done: result && (total === 0 ? toolText("Searched for “%1” (no matches)", args.query)
+				: total === 1 ? toolText("Searched for “%1” (1 match)", args.query)
+				: toolText("Searched for “%1” (%2 matches)", args.query, total)),
+			phrase: toolText("searched")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
 		"name": "generateDocx",
 		"category": "generate",
 		"description": "Use this function if you are asked to generate a textual document (report, article, letter, etc.) based on a description. Input: Short description of what needs to be generated.",
@@ -891,6 +1146,100 @@ For radio buttons, always use the same \`groupKey\` for all options of the same 
 })());
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
+		"name": "getComments",
+		"category": "comments-review",
+		"readOnly": true,
+		"description": "Lists the comments of the text document in document order. For each comment returns its id (pass it to replyToComment/resolveComment), author, creation time (ISO 8601, UTC), comment text, the quoted document text it is anchored to, whether it is resolved, and its replies (author, text). Use it to summarise review feedback or to decide which comments to answer or resolve.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"includeResolved": {
+					"type": "boolean",
+					"description": "Also return comments that are already marked as resolved.",
+					"default": true
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of comments to return (1-200).",
+					"default": 100
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Summarize the open review comments",
+				"arguments": { "includeResolved": false }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let max = params.maxResults === undefined || params.maxResults === null ? 100 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.commentParams = {
+			includeResolved: params.includeResolved !== false,
+			max: Math.min(200, Math.floor(max))
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.commentParams;
+			let all = Api.GetDocument().GetAllComments() || [];
+			let comments = [];
+			let open = 0;
+			for (let i = 0; i < all.length; i++) {
+				let c = all[i];
+				let solved = !!c.IsSolved();
+				if (!solved)
+					open++;
+				if (solved && !p.includeResolved)
+					continue;
+				if (comments.length >= p.max)
+					continue;
+				let item = {
+					id: c.GetId(),
+					author: c.GetAuthorName(),
+					text: c.GetText(),
+					quotedText: c.GetQuoteText() || "",
+					resolved: solved,
+					replies: []
+				};
+				try {
+					let t = c.GetTimeUTC();
+					if (t)
+						item.time = new Date(Number(t)).toISOString();
+				} catch (e) {}
+				let n = c.GetRepliesCount() || 0;
+				for (let r = 0; r < n; r++) {
+					let reply = c.GetReply(r);
+					if (reply)
+						item.replies.push({ author: reply.GetAuthorName(), text: reply.GetText() });
+				}
+				comments.push(item);
+			}
+			return {
+				totalComments: all.length,
+				openComments: open,
+				returned: comments.length,
+				comments: comments
+			};
+		});
+	};
+
+	func.describe = function(args, result) {
+		return {
+			start: toolText("Read the comments"),
+			done: result && toolText("Read the comments (%1)", result.totalComments),
+			phrase: toolText("read the comments")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
 		"name": "getSelection",
 		"category": "core",
 		"readOnly": true,
@@ -986,6 +1335,186 @@ HELPERS.word.push((function(){
 			done: result && !result.hasSelection ? toolText("Checked the selection (nothing selected)") : toolText("Read the selected text"),
 			phrase: toolText("read the selection")
 		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "getTrackedChanges",
+		"category": "comments-review",
+		"readOnly": true,
+		"description": "Lists the tracked changes (review mode revisions) in the text document, grouped as a flat list. Each change has its author, type (TextAdd = inserted text, TextRem = deleted text, ParaAdd/ParaRem = added/removed paragraph mark, TextPr/ParaPr = formatting change, RowsAdd/RowsRem/TablePr = table changes), the inserted/deleted text when available, the date (ISO 8601) and the text of the affected paragraph. Also reports whether track changes is currently switched on. Use reviewTrackedChanges to accept or reject them.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of changes to return (1-500).",
+					"default": 200
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What did the reviewers change?",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let max = params.maxResults === undefined || params.maxResults === null ? 200 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+		Asc.scope.revParams = { max: Math.min(500, Math.floor(max)) };
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.revParams;
+			let doc = Api.GetDocument();
+			let report = doc.GetReviewReport() || {};
+			let changes = [];
+			let total = 0;
+			let authors = {};
+			for (let author in report) {
+				if (author === "ToJSON" || typeof report[author] === "function")
+					continue;
+				let list = report[author];
+				if (list && !Array.isArray(list))
+					list = list.reviews || [];
+				if (!Array.isArray(list))
+					continue;
+				authors[author] = list.length;
+				for (let i = 0; i < list.length; i++) {
+					total++;
+					if (changes.length >= p.max)
+						continue;
+					let ch = list[i] || {};
+					let item = { author: author, type: ch.Type || "Unknown" };
+					if (ch.Value !== undefined && ch.Value !== null && ch.Value !== "")
+						item.value = typeof ch.Value === "string" ? ch.Value : String(ch.Value);
+					if (ch.Date)
+						item.date = new Date(Number(ch.Date)).toISOString();
+					try {
+						let el = ch.ReviewedElement;
+						if (el && el.GetText) {
+							let t = (el.GetText() || "").replace(/\r/g, "");
+							item.paragraph = t.length > 200 ? t.substring(0, 200) + "…" : t;
+						}
+					} catch (e) {}
+					changes.push(item);
+				}
+			}
+			return {
+				trackChangesOn: doc.IsTrackRevisions ? !!doc.IsTrackRevisions() : null,
+				totalChanges: total,
+				byAuthor: authors,
+				returned: changes.length,
+				changes: changes
+			};
+		});
+	};
+
+	func.describe = function(args, result) {
+		return {
+			start: toolText("Read the tracked changes"),
+			done: result && toolText("Read the tracked changes (%1)", result.totalChanges),
+			phrase: toolText("read the tracked changes")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "insertMarkdown",
+		"category": "edit-text",
+		"description": "Inserts rich content written in Markdown into the text document, converting headings (#, ##, ...), bold/italic, bulleted and numbered lists, links, code and tables to real document formatting. position 'cursor' inserts at the cursor (an existing selection is collapsed, not replaced), 'replaceSelection' replaces the currently selected text, 'end' appends after the last paragraph. Prefer this over editParagraph when adding several formatted paragraphs at once.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"markdown": {
+					"type": "string",
+					"description": "The content in Markdown (CommonMark + tables)."
+				},
+				"position": {
+					"type": "string",
+					"enum": ["cursor", "replaceSelection", "end"],
+					"description": "Where to insert the content.",
+					"default": "cursor"
+				}
+			},
+			"required": ["markdown"]
+		},
+		"examples": [
+			{
+				"prompt": "Append a summary section with three bullet points",
+				"arguments": { "markdown": "## Summary\n\n- Revenue grew 12%\n- Costs were stable\n- Hiring is on track", "position": "end" }
+			},
+			{
+				"prompt": "Replace the selection with a formatted table",
+				"arguments": { "markdown": "| Item | Price |\n|---|---|\n| Apples | 2.00 |\n| Pears | 3.50 |", "position": "replaceSelection" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const positions = ["cursor", "replaceSelection", "end"];
+		if (typeof params.markdown !== 'string' || params.markdown.trim() === "")
+			throw new window.AgentState.ToolError('Parameter "markdown" must be a non-empty string.');
+		let position = params.position === undefined || params.position === null ? "cursor" : params.position;
+		if (!positions.includes(position))
+			throw new window.AgentState.ToolError('Parameter "position" must be one of ' + JSON.stringify(positions) + '. Got: ' + JSON.stringify(params.position));
+
+		let html = Asc.Library.ConvertMdToHTML(params.markdown);
+		if (!html || !html.trim())
+			throw new window.AgentState.ToolError('The markdown produced no content.');
+
+		let provenanceAnchor = null;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			if (position === "replaceSelection") {
+				let hasSelection = await Asc.Editor.callCommand(function(){
+					let range = Api.GetDocument().GetRangeBySelect();
+					return !!(range && range.GetText && range.GetText() !== "");
+				});
+				if (!hasSelection)
+					throw new window.AgentState.ToolError('Nothing is selected. Select the text to replace first (e.g. with selectText) or use position "cursor" or "end".');
+			} else if (position === "cursor") {
+				await Asc.Editor.callCommand(function(){
+					Api.GetDocument().RemoveSelection();
+				}, false);
+			} else {
+				await Asc.Editor.callCommand(function(){
+					let doc = Api.GetDocument();
+					let count = doc.GetElementsCount();
+					let last = count > 0 ? doc.GetElement(count - 1) : null;
+					let lastEmpty = last && last.GetClassType() === "paragraph" && (last.GetText() || "").replace(/[\r\n]/g, "") === "";
+					if (!lastEmpty)
+						doc.Push(Api.CreateParagraph());
+					doc.MoveCursorToEnd();
+				});
+			}
+			// Provenance: wrap the inserted paragraphs in "ai-generated"
+			// content controls (after the paste, outside this undo group).
+			provenanceAnchor = window.AIProvenance ? await window.AIProvenance.captureAnchor(window.AIProvenance.scopeMeta("insertMarkdown")) : null;
+			await Asc.Editor.callMethod("PasteHtml", [html]);
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+		if (provenanceAnchor)
+			await window.AIProvenance.markInsertion(provenanceAnchor, { html: html });
+
+		return { position: position, insertedCharacters: params.markdown.length };
+	};
+
+	func.describe = function(args) {
+		let texts = {
+			replaceSelection: [toolText("Replace the selected text"), toolText("Replaced the selected text")],
+			end: [toolText("Add text at the end of the document"), toolText("Added text at the end of the document")]
+		}[args.position] || [toolText("Insert text at the cursor"), toolText("Inserted text at the cursor")];
+		return { start: texts[0], done: texts[1], phrase: toolText("inserted text") };
 	};
 
 	return func;
@@ -1278,6 +1807,97 @@ HELPERS.word.push((function(){
 })());
 HELPERS.word.push((function(){
 	let func = new RegisteredFunction({
+		"name": "readOutline",
+		"category": "core",
+		"readOnly": true,
+		"description": "Returns the outline (table of contents) of the text document: every top-level heading paragraph with its heading level (1 = top level, up to 9), its 1-based element index (same numbering as readDocument/editParagraph) and its text. Headings are detected from the paragraph's outline level or a 'Heading N' style. Use it to understand the structure of a long document cheaply, then read or edit specific sections by index.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"maxLevel": {
+					"type": "number",
+					"description": "Only return headings up to this level (1-9).",
+					"default": 9
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What sections does this document have?",
+				"arguments": {}
+			},
+			{
+				"prompt": "List the chapters",
+				"arguments": { "maxLevel": 1 }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		let maxLevel = params.maxLevel === undefined || params.maxLevel === null ? 9 : params.maxLevel;
+		if (typeof maxLevel !== 'number' || maxLevel < 1)
+			throw new window.AgentState.ToolError('Parameter "maxLevel" must be a number between 1 and 9. Got: ' + JSON.stringify(params.maxLevel));
+		Asc.scope.outlineParams = { maxLevel: Math.min(9, Math.floor(maxLevel)) };
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.outlineParams;
+			let doc = Api.GetDocument();
+			let total = doc.GetElementsCount();
+			let headings = [];
+
+			function levelOf(par) {
+				let lvl = null;
+				try {
+					let pr = par.GetParaPr();
+					lvl = pr && pr.GetOutlineLvl ? pr.GetOutlineLvl() : null;
+				} catch (e) {}
+				let style = null;
+				try {
+					style = par.GetStyle();
+				} catch (e) {}
+				if (typeof lvl !== "number" && style) {
+					try {
+						let spr = style.GetParaPr();
+						lvl = spr && spr.GetOutlineLvl ? spr.GetOutlineLvl() : null;
+					} catch (e) {}
+				}
+				if (typeof lvl !== "number" && style) {
+					let m = /^(?:heading|überschrift|titre|título|titolo|заголовок)\s*([1-9])$/i.exec(style.GetName() || "");
+					if (m)
+						lvl = parseInt(m[1], 10);
+				}
+				return (typeof lvl === "number" && lvl >= 1 && lvl <= 9) ? lvl : null;
+			}
+
+			for (let i = 0; i < total; i++) {
+				let el = doc.GetElement(i);
+				if (!el || el.GetClassType() !== "paragraph")
+					continue;
+				let level = levelOf(el);
+				if (level === null || level > p.maxLevel)
+					continue;
+				let text = (el.GetText() || "").replace(/[\r\n]+/g, " ").trim();
+				if (text === "")
+					continue;
+				headings.push({ level: level, index: i + 1, text: text.length > 300 ? text.substring(0, 300) + "…" : text });
+			}
+			return { totalElements: total, headings: headings };
+		});
+	};
+
+	func.describe = function(args, result) {
+		return {
+			start: toolText("Read the outline"),
+			done: result && toolText("Read the outline (%1 headings)", (result.headings || []).length),
+			phrase: toolText("read the outline")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
 		"name": "replaceSelection",
 		"category": "edit-text",
 		"description": "Replaces the text the user has selected with new text, keeping the surrounding formatting as far as possible. Use it to apply rewritten, translated, corrected or summarized text back to the selection. Requires a non-empty selection; call getSelection first if unsure. Set 'trackChanges' to true to make the change visible as a tracked revision.",
@@ -1344,6 +1964,204 @@ HELPERS.word.push((function(){
 
 	func.describe = function() {
 		return { start: toolText("Replace the selected text"), done: toolText("Replaced the selected text"), phrase: toolText("replaced the selected text") };
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "replyToComment",
+		"category": "comments-review",
+		"description": "Adds a reply to an existing comment in the text document. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"commentId": {
+					"type": "string",
+					"description": "Id of the comment to reply to, as returned by getComments."
+				},
+				"text": {
+					"type": "string",
+					"description": "Reply text."
+				}
+			},
+			"required": ["commentId", "text"]
+		},
+		"examples": [
+			{
+				"prompt": "Answer the comment about the budget that it was updated",
+				"arguments": { "commentId": "3", "text": "Done - the budget table now uses the Q3 figures." }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if ((typeof params.commentId !== 'string' && typeof params.commentId !== 'number') || String(params.commentId) === "")
+			throw new window.AgentState.ToolError('Parameter "commentId" is required. Call getComments to get comment ids.');
+		if (typeof params.text !== 'string' || params.text.trim() === "")
+			throw new window.AgentState.ToolError('Parameter "text" must be a non-empty string.');
+
+		Asc.scope.replyParams = { author: window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.scopeMeta("replyToComment")) : "AI", id: String(params.commentId), text: params.text };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.replyParams;
+			let comment = Api.GetDocument().GetCommentById(p.id);
+			if (!comment)
+				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
+			comment.AddReply(p.text, p.author, "uid-ai");
+			return { commentId: p.id, replies: comment.GetRepliesCount() };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function() {
+		return { start: toolText("Reply to a comment"), done: toolText("Replied to a comment"), phrase: toolText("replied to a comment") };
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "resolveComment",
+		"category": "comments-review",
+		"description": "Marks a comment in the text document as resolved, or reopens it with resolved=false. Get comment ids from getComments.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"commentId": {
+					"type": "string",
+					"description": "Id of the comment, as returned by getComments."
+				},
+				"resolved": {
+					"type": "boolean",
+					"description": "true to resolve the comment, false to reopen it.",
+					"default": true
+				}
+			},
+			"required": ["commentId"]
+		},
+		"examples": [
+			{
+				"prompt": "Resolve comment 5",
+				"arguments": { "commentId": "5", "resolved": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if ((typeof params.commentId !== 'string' && typeof params.commentId !== 'number') || String(params.commentId) === "")
+			throw new window.AgentState.ToolError('Parameter "commentId" is required. Call getComments to get comment ids.');
+		if (params.resolved !== undefined && params.resolved !== null && typeof params.resolved !== 'boolean')
+			throw new window.AgentState.ToolError('Parameter "resolved" must be a boolean.');
+
+		Asc.scope.resolveParams = { id: String(params.commentId), resolved: params.resolved !== false };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.resolveParams;
+			let comment = Api.GetDocument().GetCommentById(p.id);
+			if (!comment)
+				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
+			comment.SetSolved(p.resolved);
+			return { commentId: p.id, resolved: !!comment.IsSolved() };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args) {
+		let reopen = args.resolved === false;
+		return {
+			start: reopen ? toolText("Reopen a comment") : toolText("Resolve a comment"),
+			done: reopen ? toolText("Reopened a comment") : toolText("Resolved a comment"),
+			phrase: reopen ? toolText("reopened a comment") : toolText("resolved a comment")
+		};
+	};
+
+	return func;
+})());
+HELPERS.word.push((function(){
+	let func = new RegisteredFunction({
+		"name": "reviewTrackedChanges",
+		"category": "comments-review",
+		"description": "Accepts or rejects tracked changes in the text document. scope 'all' affects every tracked change in the document; scope 'selection' affects only the changes inside the user's current selection (use selectText first to select a passage). Returns the number of tracked changes before and after. Inspect the changes with getTrackedChanges first.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["accept", "reject"],
+					"description": "Whether to accept or reject the changes."
+				},
+				"scope": {
+					"type": "string",
+					"enum": ["all", "selection"],
+					"description": "Which changes to process.",
+					"default": "selection"
+				}
+			},
+			"required": ["action"]
+		},
+		"examples": [
+			{
+				"prompt": "Accept all tracked changes",
+				"arguments": { "action": "accept", "scope": "all" }
+			},
+			{
+				"prompt": "Reject the changes in the selected text",
+				"arguments": { "action": "reject", "scope": "selection" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.action !== "accept" && params.action !== "reject")
+			throw new window.AgentState.ToolError('Parameter "action" must be "accept" or "reject". Got: ' + JSON.stringify(params.action));
+		let scope = params.scope === undefined || params.scope === null ? "selection" : params.scope;
+		if (scope !== "all" && scope !== "selection")
+			throw new window.AgentState.ToolError('Parameter "scope" must be "all" or "selection". Got: ' + JSON.stringify(params.scope));
+
+		async function countChanges() {
+			return await Asc.Editor.callCommand(function(){
+				let report = Api.GetDocument().GetReviewReport() || {};
+				let n = 0;
+				for (let author in report) {
+					let list = report[author];
+					if (list && !Array.isArray(list) && typeof list === "object")
+						list = list.reviews;
+					if (Array.isArray(list))
+						n += list.length;
+				}
+				return n;
+			});
+		}
+
+		let before = await countChanges();
+		if (!before)
+			return { action: params.action, scope: scope, changesBefore: 0, changesAfter: 0, note: "The document has no tracked changes." };
+
+		// Plugin methods AcceptReviewChanges/RejectReviewChanges (isAll), available since 7.2.1
+		await Asc.Editor.callMethod(params.action === "accept" ? "AcceptReviewChanges" : "RejectReviewChanges", [scope === "all"]);
+
+		let after = await countChanges();
+		let res = { action: params.action, scope: scope, changesBefore: before, changesAfter: after };
+		if (after === before)
+			res.note = scope === "selection" ? "No tracked changes were inside the current selection. Select the passage first (selectText) or use scope 'all'." : "No changes were processed.";
+		return res;
+	};
+
+	func.describe = function(args, result) {
+		let reject = args.action === "reject";
+		let changed = result ? Math.max(0, (result.changesBefore || 0) - (result.changesAfter || 0)) : 0;
+		return {
+			start: reject ? toolText("Reject tracked changes") : toolText("Accept tracked changes"),
+			done: result && (reject ? toolText("Rejected %1 tracked changes", changed) : toolText("Accepted %1 tracked changes", changed)),
+			phrase: toolText("reviewed tracked changes")
+		};
 	};
 
 	return func;
@@ -2961,6 +3779,136 @@ HELPERS.slide.push((function(){
 			await Asc.Editor.callMethod("GoToSlide", [data["idx"] + 1]);
 		}
 	};
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
+		"name": "findInPresentation",
+		"category": "core",
+		"readOnly": true,
+		"description": "Searches the text of all slides (text boxes, placeholders and shapes; optionally speaker notes) for a plain-text string. Returns, per match, the 1-based slide number, the 1-based shape index on that slide (same numbering as readPresentation; null for speaker notes), where it was found ('shape' or 'notes') and a snippet of surrounding text. Case-insensitive unless matchCase is true. Use goToSlide to show a result to the user.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Text to search for (plain text)."
+				},
+				"matchCase": {
+					"type": "boolean",
+					"description": "Case-sensitive search.",
+					"default": false
+				},
+				"includeNotes": {
+					"type": "boolean",
+					"description": "Also search the speaker notes.",
+					"default": true
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of matches to return (1-200).",
+					"default": 50
+				}
+			},
+			"required": ["query"]
+		},
+		"examples": [
+			{
+				"prompt": "On which slide do we talk about pricing?",
+				"arguments": { "query": "pricing" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.query !== 'string' || params.query === "")
+			throw new window.AgentState.ToolError('Parameter "query" must be a non-empty string. Got: ' + JSON.stringify(params.query));
+		let max = params.maxResults === undefined || params.maxResults === null ? 50 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.findParams = {
+			query: params.query,
+			matchCase: params.matchCase === true,
+			includeNotes: params.includeNotes !== false,
+			max: Math.min(200, Math.floor(max)),
+			context: 50
+		};
+
+		return await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.findParams;
+			let pres = Api.GetPresentation();
+			let total = pres.GetSlidesCount();
+			let needle = p.matchCase ? p.query : p.query.toLowerCase();
+			let matches = [];
+			let count = 0;
+
+			function scan(text, slideNumber, shapeIndex, where) {
+				if (!text)
+					return;
+				text = String(text).replace(/\r\n?/g, "\n");
+				let hay = p.matchCase ? text : text.toLowerCase();
+				let pos = hay.indexOf(needle);
+				while (pos !== -1) {
+					count++;
+					if (matches.length < p.max) {
+						let start = Math.max(0, pos - p.context);
+						let end = Math.min(text.length, pos + needle.length + p.context);
+						matches.push({
+							slideNumber: slideNumber,
+							shapeIndex: shapeIndex,
+							where: where,
+							snippet: (start > 0 ? "…" : "") + text.substring(start, end).replace(/\n/g, " ") + (end < text.length ? "…" : "")
+						});
+					}
+					pos = hay.indexOf(needle, pos + needle.length);
+				}
+			}
+
+			for (let i = 0; i < total; i++) {
+				let slide = pres.GetSlideByIndex(i);
+				if (!slide)
+					continue;
+				let drawings = slide.GetAllDrawings ? slide.GetAllDrawings() : slide.GetAllShapes();
+				for (let d = 0; d < drawings.length; d++) {
+					let text = "";
+					try {
+						let content = drawings[d].GetDocContent ? drawings[d].GetDocContent() : null;
+						if (content) {
+							let lines = [];
+							for (let j = 0; j < content.GetElementsCount(); j++) {
+								let el = content.GetElement(j);
+								if (el && el.GetText)
+									lines.push(el.GetText());
+							}
+							text = lines.join("\n");
+						}
+					} catch (e) {}
+					scan(text, i + 1, d + 1, "shape");
+				}
+				if (p.includeNotes) {
+					try {
+						let notes = slide.GetNotesPage ? slide.GetNotesPage() : null;
+						if (notes)
+							scan(notes.GetBodyShapeText(), i + 1, null, "notes");
+					} catch (e) {}
+				}
+			}
+			return { query: p.query, totalMatches: count, returned: matches.length, truncated: count > matches.length, matches: matches };
+		});
+	};
+
+	func.describe = function(args, result) {
+		let total = result ? result.totalMatches : 0;
+		return {
+			start: toolText("Search for “%1”", args.query),
+			done: result && (total === 0 ? toolText("Searched for “%1” (no matches)", args.query)
+				: total === 1 ? toolText("Searched for “%1” (1 match)", args.query)
+				: toolText("Searched for “%1” (%2 matches)", args.query, total)),
+			phrase: toolText("searched")
+		};
+	};
+
 	return func;
 })());
 HELPERS.slide.push((function(){
@@ -4763,6 +5711,74 @@ ${fontsContract}
 })());
 HELPERS.slide.push((function(){
 	let func = new RegisteredFunction({
+		"name": "getSpeakerNotes",
+		"category": "notes",
+		"readOnly": true,
+		"description": "Returns the speaker notes of one slide, or of all slides when slideNumber is omitted (slides without notes are listed with an empty text). Slide numbers are 1-based. Use it to review, summarise or rewrite the presenter notes.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"slideNumber": {
+					"type": "number",
+					"description": "1-based slide number. Omit to read the notes of all slides."
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What are my speaker notes for slide 3?",
+				"arguments": { "slideNumber": 3 }
+			},
+			{
+				"prompt": "Show all speaker notes",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.slideNumber !== undefined && params.slideNumber !== null && (typeof params.slideNumber !== 'number' || params.slideNumber < 1))
+			throw new window.AgentState.ToolError('Parameter "slideNumber" must be a number >= 1. Got: ' + JSON.stringify(params.slideNumber));
+		Asc.scope.notesParams = { slideNumber: params.slideNumber ? Math.floor(params.slideNumber) : null };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.notesParams;
+			let pres = Api.GetPresentation();
+			let total = pres.GetSlidesCount();
+			function notesOf(slide) {
+				let notes = slide.GetNotesPage ? slide.GetNotesPage() : null;
+				if (!notes)
+					return "";
+				return String(notes.GetBodyShapeText() || "").replace(/\r\n?/g, "\n").replace(/\n$/, "");
+			}
+			let slides = [];
+			if (p.slideNumber) {
+				let slide = pres.GetSlideByIndex(p.slideNumber - 1);
+				if (!slide)
+					return { error: "Slide " + p.slideNumber + " does not exist. The presentation has " + total + " slides." };
+				slides.push({ slideNumber: p.slideNumber, notes: notesOf(slide) });
+			} else {
+				for (let i = 0; i < total; i++)
+					slides.push({ slideNumber: i + 1, notes: notesOf(pres.GetSlideByIndex(i)) });
+			}
+			return { totalSlides: total, slides: slides };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args) {
+		let start = typeof args.slideNumber === "number" ? toolText("Read the speaker notes of slide %1", args.slideNumber) : toolText("Read the speaker notes");
+		return { start: start, done: start, phrase: toolText("read speaker notes") };
+	};
+
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
 		"name": "goToSlide",
 		"category": "core",
 		"readOnly": true,
@@ -4801,6 +5817,62 @@ HELPERS.slide.push((function(){
 
 	func.describe = function(args) {
 		return { start: toolText("Go to slide %1", args.slideNumber), done: toolText("Went to slide %1", args.slideNumber), phrase: toolText("went to a slide") };
+	};
+
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
+		"name": "moveSlide",
+		"category": "structure",
+		"description": "Moves a slide to a new position. 'from' is the current 1-based slide number, 'to' is the 1-based number the slide should have afterwards (other slides shift accordingly). Example: from 5 to 1 makes slide 5 the first slide.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"from": {
+					"type": "number",
+					"description": "Current 1-based slide number."
+				},
+				"to": {
+					"type": "number",
+					"description": "Target 1-based slide number."
+				}
+			},
+			"required": ["from", "to"]
+		},
+		"examples": [
+			{
+				"prompt": "Move the last slide (slide 12) to position 2",
+				"arguments": { "from": 12, "to": 2 }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.from !== 'number' || params.from < 1)
+			throw new window.AgentState.ToolError('Parameter "from" must be a number >= 1. Got: ' + JSON.stringify(params.from));
+		if (typeof params.to !== 'number' || params.to < 1)
+			throw new window.AgentState.ToolError('Parameter "to" must be a number >= 1. Got: ' + JSON.stringify(params.to));
+
+		Asc.scope.moveParams = { from: Math.floor(params.from), to: Math.floor(params.to) };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.moveParams;
+			let pres = Api.GetPresentation();
+			let total = pres.GetSlidesCount();
+			if (p.from > total || p.to > total)
+				return { error: "Slide numbers must be between 1 and " + total + " (the presentation has " + total + " slides)." };
+			if (p.from === p.to)
+				return { from: p.from, to: p.to, totalSlides: total, note: "Slide is already at that position." };
+			let slide = pres.GetSlideByIndex(p.from - 1);
+			if (!slide || !slide.MoveTo(p.to - 1))
+				return { error: "Could not move slide " + p.from + "." };
+			return { from: p.from, to: slide.GetSlideIndex() + 1, totalSlides: total };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
 	};
 
 	return func;
@@ -4968,6 +6040,125 @@ HELPERS.slide.push((function(){
 
 	func.describe = function() {
 		return { start: toolText("Replace the selected text"), done: toolText("Replaced the selected text"), phrase: toolText("replaced the selected text") };
+	};
+
+	return func;
+})());
+HELPERS.slide.push((function(){
+	let func = new RegisteredFunction({
+		"name": "setSpeakerNotes",
+		"category": "notes",
+		"description": "Writes the speaker notes of a slide. mode 'replace' (default) replaces the existing notes, 'append' adds the text as new paragraphs after them. Line breaks (\\n) start new paragraphs. Defaults to the current slide. Slide numbers are 1-based.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"slideNumber": {
+					"type": "number",
+					"description": "1-based slide number. Defaults to the current slide."
+				},
+				"text": {
+					"type": "string",
+					"description": "The notes text (plain text)."
+				},
+				"mode": {
+					"type": "string",
+					"enum": ["replace", "append"],
+					"description": "Replace the existing notes or append to them.",
+					"default": "replace"
+				}
+			},
+			"required": ["text"]
+		},
+		"examples": [
+			{
+				"prompt": "Write speaker notes for slide 2",
+				"arguments": { "slideNumber": 2, "text": "Welcome everyone.\nToday we look at the Q3 results." }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.slideNumber !== undefined && params.slideNumber !== null && (typeof params.slideNumber !== 'number' || params.slideNumber < 1))
+			throw new window.AgentState.ToolError('Parameter "slideNumber" must be a number >= 1. Got: ' + JSON.stringify(params.slideNumber));
+		if (typeof params.text !== 'string')
+			throw new window.AgentState.ToolError('Parameter "text" must be a string.');
+		let mode = params.mode === undefined || params.mode === null ? "replace" : params.mode;
+		if (mode !== "replace" && mode !== "append")
+			throw new window.AgentState.ToolError('Parameter "mode" must be "replace" or "append". Got: ' + JSON.stringify(params.mode));
+
+		Asc.scope.notesParams = {
+			slideNumber: params.slideNumber ? Math.floor(params.slideNumber) : null,
+			lines: params.text.replace(/\r\n?/g, "\n").split("\n"),
+			mode: mode
+		};
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.notesParams;
+				let pres = Api.GetPresentation();
+				let total = pres.GetSlidesCount();
+				let slide;
+				let number = p.slideNumber;
+				if (number) {
+					slide = pres.GetSlideByIndex(number - 1);
+					if (!slide)
+						return { error: "Slide " + number + " does not exist. The presentation has " + total + " slides." };
+				} else {
+					slide = pres.GetCurrentSlide();
+					if (!slide)
+						return { error: "No current slide. Pass \"slideNumber\"." };
+					number = slide.GetSlideIndex() + 1;
+				}
+				let notes = slide.GetNotesPage();
+				if (!notes)
+					return { error: "Slide " + number + " has no notes page." };
+				let body = notes.GetBodyShape();
+				let content = body ? body.GetDocContent() : null;
+				if (!content)
+					return { error: "The notes of slide " + number + " cannot be edited." };
+
+				let lines = p.lines;
+				let start = 0;
+				if (p.mode === "replace") {
+					content.RemoveAllElements();
+					// RemoveAllElements leaves one empty paragraph
+					let first = content.GetElementsCount() > 0 ? content.GetElement(0) : null;
+					if (first && first.AddText) {
+						first.AddText(lines[0]);
+						start = 1;
+					}
+				} else {
+					let existing = String(notes.GetBodyShapeText() || "").replace(/[\r\n]/g, "");
+					if (existing === "" && content.GetElementsCount() === 1) {
+						content.GetElement(0).AddText(lines[0]);
+						start = 1;
+					}
+				}
+				for (let i = start; i < lines.length; i++) {
+					let par = Api.CreateParagraph();
+					par.AddText(lines[i]);
+					content.Push(par);
+				}
+				return { slideNumber: number, mode: p.mode, notes: String(notes.GetBodyShapeText() || "") };
+			});
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args, result) {
+		let n = result ? result.slideNumber : args.slideNumber;
+		return {
+			start: typeof n === "number" ? toolText("Write the speaker notes of slide %1", n) : toolText("Write the speaker notes of the current slide"),
+			done: result && toolText("Wrote the speaker notes of slide %1", n),
+			phrase: toolText("wrote speaker notes")
+		};
 	};
 
 	return func;
@@ -5412,6 +6603,13 @@ HELPERS.cell.push((function(){
 			);
 		}
 
+		// ApiWorksheet.GetRange and AddChart take one contiguous range.
+		if (typeof params.range === 'string' && /[,;]/.test(params.range)) {
+			throw new window.AgentState.ToolError(
+				'Charts need one contiguous range like "A1:G13", not several areas ("' + params.range + '"). Copy the columns next to each other first, or chart one area.'
+			);
+		}
+
 		Asc.scope.range = params.range;
 		Asc.scope.chartType = params.chartType || "bar";
 		Asc.scope.title = params.title;
@@ -5449,14 +6647,22 @@ HELPERS.cell.push((function(){
 				fromRow,
 				0
 			);
-			if (chart && Asc.scope.title) {
+			if (!chart)
+				return {error: "not_created", range: chartRange};
+			if (Asc.scope.title) {
 				chart.SetTitle(Asc.scope.title, 14);
 			}
+			return {range: chartRange};
 		});
 
 		if (callResult && callResult.error === "invalid_chart_type") {
 			throw new window.AgentState.ToolError("The chart type \"" + (params.chartType || "bar") + "\" is not valid! Here is a list of available chart types: " + JSON.stringify(callResult.validTypes));
 		}
+		if (!callResult || callResult.error) {
+			let reason = Asc.Editor.lastCommandError && !callResult ? " (" + Asc.Editor.lastCommandError + ")" : "";
+			throw new window.AgentState.ToolError("The chart was not created from \"" + (callResult && callResult.range || params.range || "the selection") + "\"" + reason + ". Check that the range is valid and contains data.");
+		}
+		return {created: true, range: callResult.range};
 	};
 
 	return func;
@@ -6267,6 +7473,128 @@ HELPERS.cell.push((function(){
 	return func;
 })());
 HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "deleteRowsColumns",
+		"category": "structure",
+		"description": "Deletes whole rows or whole columns (including their content) from a worksheet. Cells below/right of them shift up/left; formulas pointing at deleted cells become #REF!. Rows are 1-based numbers, columns are letters (A, B, ..., XFD). Read the affected cells first if unsure.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"type": {
+					"type": "string",
+					"enum": ["rows", "columns"],
+					"description": "Whether to delete whole rows or whole columns."
+				},
+				"at": {
+					"type": "string",
+					"description": "First row/column to delete: for rows a 1-based row number (e.g. '5'); for columns a column letter (e.g. 'C')."
+				},
+				"count": {
+					"type": "number",
+					"description": "How many rows/columns to delete (1-1000).",
+					"default": 1
+				}
+			},
+			"required": ["type", "at"]
+		},
+		"examples": [
+			{
+				"prompt": "Delete rows 10 to 12",
+				"arguments": { "type": "rows", "at": "10", "count": 3 }
+			},
+			{
+				"prompt": "Remove column F",
+				"arguments": { "type": "columns", "at": "F" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const MAX_ROWS = 1048576, MAX_COLS = 16384;
+		if (params.type !== "rows" && params.type !== "columns")
+			throw new window.AgentState.ToolError('Parameter "type" must be "rows" or "columns". Got: ' + JSON.stringify(params.type));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let count = params.count === undefined || params.count === null ? 1 : params.count;
+		if (typeof count !== 'number' || count < 1 || count > 1000)
+			throw new window.AgentState.ToolError('Parameter "count" must be a number between 1 and 1000. Got: ' + JSON.stringify(params.count));
+		count = Math.floor(count);
+
+		function colName(n) {
+			let s = "";
+			while (n > 0) {
+				let m = (n - 1) % 26;
+				s = String.fromCharCode(65 + m) + s;
+				n = Math.floor((n - 1) / 26);
+			}
+			return s;
+		}
+		function colNumber(letters) {
+			let n = 0;
+			for (let i = 0; i < letters.length; i++)
+				n = n * 26 + (letters.charCodeAt(i) - 64);
+			return n;
+		}
+
+		let first, address;
+		if (params.type === "rows") {
+			first = typeof params.at === 'string' && /^\s*\d+\s*$/.test(params.at) ? parseInt(params.at, 10) : params.at;
+			if (typeof first !== 'number' || !isFinite(first) || first < 1)
+				throw new window.AgentState.ToolError('For rows, "at" must be a 1-based row number, e.g. 5. Got: ' + JSON.stringify(params.at));
+			first = Math.floor(first);
+			if (first + count - 1 > MAX_ROWS)
+				throw new window.AgentState.ToolError('Rows ' + first + '-' + (first + count - 1) + ' exceed the sheet limit of ' + MAX_ROWS + ' rows.');
+			address = first + ":" + (first + count - 1);
+		} else {
+			if (typeof params.at === 'number')
+				first = Math.floor(params.at);
+			else if (typeof params.at === 'string' && /^\s*\d+\s*$/.test(params.at))
+				first = parseInt(params.at, 10);
+			else if (typeof params.at === 'string' && /^\s*[A-Za-z]{1,3}\s*$/.test(params.at))
+				first = colNumber(params.at.trim().toUpperCase());
+			else
+				first = NaN;
+			if (!isFinite(first) || first < 1)
+				throw new window.AgentState.ToolError('For columns, "at" must be a column letter such as "C" (or a 1-based column number). Got: ' + JSON.stringify(params.at));
+			if (first + count - 1 > MAX_COLS)
+				throw new window.AgentState.ToolError('Columns exceed the sheet limit of ' + MAX_COLS + ' columns (XFD).');
+			address = colName(first) + ":" + colName(first + count - 1);
+		}
+
+		Asc.scope.structParams = { sheet: params.sheet || null, address: address, shift: params.type === "rows" ? "up" : "left" };
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.structParams;
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				let range = ws.GetRange(p.address);
+				if (!range)
+					return { error: "Invalid address \"" + p.address + "\"." };
+				range.Delete(p.shift);
+				return { sheet: ws.GetName(), deleted: p.address };
+			});
+		} catch (e) {
+			throw new window.AgentState.ToolError("Could not delete " + address + ": " + (e && e.message ? e.message : String(e)) + " (the sheet may be protected).");
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "explainFormula",
@@ -6589,6 +7917,291 @@ HELPERS.cell.push((function(){
 				}
 			});
 		}
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "findFormulaErrors",
+		"category": "analysis",
+		"readOnly": true,
+		"description": "Scans the used range of a worksheet (or all worksheets) for cells showing an error value (#REF!, #DIV/0!, #VALUE!, #NAME?, #N/A, #NUM!, #NULL!, #SPILL!, #CALC!, #GETTING_DATA) and returns each one's sheet, address, error and formula, plus a count per error type. Use it to audit a workbook, then explain or repair the formulas (fixFormula, writeRange).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"allSheets": {
+					"type": "boolean",
+					"description": "Scan every worksheet.",
+					"default": false
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of error cells to return (1-500).",
+					"default": 200
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Are there any broken formulas?",
+				"arguments": { "allSheets": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let max = params.maxResults === undefined || params.maxResults === null ? 200 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.errorParams = {
+			sheet: params.sheet || null,
+			allSheets: params.allSheets === true,
+			max: Math.min(500, Math.floor(max)),
+			maxCells: 500000
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.errorParams;
+			const ERRORS = ["#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A", "#GETTING_DATA", "#SPILL!", "#CALC!"];
+			let sheets;
+			if (p.allSheets) {
+				sheets = Api.GetSheets();
+			} else {
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				sheets = [ws];
+			}
+			function colName(n) {
+				let s = "";
+				while (n > 0) {
+					let m = (n - 1) % 26;
+					s = String.fromCharCode(65 + m) + s;
+					n = Math.floor((n - 1) / 26);
+				}
+				return s;
+			}
+			let found = [];
+			let counts = {};
+			let total = 0;
+			let budget = p.maxCells;
+			let truncatedScan = false;
+			for (let s = 0; s < sheets.length && budget > 0; s++) {
+				let ws = sheets[s];
+				let used = ws.GetUsedRange();
+				if (!used)
+					continue;
+				let rows = used.GetRowsCount(), cols = used.GetColumnsCount();
+				let r0 = used.GetRow() - 1, c0 = used.GetCol() - 1;
+				let scan = used;
+				if (rows * cols > budget) {
+					rows = Math.max(1, Math.floor(budget / cols));
+					truncatedScan = true;
+					scan = ws.GetRange(colName(c0 + 1) + (r0 + 1) + ":" + colName(c0 + cols) + (r0 + rows));
+				}
+				budget -= rows * cols;
+				let values = scan.GetValue();
+				if (!Array.isArray(values))
+					values = [[values]];
+				for (let r = 0; r < rows && r < values.length; r++) {
+					let row = Array.isArray(values[r]) ? values[r] : [values[r]];
+					for (let c = 0; c < row.length; c++) {
+						let v = row[c];
+						if (typeof v !== "string" || v.charAt(0) !== "#" || ERRORS.indexOf(v) === -1)
+							continue;
+						total++;
+						counts[v] = (counts[v] || 0) + 1;
+						if (found.length >= p.max)
+							continue;
+						let cell = ws.GetRangeByNumber(r0 + r, c0 + c);
+						let item = { sheet: ws.GetName(), address: cell.GetAddress(false, false), error: v };
+						let f = cell.GetFormula();
+						if (typeof f === "string" && f.charAt(0) === "=")
+							item.formula = "=" + f.substring(1).replace(/^\s+/, "");
+						found.push(item);
+					}
+				}
+			}
+			let res = { totalErrors: total, byType: counts, returned: found.length, errors: found };
+			if (total > found.length)
+				res.truncated = true;
+			if (truncatedScan)
+				res.warning = "The workbook is very large; only the first " + p.maxCells + " cells were scanned.";
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "findInSheet",
+		"category": "core",
+		"readOnly": true,
+		"description": "Searches cell values in the used range of a worksheet (or of all worksheets) for a text or number and returns the matching cells with sheet name, A1 address and value. Values are compared as text; by default a cell matches when it contains the query anywhere (case-insensitive). Use wholeCell to require the entire cell value to equal the query. Formulas are not searched, only their results. Use it to locate data before reading or editing it with readRange/writeRange.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Text to search for. Numbers can be passed as text, e.g. '1250'."
+				},
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"allSheets": {
+					"type": "boolean",
+					"description": "Search every worksheet instead of a single one.",
+					"default": false
+				},
+				"matchCase": {
+					"type": "boolean",
+					"description": "Case-sensitive comparison.",
+					"default": false
+				},
+				"wholeCell": {
+					"type": "boolean",
+					"description": "Match only cells whose entire value equals the query.",
+					"default": false
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of matches to return (1-500).",
+					"default": 100
+				}
+			},
+			"required": ["query"]
+		},
+		"examples": [
+			{
+				"prompt": "Where is the customer 'Müller' listed?",
+				"arguments": { "query": "Müller", "allSheets": true }
+			},
+			{
+				"prompt": "Find cells that are exactly 'N/A' on Sheet1",
+				"arguments": { "query": "N/A", "sheet": "Sheet1", "wholeCell": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if ((typeof params.query !== 'string' && typeof params.query !== 'number') || String(params.query) === "")
+			throw new window.AgentState.ToolError('Parameter "query" must be a non-empty string. Got: ' + JSON.stringify(params.query));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let max = params.maxResults === undefined || params.maxResults === null ? 100 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.findParams = {
+			query: String(params.query),
+			sheet: params.sheet || null,
+			allSheets: params.allSheets === true,
+			matchCase: params.matchCase === true,
+			wholeCell: params.wholeCell === true,
+			max: Math.min(500, Math.floor(max)),
+			maxCells: 500000
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.findParams;
+			let sheets;
+			if (p.allSheets) {
+				sheets = Api.GetSheets();
+			} else {
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				sheets = [ws];
+			}
+
+			function colName(n) {
+				let s = "";
+				while (n > 0) {
+					let m = (n - 1) % 26;
+					s = String.fromCharCode(65 + m) + s;
+					n = Math.floor((n - 1) / 26);
+				}
+				return s;
+			}
+
+			let needle = p.matchCase ? p.query : p.query.toLowerCase();
+			let matches = [];
+			let total = 0;
+			let truncatedScan = false;
+			let budget = p.maxCells;
+			for (let s = 0; s < sheets.length; s++) {
+				let ws = sheets[s];
+				let used = ws.GetUsedRange();
+				if (!used)
+					continue;
+				let rows = used.GetRowsCount();
+				let cols = used.GetColumnsCount();
+				let row0 = used.GetRow();
+				let col0 = used.GetCol();
+				if (rows * cols > budget) {
+					rows = Math.max(1, Math.floor(budget / cols));
+					truncatedScan = true;
+				}
+				budget -= rows * cols;
+				let scan = rows === used.GetRowsCount() ? used : ws.GetRange(colName(col0) + row0 + ":" + colName(col0 + cols - 1) + (row0 + rows - 1));
+				let values = scan.GetValue();
+				if (!Array.isArray(values))
+					values = [[values]];
+				for (let r = 0; r < values.length; r++) {
+					let row = Array.isArray(values[r]) ? values[r] : [values[r]];
+					for (let c = 0; c < row.length; c++) {
+						let v = row[c];
+						if (v === null || v === undefined || v === "")
+							continue;
+						let sv = String(v);
+						let hay = p.matchCase ? sv : sv.toLowerCase();
+						if (p.wholeCell ? hay.trim() !== needle.trim() : hay.indexOf(needle) === -1)
+							continue;
+						total++;
+						if (matches.length < p.max)
+							matches.push({ sheet: ws.GetName(), address: colName(col0 + c) + (row0 + r), value: v });
+					}
+				}
+				if (budget <= 0)
+					break;
+			}
+			let res = { query: p.query, totalMatches: total, returned: matches.length, matches: matches };
+			if (total > matches.length)
+				res.truncated = true;
+			if (truncatedScan)
+				res.warning = "The sheet is very large; only the first " + p.maxCells + " cells were searched.";
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args, result) {
+		let total = result ? result.totalMatches : 0;
+		return {
+			start: toolText("Search for “%1”", args.query),
+			done: result && (total === 0 ? toolText("Searched for “%1” (no matches)", args.query)
+				: total === 1 ? toolText("Searched for “%1” (1 match)", args.query)
+				: toolText("Searched for “%1” (%2 matches)", args.query, total)),
+			phrase: toolText("searched")
+		};
 	};
 
 	return func;
@@ -7062,6 +8675,267 @@ HELPERS.cell.push((function(){
 
 		if (result && result.error)
 			throw new window.AgentState.ToolError(result.error);
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "freezePanes",
+		"category": "structure",
+		"description": "Freezes rows and/or columns so they stay visible while scrolling, or removes the freeze. Either pass 'rows' and/or 'columns' (number of top rows / left columns to freeze), or 'cell' (Excel semantics: everything above and to the left of this cell is frozen, e.g. 'B2' freezes row 1 and column A), or 'unfreeze': true. Applies to the given sheet, which becomes the active sheet.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"rows": {
+					"type": "number",
+					"description": "Number of top rows to freeze (0 = none)."
+				},
+				"columns": {
+					"type": "number",
+					"description": "Number of left columns to freeze (0 = none)."
+				},
+				"cell": {
+					"type": "string",
+					"description": "Top-left cell of the scrollable area, e.g. 'B2'. Alternative to rows/columns."
+				},
+				"unfreeze": {
+					"type": "boolean",
+					"description": "Remove any frozen panes.",
+					"default": false
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "Keep the header row visible",
+				"arguments": { "rows": 1 }
+			},
+			{
+				"prompt": "Freeze the first row and the first column",
+				"arguments": { "cell": "B2" }
+			},
+			{
+				"prompt": "Unfreeze panes",
+				"arguments": { "unfreeze": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let rows = 0, cols = 0;
+		let unfreeze = params.unfreeze === true;
+		if (!unfreeze) {
+			if (typeof params.cell === 'string' && params.cell.trim() !== "") {
+				let m = /^\s*\$?([A-Za-z]{1,3})\$?(\d+)\s*$/.exec(params.cell);
+				if (!m)
+					throw new window.AgentState.ToolError('Parameter "cell" must be a single cell address such as "B2". Got: ' + JSON.stringify(params.cell));
+				let letters = m[1].toUpperCase();
+				let col = 0;
+				for (let i = 0; i < letters.length; i++)
+					col = col * 26 + (letters.charCodeAt(i) - 64);
+				rows = parseInt(m[2], 10) - 1;
+				cols = col - 1;
+			} else {
+				if (params.rows !== undefined && params.rows !== null) {
+					if (typeof params.rows !== 'number' || params.rows < 0)
+						throw new window.AgentState.ToolError('Parameter "rows" must be a number >= 0. Got: ' + JSON.stringify(params.rows));
+					rows = Math.floor(params.rows);
+				}
+				if (params.columns !== undefined && params.columns !== null) {
+					if (typeof params.columns !== 'number' || params.columns < 0)
+						throw new window.AgentState.ToolError('Parameter "columns" must be a number >= 0. Got: ' + JSON.stringify(params.columns));
+					cols = Math.floor(params.columns);
+				}
+			}
+			if (rows === 0 && cols === 0) {
+				if (params.rows === undefined && params.columns === undefined && params.cell === undefined)
+					throw new window.AgentState.ToolError('Pass "rows" and/or "columns", or "cell", or "unfreeze": true.');
+				unfreeze = true;
+			}
+		}
+
+		Asc.scope.freezeParams = { sheet: params.sheet || null, rows: rows, cols: cols, unfreeze: unfreeze };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.freezeParams;
+			let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+			if (!ws)
+				return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+			// Freeze panes act on the active sheet's view
+			ws.SetActive();
+			let panes = ws.GetFreezePanes();
+			function colName(n) {
+				let s = "";
+				while (n > 0) {
+					let m = (n - 1) % 26;
+					s = String.fromCharCode(65 + m) + s;
+					n = Math.floor((n - 1) / 26);
+				}
+				return s;
+			}
+			if (p.unfreeze) {
+				panes.Unfreeze();
+			} else if (p.rows > 0 && p.cols > 0) {
+				panes.FreezeAt("A1:" + colName(p.cols) + p.rows);
+			} else if (p.rows > 0) {
+				panes.FreezeRows(p.rows);
+			} else {
+				panes.FreezeColumns(p.cols);
+			}
+			let loc = panes.GetLocation();
+			return {
+				sheet: ws.GetName(),
+				frozenRows: p.unfreeze ? 0 : p.rows,
+				frozenColumns: p.unfreeze ? 0 : p.cols,
+				frozenRange: loc ? loc.GetAddress(false, false) : null
+			};
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "getComments",
+		"category": "comments-review",
+		"readOnly": true,
+		"description": "Lists the comments in the workbook. For each comment returns its id (pass it to replyToComment), the sheet and cell address it belongs to (address is omitted when it cannot be determined, e.g. for comments on cells outside the used range), the cell value, author, comment text, whether it is resolved, and its replies.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Only return comments of this sheet. Defaults to all sheets."
+				},
+				"includeResolved": {
+					"type": "boolean",
+					"description": "Also return resolved comments.",
+					"default": true
+				},
+				"maxResults": {
+					"type": "number",
+					"description": "Maximum number of comments to return (1-200).",
+					"default": 100
+				}
+			},
+			"required": []
+		},
+		"examples": [
+			{
+				"prompt": "What do the comments in this workbook say?",
+				"arguments": {}
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let max = params.maxResults === undefined || params.maxResults === null ? 100 : params.maxResults;
+		if (typeof max !== 'number' || max < 1)
+			throw new window.AgentState.ToolError('Parameter "maxResults" must be a number >= 1. Got: ' + JSON.stringify(params.maxResults));
+
+		Asc.scope.commentParams = {
+			sheet: params.sheet || null,
+			includeResolved: params.includeResolved !== false,
+			max: Math.min(200, Math.floor(max)),
+			maxScanCells: 20000
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.commentParams;
+			let sheets;
+			if (p.sheet) {
+				let ws = Api.GetSheet(p.sheet);
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				sheets = [ws];
+			} else {
+				sheets = Api.GetSheets();
+			}
+
+			function describe(c, sheetName, address) {
+				let item = {
+					id: c.GetId(),
+					sheet: sheetName,
+					author: c.GetAuthorName(),
+					text: c.GetText(),
+					resolved: !!c.IsSolved(),
+					replies: []
+				};
+				if (address)
+					item.address = address;
+				let q = c.GetQuoteText();
+				if (q !== null && q !== undefined && q !== "")
+					item.cellValue = q;
+				let n = c.GetRepliesCount() || 0;
+				for (let r = 0; r < n; r++) {
+					let reply = c.GetReply(r);
+					if (reply)
+						item.replies.push({ author: reply.GetAuthorName(), text: reply.GetText() });
+				}
+				return item;
+			}
+
+			let comments = [];
+			let total = 0;
+			for (let s = 0; s < sheets.length; s++) {
+				let ws = sheets[s];
+				let list = ws.GetComments() || [];
+				if (!list.length)
+					continue;
+				// Map comment ids to cell addresses by scanning the used range (bounded).
+				let addresses = {};
+				let used = ws.GetUsedRange();
+				if (used) {
+					let rows = used.GetRowsCount(), cols = used.GetColumnsCount();
+					if (rows * cols <= p.maxScanCells) {
+						let r0 = used.GetRow() - 1, c0 = used.GetCol() - 1;
+						for (let r = 0; r < rows; r++) {
+							for (let c = 0; c < cols; c++) {
+								let cell = ws.GetRangeByNumber(r0 + r, c0 + c);
+								let cm = cell.GetComment();
+								if (cm)
+									addresses[cm.GetId()] = cell.GetAddress(false, false);
+							}
+						}
+					}
+				}
+				for (let i = 0; i < list.length; i++) {
+					let c = list[i];
+					total++;
+					if (!p.includeResolved && c.IsSolved())
+						continue;
+					if (comments.length < p.max)
+						comments.push(describe(c, ws.GetName(), addresses[c.GetId()]));
+				}
+			}
+			return { totalComments: total, returned: comments.length, comments: comments };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function(args, result) {
+		return {
+			start: toolText("Read the comments"),
+			done: result && toolText("Read the comments (%1)", result.totalComments),
+			phrase: toolText("read the comments")
+		};
 	};
 
 	return func;
@@ -8016,6 +9890,248 @@ HELPERS.cell.push((function(){
 })());
 HELPERS.cell.push((function(){
 	let func = new RegisteredFunction({
+		"name": "insertRowsColumns",
+		"category": "structure",
+		"description": "Inserts empty whole rows or whole columns into a worksheet. The new rows/columns are inserted at position 'at' (before the existing row/column there), which shifts existing cells down or right; formulas referencing shifted cells are updated automatically. Rows are 1-based numbers, columns are letters (A, B, ..., XFD).",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"type": {
+					"type": "string",
+					"enum": ["rows", "columns"],
+					"description": "Whether to insert whole rows or whole columns."
+				},
+				"at": {
+					"type": "string",
+					"description": "Where to insert: for rows a 1-based row number (new rows start here, e.g. '5'); for columns a column letter (e.g. 'C')."
+				},
+				"count": {
+					"type": "number",
+					"description": "How many rows/columns to insert (1-1000).",
+					"default": 1
+				}
+			},
+			"required": ["type", "at"]
+		},
+		"examples": [
+			{
+				"prompt": "Insert two empty rows above row 5",
+				"arguments": { "type": "rows", "at": "5", "count": 2 }
+			},
+			{
+				"prompt": "Add a column before column C",
+				"arguments": { "type": "columns", "at": "C" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const MAX_ROWS = 1048576, MAX_COLS = 16384;
+		if (params.type !== "rows" && params.type !== "columns")
+			throw new window.AgentState.ToolError('Parameter "type" must be "rows" or "columns". Got: ' + JSON.stringify(params.type));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		let count = params.count === undefined || params.count === null ? 1 : params.count;
+		if (typeof count !== 'number' || count < 1 || count > 1000)
+			throw new window.AgentState.ToolError('Parameter "count" must be a number between 1 and 1000. Got: ' + JSON.stringify(params.count));
+		count = Math.floor(count);
+
+		function colName(n) {
+			let s = "";
+			while (n > 0) {
+				let m = (n - 1) % 26;
+				s = String.fromCharCode(65 + m) + s;
+				n = Math.floor((n - 1) / 26);
+			}
+			return s;
+		}
+		function colNumber(letters) {
+			let n = 0;
+			for (let i = 0; i < letters.length; i++)
+				n = n * 26 + (letters.charCodeAt(i) - 64);
+			return n;
+		}
+
+		let first, address;
+		if (params.type === "rows") {
+			first = typeof params.at === 'string' && /^\s*\d+\s*$/.test(params.at) ? parseInt(params.at, 10) : params.at;
+			if (typeof first !== 'number' || !isFinite(first) || first < 1)
+				throw new window.AgentState.ToolError('For rows, "at" must be a 1-based row number, e.g. 5. Got: ' + JSON.stringify(params.at));
+			first = Math.floor(first);
+			if (first + count - 1 > MAX_ROWS)
+				throw new window.AgentState.ToolError('Rows ' + first + '-' + (first + count - 1) + ' exceed the sheet limit of ' + MAX_ROWS + ' rows.');
+			address = first + ":" + (first + count - 1);
+		} else {
+			if (typeof params.at === 'number')
+				first = Math.floor(params.at);
+			else if (typeof params.at === 'string' && /^\s*\d+\s*$/.test(params.at))
+				first = parseInt(params.at, 10);
+			else if (typeof params.at === 'string' && /^\s*[A-Za-z]{1,3}\s*$/.test(params.at))
+				first = colNumber(params.at.trim().toUpperCase());
+			else
+				first = NaN;
+			if (!isFinite(first) || first < 1)
+				throw new window.AgentState.ToolError('For columns, "at" must be a column letter such as "C" (or a 1-based column number). Got: ' + JSON.stringify(params.at));
+			if (first + count - 1 > MAX_COLS)
+				throw new window.AgentState.ToolError('Columns exceed the sheet limit of ' + MAX_COLS + ' columns (XFD).');
+			address = colName(first) + ":" + colName(first + count - 1);
+		}
+
+		Asc.scope.structParams = { sheet: params.sheet || null, address: address, shift: params.type === "rows" ? "down" : "right" };
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.structParams;
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				let range = ws.GetRange(p.address);
+				if (!range)
+					return { error: "Invalid address \"" + p.address + "\"." };
+				range.Insert(p.shift);
+				return { sheet: ws.GetName(), inserted: p.address };
+			});
+		} catch (e) {
+			throw new window.AgentState.ToolError("Could not insert " + address + ": " + (e && e.message ? e.message : String(e)) + " (the sheet may be protected).");
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "manageSheet",
+		"category": "structure",
+		"description": "Adds, renames, deletes or activates a worksheet. 'add' creates a new sheet called 'name' (it becomes the active sheet); 'rename' renames sheet 'name' to 'newName'; 'delete' removes sheet 'name' and all its data (the last remaining sheet cannot be deleted); 'activate' switches to sheet 'name'. Sheet names must be 1-31 characters and must not contain : \\ / ? * [ ]. Returns the resulting list of sheets and the active sheet.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["add", "rename", "delete", "activate"],
+					"description": "What to do."
+				},
+				"name": {
+					"type": "string",
+					"description": "Name of the sheet to add, or of the existing sheet to rename/delete/activate."
+				},
+				"newName": {
+					"type": "string",
+					"description": "New sheet name (required for 'rename')."
+				}
+			},
+			"required": ["action", "name"]
+		},
+		"examples": [
+			{
+				"prompt": "Add a sheet called Summary",
+				"arguments": { "action": "add", "name": "Summary" }
+			},
+			{
+				"prompt": "Rename Sheet1 to Data 2025",
+				"arguments": { "action": "rename", "name": "Sheet1", "newName": "Data 2025" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const actions = ["add", "rename", "delete", "activate"];
+		if (!actions.includes(params.action))
+			throw new window.AgentState.ToolError('Parameter "action" must be one of ' + JSON.stringify(actions) + '. Got: ' + JSON.stringify(params.action));
+		if (typeof params.name !== 'string' || params.name.trim() === "")
+			throw new window.AgentState.ToolError('Parameter "name" must be a non-empty string.');
+
+		function checkName(n, field) {
+			if (n.length > 31)
+				throw new window.AgentState.ToolError('Parameter "' + field + '" is too long (' + n.length + ' characters); sheet names have at most 31 characters.');
+			if (/[:\\\/?*\[\]]/.test(n))
+				throw new window.AgentState.ToolError('Parameter "' + field + '" contains a character that is not allowed in sheet names (: \\ / ? * [ ]).');
+			if (/^'|'$/.test(n))
+				throw new window.AgentState.ToolError('Sheet names cannot start or end with an apostrophe.');
+		}
+
+		if (params.action === "add")
+			checkName(params.name, "name");
+		if (params.action === "rename") {
+			if (typeof params.newName !== 'string' || params.newName.trim() === "")
+				throw new window.AgentState.ToolError('Parameter "newName" is required for action "rename".');
+			checkName(params.newName, "newName");
+		}
+
+		Asc.scope.sheetParams = { action: params.action, name: params.name, newName: params.newName || null };
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.sheetParams;
+				function names() {
+					return Api.GetSheets().map(function(s){ return s.GetName(); });
+				}
+				function find(n) {
+					let list = Api.GetSheets();
+					for (let i = 0; i < list.length; i++) {
+						if (list[i].GetName().toLowerCase() === String(n).toLowerCase())
+							return list[i];
+					}
+					return null;
+				}
+				let ws = find(p.name);
+				switch (p.action) {
+					case "add":
+						if (ws)
+							return { error: "A sheet named \"" + p.name + "\" already exists." };
+						Api.AddSheet(p.name);
+						break;
+					case "rename":
+						if (!ws)
+							return { error: "Sheet \"" + p.name + "\" not found. Available sheets: " + names().join(", ") };
+						let other = find(p.newName);
+						if (other && other.GetName() !== ws.GetName())
+							return { error: "A sheet named \"" + p.newName + "\" already exists." };
+						ws.SetName(p.newName);
+						break;
+					case "delete":
+						if (!ws)
+							return { error: "Sheet \"" + p.name + "\" not found. Available sheets: " + names().join(", ") };
+						if (Api.GetSheets().length <= 1)
+							return { error: "Cannot delete the only sheet of the workbook." };
+						ws.Delete();
+						break;
+					case "activate":
+						if (!ws)
+							return { error: "Sheet \"" + p.name + "\" not found. Available sheets: " + names().join(", ") };
+						ws.SetActive();
+						break;
+				}
+				let active = Api.GetActiveSheet();
+				return { action: p.action, sheets: names(), activeSheet: active ? active.GetName() : null };
+			});
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
 		"name": "readRange",
 		"category": "core",
 		"readOnly": true,
@@ -8171,6 +10287,80 @@ HELPERS.cell.push((function(){
 			done: read ? toolText("Read cells %1", read) : "",
 			phrase: toolText("read cells")
 		};
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "replyToComment",
+		"category": "comments-review",
+		"description": "Adds a reply to an existing cell comment in the workbook, or marks it as resolved. The reply is appended after existing replies and is authored as 'AI Assistant (model)'. Get comment ids from getComments.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"commentId": {
+					"type": "string",
+					"description": "Id of the comment, as returned by getComments."
+				},
+				"text": {
+					"type": "string",
+					"description": "Reply text. May be omitted when only changing 'resolved'."
+				},
+				"resolved": {
+					"type": "boolean",
+					"description": "Optionally mark the comment as resolved (true) or reopen it (false)."
+				}
+			},
+			"required": ["commentId"]
+		},
+		"examples": [
+			{
+				"prompt": "Reply to the comment on B4 that the value was checked, and resolve it",
+				"arguments": { "commentId": "1", "text": "Checked against the invoice - value is correct.", "resolved": true }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if ((typeof params.commentId !== 'string' && typeof params.commentId !== 'number') || String(params.commentId) === "")
+			throw new window.AgentState.ToolError('Parameter "commentId" is required. Call getComments to get comment ids.');
+		let hasText = typeof params.text === 'string' && params.text.trim() !== "";
+		if (params.text !== undefined && params.text !== null && typeof params.text !== 'string')
+			throw new window.AgentState.ToolError('Parameter "text" must be a string.');
+		if (params.resolved !== undefined && params.resolved !== null && typeof params.resolved !== 'boolean')
+			throw new window.AgentState.ToolError('Parameter "resolved" must be a boolean.');
+		if (!hasText && typeof params.resolved !== 'boolean')
+			throw new window.AgentState.ToolError('Provide a non-empty "text" for the reply and/or "resolved".');
+
+		Asc.scope.replyParams = {
+			author: window.AIProvenance ? window.AIProvenance.commentAuthor(window.AIProvenance.scopeMeta("replyToComment")) : "AI",
+			id: String(params.commentId),
+			text: hasText ? params.text : null,
+			resolved: typeof params.resolved === 'boolean' ? params.resolved : null
+		};
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.replyParams;
+			let comment = Api.GetCommentById(p.id);
+			if (!comment)
+				return { error: "Comment \"" + p.id + "\" not found. Call getComments to get valid ids." };
+			if (p.text !== null)
+				comment.AddReply(p.text, p.author, "uid-ai");
+			if (p.resolved !== null)
+				comment.SetSolved(p.resolved);
+			// Re-read: ApiComment wraps a copy of the comment data.
+			let fresh = Api.GetCommentById(p.id) || comment;
+			return { commentId: p.id, replies: fresh.GetRepliesCount(), resolved: !!fresh.IsSolved() };
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	func.describe = function() {
+		return { start: toolText("Reply to a comment"), done: toolText("Replied to a comment"), phrase: toolText("replied to a comment") };
 	};
 
 	return func;
@@ -8480,6 +10670,195 @@ HELPERS.cell.push((function(){
 	return func;
 })());
 HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "setDataValidation",
+		"category": "data",
+		"description": "Adds a data validation rule to a cell range (replacing any existing rule there), or removes validation with type 'none'. Types: 'list' (drop-down; give 'values' as an array of items or 'source' as a range reference like '=$H$2:$H$10'), 'whole' (whole numbers), 'decimal', 'date', 'time', 'textLength' (length of the text), 'custom' (a formula that must be TRUE, in 'min'). For whole/decimal/date/time/textLength use 'operator' with 'min' and, for between/notBetween, 'max'. Dates are given as formulas such as '=DATE(2025,1,31)', times as decimals of a day such as '0.5' (12:00). Optionally set an error message shown when invalid data is entered.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"range": {
+					"type": "string",
+					"description": "A1-style address, e.g. 'B2:B200'."
+				},
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"type": {
+					"type": "string",
+					"enum": ["list", "whole", "decimal", "date", "time", "textLength", "custom", "none"],
+					"description": "Validation type; 'none' removes existing validation."
+				},
+				"values": {
+					"type": "array",
+					"items": { "type": "string" },
+					"description": "Allowed items for type 'list'. Items must not contain commas."
+				},
+				"source": {
+					"type": "string",
+					"description": "For type 'list': a range reference that holds the allowed items, e.g. '=$H$2:$H$10' or '=Lists!$A$1:$A$5'."
+				},
+				"operator": {
+					"type": "string",
+					"enum": ["between", "notBetween", "equal", "notEqual", "greater", "less", "greaterOrEqual", "lessOrEqual"],
+					"description": "Comparison for whole/decimal/date/time/textLength.",
+					"default": "between"
+				},
+				"min": {
+					"type": "string",
+					"description": "First value or formula (lower bound, or the compared value for single-value operators; the formula for 'custom'). Numbers can be given as text, e.g. '0'."
+				},
+				"max": {
+					"type": "string",
+					"description": "Upper bound for operators 'between' and 'notBetween'."
+				},
+				"alertStyle": {
+					"type": "string",
+					"enum": ["stop", "warning", "information"],
+					"description": "How invalid entries are handled: 'stop' rejects them, 'warning'/'information' only warn.",
+					"default": "stop"
+				},
+				"errorMessage": {
+					"type": "string",
+					"description": "Optional message shown when invalid data is entered."
+				}
+			},
+			"required": ["range", "type"]
+		},
+		"examples": [
+			{
+				"prompt": "Make column C a drop-down with Open, In progress, Done",
+				"arguments": { "range": "C2:C200", "type": "list", "values": ["Open", "In progress", "Done"] }
+			},
+			{
+				"prompt": "Only allow whole numbers from 1 to 10 in B2:B50",
+				"arguments": { "range": "B2:B50", "type": "whole", "operator": "between", "min": "1", "max": "10", "errorMessage": "Enter a number from 1 to 10." }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		const types = { list: "xlValidateList", whole: "xlValidateWholeNumber", decimal: "xlValidateDecimal", date: "xlValidateDate", time: "xlValidateTime", textLength: "xlValidateTextLength", custom: "xlValidateCustom", none: null };
+		const operators = { between: "xlBetween", notBetween: "xlNotBetween", equal: "xlEqual", notEqual: "xlNotEqual", greater: "xlGreater", less: "xlLess", greaterOrEqual: "xlGreaterEqual", lessOrEqual: "xlLessEqual" };
+		const alerts = { stop: "xlValidAlertStop", warning: "xlValidAlertWarning", information: "xlValidAlertInformation" };
+
+		if (typeof params.range !== 'string' || params.range.trim() === "")
+			throw new window.AgentState.ToolError('Parameter "range" must be an A1-style string, e.g. "B2:B200".');
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+		if (!(params.type in types))
+			throw new window.AgentState.ToolError('Parameter "type" must be one of ' + JSON.stringify(Object.keys(types)) + '. Got: ' + JSON.stringify(params.type));
+		let operator = params.operator === undefined || params.operator === null ? "between" : params.operator;
+		if (!(operator in operators))
+			throw new window.AgentState.ToolError('Parameter "operator" must be one of ' + JSON.stringify(Object.keys(operators)) + '. Got: ' + JSON.stringify(params.operator));
+		let alert = params.alertStyle === undefined || params.alertStyle === null ? "stop" : params.alertStyle;
+		if (!(alert in alerts))
+			throw new window.AgentState.ToolError('Parameter "alertStyle" must be one of ' + JSON.stringify(Object.keys(alerts)) + '.');
+
+		function str(v) {
+			return v === undefined || v === null || v === "" ? null : String(v);
+		}
+		let formula1 = null, formula2 = null;
+		switch (params.type) {
+			case "list":
+				if (Array.isArray(params.values) && params.values.length) {
+					let items = params.values.map(function(v){ return String(v).trim(); }).filter(function(v){ return v !== ""; });
+					if (!items.length)
+						throw new window.AgentState.ToolError('Parameter "values" contains no non-empty items.');
+					if (items.some(function(v){ return v.indexOf(",") !== -1; }))
+						throw new window.AgentState.ToolError('List items must not contain commas. Put the items in cells and pass "source" instead.');
+					formula1 = items.join(",");
+					if (formula1.length > 255)
+						throw new window.AgentState.ToolError('The list is too long (' + formula1.length + ' characters, max 255). Put the items in cells and pass "source" instead.');
+				} else if (typeof params.source === 'string' && params.source.trim() !== "") {
+					formula1 = params.source.trim();
+					if (formula1.charAt(0) !== "=")
+						formula1 = "=" + formula1;
+				} else {
+					throw new window.AgentState.ToolError('Type "list" needs "values" (array of items) or "source" (range reference such as "=$H$2:$H$10").');
+				}
+				break;
+			case "custom":
+				formula1 = str(params.min);
+				if (!formula1)
+					throw new window.AgentState.ToolError('Type "custom" needs the formula in "min", e.g. "=LEN(A2)<=10".');
+				break;
+			case "none":
+				break;
+			default:
+				formula1 = str(params.min);
+				formula2 = str(params.max);
+				if (!formula1)
+					throw new window.AgentState.ToolError('Type "' + params.type + '" needs "min" (the value to compare with).');
+				if ((operator === "between" || operator === "notBetween") && !formula2)
+					throw new window.AgentState.ToolError('Operator "' + operator + '" needs both "min" and "max".');
+				if (operator !== "between" && operator !== "notBetween")
+					formula2 = null;
+		}
+		if (params.errorMessage !== undefined && params.errorMessage !== null && typeof params.errorMessage !== 'string')
+			throw new window.AgentState.ToolError('Parameter "errorMessage" must be a string.');
+
+		Asc.scope.validationParams = {
+			range: params.range.trim(),
+			sheet: params.sheet || null,
+			type: types[params.type],
+			alert: alerts[alert],
+			operator: operators[operator],
+			formula1: formula1,
+			formula2: formula2,
+			errorMessage: params.errorMessage || null
+		};
+
+		let result;
+		await Asc.Editor.callMethod("StartAction", ["GroupActions"]);
+		try {
+			result = await Asc.Editor.callCommand(function(){
+				let p = Asc.scope.validationParams;
+				let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+				if (!ws)
+					return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+				let range = null;
+				try {
+					range = ws.GetRange(p.range); // ApiWorksheet.GetRange throws on an invalid address
+				} catch (e) {}
+				if (!range)
+					return { error: "Invalid range \"" + p.range + "\"." };
+				try {
+					range.GetValidation().Delete();
+				} catch (e) {}
+				if (!p.type)
+					return { sheet: ws.GetName(), range: range.GetAddress(false, false), removed: true };
+				// GetValidation() caches per ApiRange; use a fresh range after deleting
+				let fresh = ws.GetRange(p.range);
+				let v;
+				try {
+					v = fresh.GetValidation().Add(p.type, p.alert, p.operator, p.formula1 === null ? undefined : p.formula1, p.formula2 === null ? undefined : p.formula2);
+				} catch (e) {
+					return { error: "The editor rejected the validation rule: " + (e && e.message ? e.message : String(e)) + ". Check min/max/source." };
+				}
+				if (!v)
+					return { error: "The editor rejected the validation rule. Check type, min/max and source." };
+				if (p.errorMessage) {
+					try {
+						v.SetShowError(true);
+						v.SetErrorMessage(p.errorMessage);
+					} catch (e) {}
+				}
+				return { sheet: ws.GetName(), range: fresh.GetAddress(false, false), type: p.type, operator: p.operator, formula1: p.formula1, formula2: p.formula2 };
+			});
+		} finally {
+			await Asc.Editor.callMethod("EndAction", ["GroupActions"]);
+		}
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
 
 	let func = new RegisteredFunction({
 		"name": "setMultiSort",
@@ -8713,6 +11092,81 @@ HELPERS.cell.push((function(){
 				Asc.scope.header
 			);
 		});
+	};
+
+	return func;
+})());
+HELPERS.cell.push((function(){
+	let func = new RegisteredFunction({
+		"name": "setNumberFormat",
+		"category": "data",
+		"description": "Applies a number format code to a cell range without changing the stored values. Use standard Excel format codes, e.g. 'General', '0', '0.00', '#,##0.00', '0%', '0.0%', '#,##0.00 \"€\"', '[$$-409]#,##0.00', 'dd.mm.yyyy', 'yyyy-mm-dd', 'hh:mm', '@' (text). Use it to show values as currency, percentages, dates or with a fixed number of decimals.",
+		"parameters": {
+			"type": "object",
+			"properties": {
+				"range": {
+					"type": "string",
+					"description": "A1-style address, e.g. 'C2:C50'. Defaults to the current selection."
+				},
+				"sheet": {
+					"type": "string",
+					"description": "Sheet name. Defaults to the active sheet."
+				},
+				"format": {
+					"type": "string",
+					"description": "Number format code, e.g. '#,##0.00'."
+				}
+			},
+			"required": ["format"]
+		},
+		"examples": [
+			{
+				"prompt": "Show column D as percentages with one decimal",
+				"arguments": { "range": "D2:D100", "format": "0.0%" }
+			},
+			{
+				"prompt": "Format the selection as euro amounts",
+				"arguments": { "format": "#,##0.00 \"€\"" }
+			}
+		]
+	});
+
+	func.call = async function(params) {
+		if (typeof params.format !== 'string' || params.format === "")
+			throw new window.AgentState.ToolError('Parameter "format" must be a non-empty number format code, e.g. "#,##0.00".');
+		if (params.range !== undefined && params.range !== null && typeof params.range !== 'string')
+			throw new window.AgentState.ToolError('Parameter "range" must be an A1-style string. Got: ' + JSON.stringify(params.range));
+		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
+			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
+
+		Asc.scope.formatParams = { range: params.range || null, sheet: params.sheet || null, format: params.format };
+
+		let result = await Asc.Editor.callCommand(function(){
+			let p = Asc.scope.formatParams;
+			let ws = p.sheet ? Api.GetSheet(p.sheet) : Api.GetActiveSheet();
+			if (!ws)
+				return { error: "Sheet \"" + p.sheet + "\" not found. Available sheets: " + Api.GetSheets().map(function(s){ return s.GetName(); }).join(", ") };
+			let range = null;
+			try {
+				range = p.range ? ws.GetRange(p.range) : Api.GetSelection(); // ApiWorksheet.GetRange throws on an invalid address
+			} catch (e) {}
+			if (!range)
+				return { error: p.range ? "Invalid range \"" + p.range + "\"." : "No range selected. Pass \"range\"." };
+			range.SetNumberFormat(p.format);
+			let sample = null;
+			try {
+				let cell = ws.GetRangeByNumber(range.GetRow() - 1, range.GetCol() - 1);
+				sample = { address: cell.GetAddress(false, false), displayed: cell.GetText() };
+			} catch (e) {}
+			let res = { sheet: ws.GetName(), range: range.GetAddress(false, false), format: p.format };
+			if (sample)
+				res.sample = sample;
+			return res;
+		});
+
+		if (result && result.error)
+			throw new window.AgentState.ToolError(result.error);
+		return result;
 	};
 
 	return func;
@@ -9478,13 +11932,22 @@ HELPERS.names.word = {
 	"checkSpelling": "Check and Fix Spelling",
 	"commentText": "Add Comment to Text",
 	"editParagraph": "Edit Paragraph",
+	"findAIContent": "Find AI-Generated Content",
+	"findText": "Find Text",
 	"generateDocx": "Generate Document",
 	"generateForm": "Generate Form Template",
+	"getComments": "Read Comments",
 	"getSelection": "Read Selection",
+	"getTrackedChanges": "Read Tracked Changes",
+	"insertMarkdown": "Insert Formatted Text",
 	"insertPage": "Insert Blank Page",
 	"changeParagraphStyle": "Change Paragraph Style",
 	"readDocument": "Read Document",
+	"readOutline": "Read Outline",
 	"replaceSelection": "Replace Selection",
+	"replyToComment": "Reply to Comment",
+	"resolveComment": "Resolve Comment",
+	"reviewTrackedChanges": "Accept or Reject Changes",
 	"rewriteText": "Rewrite Text",
 	"selectText": "Select Text",
 	"changeTextStyle": "Format Text",
@@ -9500,10 +11963,14 @@ HELPERS.names.slide = {
 	"changeSlideBackground": "Change Slide Background",
 	"deleteSlide": "Delete Slide",
 	"duplicateSlide": "Duplicate Slide",
+	"findInPresentation": "Find in Presentation",
 	"generatePresentationWithTheme": "Generate Presentation",
+	"getSpeakerNotes": "Read Speaker Notes",
 	"goToSlide": "Go to Slide",
+	"moveSlide": "Move Slide",
 	"readPresentation": "Read Presentation",
 	"replaceSelection": "Replace Selection",
+	"setSpeakerNotes": "Write Speaker Notes",
 	"writeMacro": "Run Macro"
 };
 HELPERS.names.cell = {
@@ -9518,18 +11985,28 @@ HELPERS.names.cell = {
 	"addTop10Condition": "Highlight Top or Bottom Values",
 	"addUniqueValues": "Highlight Unique or Duplicate Values",
 	"clearConditionalFormatting": "Clear Conditional Formatting",
+	"deleteRowsColumns": "Delete Rows or Columns",
 	"explainFormula": "Explain Formula",
 	"fillMissingData": "Fill Missing Data",
+	"findFormulaErrors": "Find Formula Errors",
+	"findInSheet": "Find in Sheet",
 	"fixFormula": "Fix Formula Errors",
 	"formatTable": "Format as Table",
+	"freezePanes": "Freeze Panes",
+	"getComments": "Read Comments",
 	"getWorkbookInfo": "Inspect Workbook",
 	"highlightAnomalies": "Highlight Data Anomalies",
 	"highlightDuplicates": "Highlight Duplicate Values",
 	"insertPivotTable": "Create Pivot Table",
+	"insertRowsColumns": "Insert Rows or Columns",
+	"manageSheet": "Manage Sheets",
 	"readRange": "Read Cells",
+	"replyToComment": "Reply to Comment",
 	"selectRange": "Select Cells",
 	"setAutoFilter": "Apply Data Filter",
+	"setDataValidation": "Set Data Validation",
 	"setMultiSort": "Sort by Multiple Columns",
+	"setNumberFormat": "Set Number Format",
 	"setSort": "Sort Data",
 	"summarizeData": "Summarize Data",
 	"changeTextStyle": "Format Cell Text",
