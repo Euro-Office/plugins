@@ -189,5 +189,12 @@ describe("AIPromptTools.toToolCalls", () => {
 		expect(PT.isToolCall("[functionCalling (x)]: {}")).toBe(true);
 		expect(PT.isToolCall("\n [functionCalling (x)]: {}")).toBe(true);
 		expect(PT.isToolCall("Sure: [functionCalling (x)]: {}")).toBe(false);
+		const [later] = PT.toToolCalls('Reading it now.\n[functionCalling (readDocument)]: {"startIndex": 1}');
+		expect(later).toMatchObject({ function: { name: "readDocument", arguments: '{"startIndex":1}' }, promptCall: '[functionCalling (readDocument)]: {"startIndex": 1}' });
+		const [first] = PT.toToolCalls("[functionCalling (getSelection)]: {}\n[functionCalling (readDocument)]: {}");
+		expect(first.promptCall).toBe("[functionCalling (getSelection)]: {}");
+		expect(PT.textBeforeCall('Reading it now.\n[functionCalling (readDocument)]: {}')).toBe("Reading it now.");
+		expect(PT.streamableLength("Done.\n[functionCall")).toBe(6);
+		expect(PT.streamableLength("Done.\nNext")).toBe(10);
 	});
 });

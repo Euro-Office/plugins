@@ -40,7 +40,8 @@
 	// the persisted chat does not grow with every tool result.
 	const HISTORY_STORED_TRANSCRIPT_TURNS = 10;
 
-	const FUNC_CALL_RE = /^\s*\[functionCalling\s*\(\s*([A-Za-z_$][\w$.-]*)\s*\)\s*\]\s*:?\s*([\s\S]*)$/;
+	// A prompt-based call starts a line, possibly after some text (promptTools.js).
+	const FUNC_CALL_RE = /(?:^|\n)[ \t\r]*\[functionCalling\s*\(\s*([A-Za-z_$][\w$.-]*)\s*\)/;
 	const MISSING_RESULT = "No result was recorded for this call.";
 
 	function truncate(text, max) {
