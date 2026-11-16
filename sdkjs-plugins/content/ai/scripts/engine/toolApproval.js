@@ -10,8 +10,9 @@
 //  - tools marked readOnly (RegisteredFunction.readOnly) run without asking;
 //  - every other tool needs the user's consent in the chat window
 //    ("Allow" / "Always allow" / "Deny"). "Always allow" is stored per tool
-//    in localStorage, except for writeMacro (arbitrary code), where it only
-//    lasts as long as the chat window is open;
+//    in localStorage, except for SESSION_ONLY_TOOLS (writeMacro runs arbitrary
+//    code; the others can delete sheets, rows/columns or all tracked changes),
+//    where it only lasts as long as the chat window is open;
 //  - arguments are parsed as data (parseToolArguments in helperFuncs.js),
 //    never evaluated;
 //  - unknown tools and bad arguments become error results, never throws.
@@ -22,7 +23,7 @@
 (function(root) {
 
 	const ALWAYS_ALLOW_KEY = "onlyoffice_ai_tool_always_allow";
-	const SESSION_ONLY_TOOLS = { "writeMacro": true };
+	const SESSION_ONLY_TOOLS = { "writeMacro": true, "manageSheet": true, "deleteRowsColumns": true, "reviewTrackedChanges": true };
 	const WINDOW_READY_TIMEOUT = 20000;
 	const PREVIEW_TIMEOUT = 4000;
 	const DECLINED_MESSAGE = "The user declined this action.";

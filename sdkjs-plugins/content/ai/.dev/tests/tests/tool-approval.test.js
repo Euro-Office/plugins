@@ -126,6 +126,20 @@ function setup(respond, canOpen) {
 		assert.strictEqual(asked, 3);
 	});
 
+	test("Always allow for manageSheet, deleteRowsColumns and reviewTrackedChanges lasts only for the session", async () => {
+		const names = ["manageSheet", "deleteRowsColumns", "reviewTrackedChanges"];
+		let asked = 0;
+		const { ctx } = setup(() => { asked++; return "always"; });
+		names.forEach((name) => M.addTool(ctx, "word", { name: name }, async () => ({ ok: true })));
+		for (const name of names) {
+			await ctx.ToolApproval.handleEditorToolCall({ name: name, arguments: "{}" });
+			await ctx.ToolApproval.handleEditorToolCall({ name: name, arguments: "{}" });
+		}
+		assert.strictEqual(asked, names.length, "asked once per tool within the session");
+		const stored = JSON.parse(ctx.localStorage.getItem("onlyoffice_ai_tool_always_allow") || "{}");
+		names.forEach((name) => assert.strictEqual(stored[name], undefined, name + " is not persisted"));
+	});
+
 	test("approval card carries the macro code and stays pending until answered; stop denies", async () => {
 		const { ctx } = setup(null); // never answers
 		const p = ctx.ToolApproval.handleEditorToolCall({ name: "writeMacro", arguments: { code: "Api.GetDocument()" } });
