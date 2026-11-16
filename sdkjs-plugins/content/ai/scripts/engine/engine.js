@@ -129,22 +129,20 @@ function fetchExternal(url, options, isStreaming) {
 (function(window, undefined)
 {
 	// The server keeps the provider keys: requests go to its /ai-proxy, which adds them.
+	// Without server settings, requests go straight to the provider.
 	function toProxyRequest(url, request) {
-		let proxyRequest = {
+		return [AI.serverSettings.proxy, {
 			"method" : request.method,
+			"headers" : {
+				"Authorization" : "Bearer " + Asc.plugin.info.jwt,
+			},
 			"body" : JSON.stringify({
 				"target" : url,
 				"method" : request.method,
 				"headers" : request.headers,
 				"data" : request.body
 			})
-		};
-		if (!AI.serverSettings)
-			return [AI.PROXY_URL, proxyRequest];
-		proxyRequest["headers"] = {
-			"Authorization" : "Bearer " + Asc.plugin.info.jwt,
-		};
-		return [AI.serverSettings.proxy, proxyRequest];
+		}];
 	}
 
 	async function requestWrapper(message) {
@@ -173,7 +171,7 @@ function fetchExternal(url, options, isStreaming) {
 				if (request.method != "GET") {
 					request.body = message.isBlob ? message.body : (message.body ? JSON.stringify(message.body) : "");
 
-					if (message.isUseProxy)
+					if (message.isUseProxy && AI.serverSettings)
 						[requestUrl, request] = toProxyRequest(message.url, request);
 				}
 				
@@ -277,7 +275,7 @@ function fetchExternal(url, options, isStreaming) {
 		}
 
 		let requestUrl = message.url;
-		if (message.isUseProxy && request.method !== "GET") {
+		if (message.isUseProxy && AI.serverSettings && request.method !== "GET") {
 			[requestUrl, request] = toProxyRequest(message.url, request);
 			request.signal = abortController.signal;
 		}
@@ -297,8 +295,6 @@ function fetchExternal(url, options, isStreaming) {
 	}
 
 	AI.TmpProviderForModels = null;
-
-	AI.PROXY_URL = "https://plugins-services.onlyoffice.com/proxy";
 
 	AI._getHeaders = function(_provider) {
 		let provider = _provider.createInstance ? _provider : AI.Storage.getProvider(_provider.name);
