@@ -17,7 +17,6 @@ const testSource = source.slice(0, source.lastIndexOf(ending)) +
 
 const target = "https://generativelanguage.googleapis.com/v1beta/models/test:streamGenerateContent";
 const proxy = "https://editor.example/ai-proxy";
-const publicProxy = "https://public.example/proxy";
 
 function loadEngine(settings = { proxy }, response = new Response("first chunk")) {
 	const calls = [];
@@ -30,7 +29,6 @@ function loadEngine(settings = { proxy }, response = new Response("first chunk")
 		}
 	});
 	sb.run(testSource, pathToFileURL(pluginPath(ENGINE)).href);
-	sb.ctx.AI.PROXY_URL = publicProxy;
 	return { transport: sb.ctx.transport, calls };
 }
 
@@ -72,16 +70,30 @@ test("streaming and non-streaming use the same server proxy envelope", async () 
 	expect(streaming.calls[0].request.headers.Authorization).toBe(regular.calls[0].request.headers.Authorization);
 });
 
-test("without server settings, proxied streaming goes to the public proxy without a session token", async () => {
-	const { transport, calls } = loadEngine(null);
+// Without server settings a provider that asks for proxying (Together AI) is
+// called directly: the public ONLYOFFICE proxy must not receive the provider key.
+test.each([
+	["streaming", "requestWrapperStream"],
+	["non-streaming", "requestWrapper"]
+])("without server settings, proxied %s goes straight to the provider", async (_name, fn) => {
+	const { transport, calls } = loadEngine(null, new Response("{\"answer\":\"ok\"}"));
 	const input = message();
-	await transport.requestWrapperStream(input);
-	expect(calls[0].url).toBe(publicProxy);
-	expect(calls[0].request.headers).toBeUndefined();
+	await transport[fn](input);
+	expect(calls).toHaveLength(1);
+	expect(calls[0].url).toBe(target);
+	expect(calls[0].request.headers).toEqual(input.headers);
+	expect(calls[0].request.body).toBe(JSON.stringify(input.body));
+});
+
+test("non-streaming with server settings uses the authenticated server proxy", async () => {
+	const { transport, calls } = loadEngine({ proxy }, new Response("{\"answer\":\"ok\"}"));
+	const input = message();
+	await transport.requestWrapper(input);
+	expect(calls[0].url).toBe(proxy);
+	expect(calls[0].request.headers).toEqual({ Authorization: "Bearer test-session-token" });
 	expect(JSON.parse(calls[0].request.body)).toEqual({
 		target, method: "POST", headers: input.headers, data: JSON.stringify(input.body)
 	});
-	expect(calls[0].request.signal).toBeInstanceOf(AbortSignal);
 });
 
 test("proxied streaming delivers chunks before completion and preserves split UTF-8", async () => {
@@ -118,8 +130,6 @@ test("provider errors remain readable through the proxy", async () => {
 	expect((await reader.read()).value).toBe(error);
 });
 
-// A browser-configured provider only proxies when the provider asks for it
-// (AI._extendBody), so without server settings isUseProxy is false.
 test.each([
 	["browser-configured provider", null, { isUseProxy: false }],
 	["request that opts out of proxying", { proxy }, { isUseProxy: false }],
