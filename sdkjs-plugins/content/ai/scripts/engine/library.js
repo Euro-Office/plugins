@@ -567,7 +567,7 @@
 
 	Library.prototype.ConvertMdToHTML = function(data, plugins, isStreaming)
 	{
-		let c = window.markdownit();
+		let c = window.markdownit().use(Asc.PluginsMD.noImages);
 		if (plugins) {
 			for (let i = 0, len = plugins.length; i < len; i++)
 				c.use(plugins[i]);
