@@ -432,6 +432,14 @@ describe("insertMarkdown", () => {
 		expect(html).toContain("Intro secret &lt;b&gt; end");
 	});
 
+	test("ConvertMdToHTML never renders images, also for the context menu and smart actions", () => {
+		const { sandbox } = word({ body: ["one"] });
+		const html = sandbox.run("Asc.Library.ConvertMdToHTML('![a](https://x.example/y.png)', [Asc.PluginsMD.latex, Asc.PluginsMD.hr])");
+		expect(html).not.toContain("<img");
+		expect(html).not.toContain("x.example");
+		expect(html).toContain("a");
+	});
+
 	test("replaceSelection needs a selection; the undo group is still closed", async () => {
 		const { call, host } = word({ body: ["one"] });
 		await expectToolError(call("insertMarkdown", { markdown: "x", position: "replaceSelection" }), /Nothing is selected/);

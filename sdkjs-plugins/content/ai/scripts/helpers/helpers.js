@@ -1467,7 +1467,7 @@ HELPERS.word.push((function(){
 		if (!positions.includes(position))
 			throw new window.AgentState.ToolError('Parameter "position" must be one of ' + JSON.stringify(positions) + '. Got: ' + JSON.stringify(params.position));
 
-		let html = Asc.Library.ConvertMdToHTML(params.markdown, [Asc.PluginsMD.noImages]);
+		let html = Asc.Library.ConvertMdToHTML(params.markdown);
 		if (!html || !html.trim())
 			throw new window.AgentState.ToolError('The markdown produced no content.');
 
