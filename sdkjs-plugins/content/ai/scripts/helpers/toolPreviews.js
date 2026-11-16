@@ -447,6 +447,61 @@
 		return { text: { before: clip(selected), after: clip(params.text) } };
 	}
 
+	// ── Tracked changes (text document) ────────────────────────────────────
+
+	async function previewReviewTrackedChanges(params) {
+		let byAuthor = await callCommand(function() {
+			let report = Api.GetDocument().GetReviewReport() || {};
+			let res = {};
+			for (let author in report) {
+				let list = report[author];
+				if (list && !Array.isArray(list) && typeof list === "object")
+					list = list.reviews;
+				if (Array.isArray(list) && list.length)
+					res[author] = list.length;
+			}
+			return res;
+		});
+		let authors = Object.keys(byAuthor || {});
+		if (!authors.length)
+			return null;
+		let all = params && params.scope === "all";
+		let items = [{ label: tr("Applies to"), value: all ? tr("Whole document") : tr("Selection") }];
+		authors.forEach(function(author) {
+			items.push({ label: clip(author, 60), value: String(byAuthor[author]) });
+		});
+		let preview = { items: items };
+		if (!all)
+			preview.note = tr("Tracked changes per author in the whole document; only those in the selection are processed.");
+		return preview;
+	}
+
+	// ── Presentation ───────────────────────────────────────────────────────
+
+	async function previewSetSpeakerNotes(params) {
+		if (!params || typeof params.text !== "string")
+			return null;
+		scope().aiPreviewNotes = typeof params.slideNumber === "number" ? Math.floor(params.slideNumber) : null;
+		let current = await callCommand(function() {
+			let pres = Api.GetPresentation();
+			let number = Asc.scope.aiPreviewNotes;
+			let slide = number ? pres.GetSlideByIndex(number - 1) : pres.GetCurrentSlide();
+			let notes = slide ? slide.GetNotesPage() : null;
+			if (!notes)
+				return null;
+			return { slideNumber: slide.GetSlideIndex() + 1, notes: String(notes.GetBodyShapeText() || "") };
+		});
+		if (!current)
+			return null;
+		let before = current.notes.replace(/\r\n?/g, "\n");
+		let text = params.text.replace(/\r\n?/g, "\n");
+		let after = params.mode === "append" && before !== "" ? before + "\n" + text : text;
+		return {
+			items: [{ label: tr("Slide"), value: String(current.slideNumber) }],
+			text: { before: clip(before), after: clip(after) }
+		};
+	}
+
 	const HOOKS = {
 		cell: {
 			writeRange: previewWriteRange,
@@ -457,10 +512,12 @@
 			manageSheet: previewManageSheet
 		},
 		slide: {
-			replaceSelection: previewReplaceSelection
+			replaceSelection: previewReplaceSelection,
+			setSpeakerNotes: previewSetSpeakerNotes
 		},
 		word: {
-			replaceSelection: previewReplaceSelection
+			replaceSelection: previewReplaceSelection,
+			reviewTrackedChanges: previewReviewTrackedChanges
 		}
 	};
 

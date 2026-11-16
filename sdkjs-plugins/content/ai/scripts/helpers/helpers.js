@@ -2156,9 +2156,12 @@ HELPERS.word.push((function(){
 
 	func.describe = function(args, result) {
 		let reject = args.action === "reject";
+		let all = args.scope === "all";
 		let changed = result ? Math.max(0, (result.changesBefore || 0) - (result.changesAfter || 0)) : 0;
 		return {
-			start: reject ? toolText("Reject tracked changes") : toolText("Accept tracked changes"),
+			start: reject
+				? (all ? toolText("Reject all tracked changes") : toolText("Reject the tracked changes in the selection"))
+				: (all ? toolText("Accept all tracked changes") : toolText("Accept the tracked changes in the selection")),
 			done: result && (reject ? toolText("Rejected %1 tracked changes", changed) : toolText("Accepted %1 tracked changes", changed)),
 			phrase: toolText("reviewed tracked changes")
 		};
