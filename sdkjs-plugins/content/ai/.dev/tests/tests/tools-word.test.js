@@ -440,6 +440,15 @@ describe("insertMarkdown", () => {
 		expect(html).toContain("a");
 	});
 
+	test("ConvertMdToHTML escapes HTML inside LaTeX", () => {
+		const { sandbox } = word({ body: ["one"] });
+		const md = "$a<img src=x>b$\n\n$$\n<img src=y>\n$$";
+		const html = sandbox.run(`Asc.Library.ConvertMdToHTML(${JSON.stringify(md)}, [Asc.PluginsMD.latex])`);
+		expect(html).not.toContain("<img");
+		expect(html).toContain('<span class="oo-latex-inline">a&lt;img src=x&gt;b</span>');
+		expect(html).toContain('<span class="oo-latex">&lt;img src=y&gt;</span>');
+	});
+
 	test("replaceSelection needs a selection; the undo group is still closed", async () => {
 		const { call, host } = word({ body: ["one"] });
 		await expectToolError(call("insertMarkdown", { markdown: "x", position: "replaceSelection" }), /Nothing is selected/);

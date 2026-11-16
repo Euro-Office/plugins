@@ -232,7 +232,7 @@
 				return true;
 			});
 			md.renderer.rules.latex_inline = function(tokens, idx) {
-				return `<span class="oo-latex-inline">${tokens[idx].content}</span>`;
+				return `<span class="oo-latex-inline">${md.utils.escapeHtml(tokens[idx].content)}</span>`;
 			};
 			
 			// Block: $$...$$  
@@ -274,7 +274,7 @@
 				return true;
 			});
 			md.renderer.rules.latex_block = function(tokens, idx) {
-				return `<span class="oo-latex">${tokens[idx].content}</span>\n`;
+				return `<span class="oo-latex">${md.utils.escapeHtml(tokens[idx].content)}</span>\n`;
 			};
 		},
 
