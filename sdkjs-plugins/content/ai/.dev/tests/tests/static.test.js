@@ -64,6 +64,16 @@ describe("JSON", () => {
 });
 
 describe("licence headers", () => {
+	// DocumentServer/AGENTS.md puts a year in front, older files have none.
+	const SPDX_COPYRIGHT = /SPDX-FileCopyrightText: (\d{4} )?Euro-Office contributors/;
+
+	test.each([
+		"// SPDX-FileCopyrightText: Euro-Office contributors",
+		"# SPDX-FileCopyrightText: 2026 Euro-Office contributors"
+	])("accepts %s", (line) => {
+		expect(line).toMatch(SPDX_COPYRIGHT);
+	});
+
 	// Upstream files that came without a header; they stay as they are.
 	const UPSTREAM_WITHOUT_HEADER = [
 		".dev/helpers/helpers.py",
@@ -98,7 +108,7 @@ describe("licence headers", () => {
 		const head = fs.readFileSync(path.join(PLUGIN_DIR, file), "utf8").split("\n").slice(0, 40).join("\n");
 		if (head.includes("Ascensio System SIA"))
 			return;
-		expect(head).toContain("SPDX-FileCopyrightText: Euro-Office contributors");
+		expect(head).toMatch(SPDX_COPYRIGHT);
 		expect(head).toContain("SPDX-License-Identifier: AGPL-3.0-only");
 	});
 
