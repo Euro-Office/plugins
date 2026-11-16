@@ -81,13 +81,13 @@
 			throw new window.AgentState.ToolError('Parameter "range" must be an A1-style string, e.g. "B2:B200".');
 		if (params.sheet !== undefined && params.sheet !== null && typeof params.sheet !== 'string')
 			throw new window.AgentState.ToolError('Parameter "sheet" must be a string. Got: ' + JSON.stringify(params.sheet));
-		if (!(params.type in types))
+		if (!Object.hasOwn(types, params.type))
 			throw new window.AgentState.ToolError('Parameter "type" must be one of ' + JSON.stringify(Object.keys(types)) + '. Got: ' + JSON.stringify(params.type));
 		let operator = params.operator === undefined || params.operator === null ? "between" : params.operator;
-		if (!(operator in operators))
+		if (!Object.hasOwn(operators, operator))
 			throw new window.AgentState.ToolError('Parameter "operator" must be one of ' + JSON.stringify(Object.keys(operators)) + '. Got: ' + JSON.stringify(params.operator));
 		let alert = params.alertStyle === undefined || params.alertStyle === null ? "stop" : params.alertStyle;
-		if (!(alert in alerts))
+		if (!Object.hasOwn(alerts, alert))
 			throw new window.AgentState.ToolError('Parameter "alertStyle" must be one of ' + JSON.stringify(Object.keys(alerts)) + '.');
 
 		function str(v) {
