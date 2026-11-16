@@ -112,6 +112,38 @@ function setup(editorType, defs) {
 		assert.strictEqual(ctx.ToolPreviews.rowsColumnsAddress({ type: "rows", at: "x" }), null);
 	});
 
+	test("reviewTrackedChanges: scope and changes per author", async () => {
+		const ctx = setup("word", ["reviewTrackedChanges"]);
+		ctx.Api = { GetDocument: () => ({ GetReviewReport: () => ({ Anna: [{}, {}], Ben: { reviews: [{}] } }) }) };
+		const all = await ctx.ToolApproval.getPreview("reviewTrackedChanges", { action: "accept", scope: "all" });
+		assert.deepStrictEqual(JSON.parse(JSON.stringify(all.items)), [
+			{ label: "Applies to", value: "Whole document" },
+			{ label: "Anna", value: "2" },
+			{ label: "Ben", value: "1" }
+		]);
+		const sel = await ctx.ToolApproval.getPreview("reviewTrackedChanges", { action: "reject" });
+		assert.strictEqual(sel.items[0].value, "Selection");
+		assert.match(sel.note, /whole document/);
+		ctx.Api = { GetDocument: () => ({ GetReviewReport: () => ({}) }) };
+		assert.strictEqual(await ctx.ToolApproval.getPreview("reviewTrackedChanges", { action: "accept", scope: "all" }), null);
+	});
+
+	test("setSpeakerNotes: current notes vs new notes", async () => {
+		const ctx = setup("slide", ["setSpeakerNotes"]);
+		const slide = (n, notes) => ({ GetSlideIndex: () => n - 1, GetNotesPage: () => ({ GetBodyShapeText: () => notes }) });
+		const slides = [slide(1, "Old notes\r\nline two"), slide(2, "")];
+		ctx.Api = { GetPresentation: () => ({ GetSlideByIndex: (i) => slides[i] || null, GetCurrentSlide: () => slides[1] }) };
+		const rep = await ctx.ToolApproval.getPreview("setSpeakerNotes", { slideNumber: 1, text: "New" });
+		assert.strictEqual(rep.items[0].value, "1");
+		assert.deepStrictEqual(rep.text, { before: "Old notes\nline two", after: "New" });
+		const app = await ctx.ToolApproval.getPreview("setSpeakerNotes", { slideNumber: 1, text: "More", mode: "append" });
+		assert.deepStrictEqual(app.text, { before: "Old notes\nline two", after: "Old notes\nline two\nMore" });
+		const cur = await ctx.ToolApproval.getPreview("setSpeakerNotes", { text: "First" });
+		assert.strictEqual(cur.items[0].value, "2");
+		assert.deepStrictEqual(cur.text, { before: "", after: "First" });
+		assert.strictEqual(await ctx.ToolApproval.getPreview("setSpeakerNotes", { slideNumber: 9, text: "x" }), null);
+	});
+
 	test("preview is attached but never sent to the model (getTools)", async () => {
 		const ctx = setup("cell", ["writeRange"]);
 		assert.strictEqual(typeof ctx.EditorHelper.names2funcs.writeRange.preview, "function");
