@@ -12,7 +12,7 @@ services:
     ports:
       # Must be 80 on both sides: the example app builds document URLs from the
       # browser's host and port, and the server fetches them from inside the container.
-      - "80:80"
+      - "127.0.0.1:80:80"
     environment:
       JWT_ENABLED: "true"
       JWT_SECRET: "${EO_JWT_SECRET:-local-dev-secret-at-least-32-chars-long}"
@@ -34,7 +34,7 @@ services:
     profiles: ["ollama"]
     image: ollama/ollama:${OLLAMA_TAG:-latest}
     ports:
-      - "${OLLAMA_PORT:-11434}:11434"
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
     environment:
       # The plugin calls Ollama directly from the browser, so allow the editor origin.
       OLLAMA_ORIGINS: "*"
