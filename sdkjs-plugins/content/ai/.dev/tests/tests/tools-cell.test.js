@@ -301,6 +301,9 @@ describe("setDataValidation", () => {
 
 	test.each([
 		[{ range: "A1", type: "regex" }, /"type" must be one of/],
+		[{ range: "A1", type: "toString" }, /"type" must be one of/],
+		[{ range: "A1", type: "whole", min: 1, max: 2, operator: "constructor" }, /"operator" must be one of/],
+		[{ range: "A1", type: "whole", min: 1, max: 2, alertStyle: "hasOwnProperty" }, /"alertStyle"/],
 		[{ range: "A1", type: "list" }, /needs "values"/],
 		[{ range: "A1", type: "list", values: ["a,b"] }, /must not contain commas/],
 		[{ range: "A1", type: "list", values: ["x".repeat(300)] }, /too long/],
