@@ -191,6 +191,13 @@
 	}
 
 	exports.Asc.PluginsMD = {
+		// Images would load without a click, so model output (or a prompt injected
+		// through document content) could send data to any host. Show the alt text.
+		noImages: function(md) {
+			md.renderer.rules.image = function(tokens, idx) {
+				return md.utils.escapeHtml(tokens[idx].content || "");
+			};
+		},
 		latex: function(md) {
 			// Inline: $...$
 			md.inline.ruler.after("escape", "latex_inline", function(state, silent) {
