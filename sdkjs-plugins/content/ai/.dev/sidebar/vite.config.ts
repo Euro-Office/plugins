@@ -19,7 +19,7 @@ const banner = [
 	"/*!",
 	" * SPDX-FileCopyrightText: Euro-Office contributors",
 	" * SPDX-License-Identifier: AGPL-3.0-only",
-	" * Built from https://github.com/Euro-Office/plugins/tree/master/sdkjs-plugins/content/ai/.dev/sidebar",
+	" * Built from https://github.com/Euro-Office/plugins/tree/main/sdkjs-plugins/content/ai/.dev/sidebar",
 	" *",
 	" * Includes Preact " + preactVersion + " (https://preactjs.com), licensed under the MIT License:",
 	" *",
