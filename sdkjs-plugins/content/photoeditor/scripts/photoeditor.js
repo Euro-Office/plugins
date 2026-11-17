@@ -1,6 +1,7 @@
 /**
  *
  * (c) Copyright Ascensio System SIA 2020
+ * Modified by Euro-Office contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -187,7 +188,7 @@ var bNewVersion = false;
                         path: oImage.src,
                         name: 'Image'
                     },
-                    theme: themeStyle,
+                    theme: themeStyle || whiteTheme,
                     initMenu: 'filter',
                     menuBarPosition: 'bottom',
                     usageStatistics: false,
