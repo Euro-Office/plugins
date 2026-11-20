@@ -18,8 +18,9 @@
 //  - unknown tools and bad arguments become error results, never throws.
 //
 // The approval card is shown in the chat window. For editor-initiated calls
-// the chat window is opened/activated if needed (window.chatWindowShow); if
-// that is impossible the call is denied with an error result.
+// the chat window is opened/activated if needed (window.chatWindowShow), also
+// when no chat model is configured; if that is impossible the call is denied
+// with an error result.
 (function(root) {
 
 	const ALWAYS_ALLOW_KEY = "onlyoffice_ai_tool_always_allow";
@@ -197,7 +198,7 @@
 	async function ensureWindow() {
 		try {
 			if (typeof root.chatWindowShow === "function")
-				root.chatWindowShow();
+				root.chatWindowShow(undefined, false, true);
 		} catch (e) {
 			console.error("Could not open the chat window for a tool approval:", e);
 		}

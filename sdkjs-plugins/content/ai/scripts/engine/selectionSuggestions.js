@@ -92,10 +92,20 @@
 		return window.Asc.plugin.tr(text);
 	}
 
+	// The panel can be open without a chat model, for tool approvals alone
+	// (chatWindow.js): a chip would then only open the AI settings, so none
+	// are offered. The separate key lets them show again for the next
+	// selection once a model is set.
+	function hasChatModel() {
+		return !!AI.Request.create(AI.ActionType.Chat, true);
+	}
+
 	function buildPayload(ctx) {
 		let type = editorType();
-		let actions = window.SmartActions.get(type, ctx);
 		let key = window.SmartActions.selectionKey(ctx);
+		if (!hasChatModel())
+			return { key: "no-model:" + key, summary: "", actions: [] };
+		let actions = window.SmartActions.get(type, ctx);
 		if (!actions.length)
 			return { key: key, summary: "", actions: [] };
 
@@ -174,7 +184,10 @@
 				if (!action || !state.run)
 					return;
 				state.busy = true;
-				state.run(action.prompt + window.SmartActions.LANG_HINT, true);
+				// false: nothing was sent (no chat model; the AI settings open
+				// instead), so no agent turn will end the pause.
+				if (state.run(action.prompt + window.SmartActions.LANG_HINT, true) === false)
+					state.busy = false;
 			});
 
 			win.attachEvent("onChatVisible", function(isVisible) {

@@ -116,8 +116,12 @@ function suggestionsEnv(editorType, fake) {
 	const win = { command: (n, d) => sent.push([n, JSON.parse(JSON.stringify(d))]), attachEvent: (n, f) => { handlers[n] = f; } };
 	const runs = [];
 	env.ctx.chatWindow = win;
+	let chatModel = true;
+	env.ctx.AI.ActionType = env.ctx.AI.ActionType || { Chat: "Chat" };
+	env.ctx.AI.Request = { create: () => (chatModel ? {} : null) };
 	return {
 		...env, win, sent, handlers, runs, editorEvents,
+		setChatModel(on) { chatModel = on; },
 		// The page reports its visibility right after "onWindowReady".
 		attach(visible = true) {
 			env.ctx.SelectionSuggestions.attach(win, (text, force) => runs.push([text, force]));
@@ -173,6 +177,39 @@ describe("SelectionSuggestions", () => {
 
 		s.handlers.onSelectionSuggestionsBusy(false);
 		await vi.advanceTimersByTimeAsync(1000);
+		expect(s.sent).toHaveLength(2);
+		expect(s.sent[1][1].summary).toBe("Selected text (5 chars)");
+	});
+
+	test("no chat model (panel open for approvals only): no chips; they come back once a model is set", async () => {
+		const fake = createWordDocument({ body: ["Hello world"], selection: { paragraph: 1 } });
+		const s = suggestionsEnv("word", fake);
+		s.setChatModel(false);
+		s.attach();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(s.sent).toHaveLength(1);
+		expect(s.sent[0][1].actions).toEqual([]);
+
+		s.setChatModel(true);
+		fake.doc.selection = [{ para: fake.doc.elements[0], start: 0, end: 5 }];
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(s.sent).toHaveLength(2);
+		expect(s.sent[1][1].actions.length).toBeGreaterThan(0);
+	});
+
+	test("a chip click that sends nothing (model removed meanwhile) does not pause suggestions", async () => {
+		const fake = createWordDocument({ body: ["Hello world"], selection: { paragraph: 1 } });
+		const s = suggestionsEnv("word", fake);
+		s.ctx.SelectionSuggestions.attach(s.win, (text, force) => { s.runs.push([text, force]); return false; });
+		s.handlers.onChatVisible(true);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(s.sent).toHaveLength(1);
+
+		s.handlers.onSmartActionChip({ id: "improve" });
+		expect(s.runs).toHaveLength(1);
+
+		fake.doc.selection = [{ para: fake.doc.elements[0], start: 0, end: 5 }];
+		await vi.advanceTimersByTimeAsync(5000);
 		expect(s.sent).toHaveLength(2);
 		expect(s.sent[1][1].summary).toBe("Selected text (5 chars)");
 	});

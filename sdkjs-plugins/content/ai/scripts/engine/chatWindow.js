@@ -45,12 +45,18 @@
 	let pendingText = null;
 	let pageReady = false;
 
-	function chatWindowShow(attachedText, isForceSend)
+	// forApproval: opened by ToolApproval for a tool call from outside the
+	// plugin (ai_onCallTool). That caller brings its own model, and the
+	// approval card needs none, so the chat model check (which opens the AI
+	// settings when it fails) is skipped. A chat message typed without a
+	// model still fails with an error in the agent loop.
+	// Returns false when nothing was opened (no chat model).
+	function chatWindowShow(attachedText, isForceSend, forApproval)
 	{
 		// No chat model (e.g. removed after the panel was created): open the
 		// AI settings instead, like before the panel existed.
-		if (!AI.Request.create(AI.ActionType.Chat))
-			return;
+		if (!forApproval && !AI.Request.create(AI.ActionType.Chat))
+			return false;
 		if (window.chatWindow) {
 			window.chatWindow.activate();
 			if (attachedText && attachedText.trim()) {
@@ -59,9 +65,9 @@
 				else
 					pendingText = { text: attachedText, forceSend: !!isForceSend };
 			}
-			return;
+			return true;
 		}
-		createChatWindow(attachedText, isForceSend, true);
+		return createChatWindow(attachedText, isForceSend, true, forApproval);
 	}
 
 	// The chat's button in the right bar, panel closed. Only where the chat
@@ -76,11 +82,10 @@
 		createChatWindow("", false, false);
 	}
 
-	function createChatWindow(attachedText, isForceSend, isActivated)
+	function createChatWindow(attachedText, isForceSend, isActivated, forApproval)
 	{
-		let requestEngine = AI.Request.create(AI.ActionType.Chat);
-		if (!requestEngine)
-			return;
+		if (!forApproval && !AI.Request.create(AI.ActionType.Chat))
+			return false;
 
 		pageReady = false;
 		pendingText = attachedText && attachedText.trim() ? { text: attachedText, forceSend: !!isForceSend } : null;
@@ -300,6 +305,7 @@
 		chatWindow.show(variation);
 
 		window.chatWindow = chatWindow;
+		return true;
 	}
 
 	window.AIChatWindow = {
