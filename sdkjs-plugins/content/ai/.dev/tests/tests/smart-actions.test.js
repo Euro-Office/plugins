@@ -177,6 +177,23 @@ describe("SelectionSuggestions", () => {
 		expect(s.sent[1][1].summary).toBe("Selected text (5 chars)");
 	});
 
+	test("a chip click that sends nothing (no chat model) does not pause suggestions", async () => {
+		const fake = createWordDocument({ body: ["Hello world"], selection: { paragraph: 1 } });
+		const s = suggestionsEnv("word", fake);
+		s.ctx.SelectionSuggestions.attach(s.win, (text, force) => { s.runs.push([text, force]); return false; });
+		s.handlers.onChatVisible(true);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(s.sent).toHaveLength(1);
+
+		s.handlers.onSmartActionChip({ id: "improve" });
+		expect(s.runs).toHaveLength(1);
+
+		fake.doc.selection = [{ para: fake.doc.elements[0], start: 0, end: 5 }];
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(s.sent).toHaveLength(2);
+		expect(s.sent[1][1].summary).toBe("Selected text (5 chars)");
+	});
+
 	test("stops polling once the chat window is closed", async () => {
 		const fake = createWordDocument({ body: ["Hello"] });
 		const s = suggestionsEnv("word", fake);

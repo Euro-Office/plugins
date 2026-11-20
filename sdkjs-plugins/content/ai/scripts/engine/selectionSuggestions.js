@@ -174,7 +174,10 @@
 				if (!action || !state.run)
 					return;
 				state.busy = true;
-				state.run(action.prompt + window.SmartActions.LANG_HINT, true);
+				// false: nothing was sent (no chat model; the AI settings open
+				// instead), so no agent turn will end the pause.
+				if (state.run(action.prompt + window.SmartActions.LANG_HINT, true) === false)
+					state.busy = false;
 			});
 
 			win.attachEvent("onChatVisible", function(isVisible) {

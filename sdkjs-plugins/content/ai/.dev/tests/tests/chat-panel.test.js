@@ -130,3 +130,76 @@ describe("closing and missing models", () => {
 		expect(win.activations || 0).toBe(0);
 	});
 });
+
+describe("approvals for tool calls from outside the plugin", () => {
+	// ai_onCallTool callers bring their own model; the approval card needs none.
+	async function noModelAgent() {
+		const agent = await startup();
+		const counts = { settings: 0 };
+		agent.ctx.AI.Request.create = (action, disableSettings) => { if (!disableSettings) counts.settings++; return null; };
+		agent.ctx.EditorHelper = new agent.ctx.EditorHelperImpl();
+		counts.ran = 0;
+		agent.ctx.EditorHelper.names2funcs.editParagraph.call = async () => { counts.ran++; return { ok: true }; };
+		return { agent, counts };
+	}
+
+	async function approve(win, decision) {
+		await win.fire("onWindowReady", {});
+		for (let i = 0; i < 20 && !win.sent("onToolApprovalRequest").length; i++)
+			await new Promise((r) => setTimeout(r, 0));
+		const [request] = win.sent("onToolApprovalRequest");
+		await win.fire("onToolApprovalResponse", { id: request.id, decision });
+		return request;
+	}
+
+	test("without a chat model the panel opens, without the AI settings, and the tool runs after Allow", async () => {
+		const { agent, counts } = await noModelAgent();
+		const call = agent.ctx.ToolApproval.handleEditorToolCall({ name: "editParagraph", arguments: { index: 1, action: "delete" } });
+		await new Promise((r) => setTimeout(r, 0));
+		const win = FakePluginWindow.last;
+		expect(win).not.toBeNull();
+		expect(win.variation.isActivated).not.toBe(false);
+		const request = await approve(win, "allow");
+		expect(request.source).toBe("editor");
+		const res = await call;
+		expect(res.error).toBeUndefined();
+		expect(counts.ran).toBe(1);
+		expect(counts.settings).toBe(0);
+	});
+
+	test("without a chat model, Deny still declines and the tool does not run", async () => {
+		const { agent, counts } = await noModelAgent();
+		const call = agent.ctx.ToolApproval.handleEditorToolCall({ name: "editParagraph", arguments: { index: 1, action: "delete" } });
+		await new Promise((r) => setTimeout(r, 0));
+		await approve(FakePluginWindow.last, "deny");
+		const res = await call;
+		expect(res.declined).toBe(true);
+		expect(counts.ran).toBe(0);
+	});
+
+	test("the toolbar Chatbot still opens the AI settings when the panel was opened only for an approval", async () => {
+		const { agent, counts } = await noModelAgent();
+		agent.ctx.ToolApproval.handleEditorToolCall({ name: "editParagraph", arguments: { index: 1, action: "delete" } });
+		await new Promise((r) => setTimeout(r, 0));
+		const win = FakePluginWindow.last;
+		await win.fire("onWindowReady", {});
+		chatbotToolbar(agent).clicks[0]();
+		expect(counts.settings).toBe(1);
+		expect(win.activations || 0).toBe(0);
+		// Selection chips rely on this to not stay paused (selectionSuggestions.js).
+		expect(agent.ctx.AIChatWindow.show("Improve", true)).toBe(false);
+		expect(agent.ctx.AIChatWindow.show(undefined, false, true)).toBe(true);
+		agent.ctx.ToolApproval.denyAll();
+	});
+
+	test("a chat message typed without a model fails with an error, not silently", async () => {
+		const { agent } = await noModelAgent();
+		agent.ctx.ToolApproval.handleEditorToolCall({ name: "editParagraph", arguments: { index: 1, action: "delete" } });
+		await new Promise((r) => setTimeout(r, 0));
+		const win = FakePluginWindow.last;
+		await win.fire("onWindowReady", {});
+		await win.fire("onChatMessage", { messages: [{ role: "user", content: "hi" }], usedTools: [], turnId: "t1" });
+		expect(win.sent("onChatReply").join(" ")).toMatch(/No AI model is selected/);
+		agent.ctx.ToolApproval.denyAll();
+	});
+});
